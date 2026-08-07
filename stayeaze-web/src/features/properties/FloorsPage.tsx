@@ -1,0 +1,117 @@
+import { useState } from 'react';
+import { Building2, Plus, Pencil, Trash2, Layers } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { DataTable, type Column } from '@/components/common/DataTable';
+import { RowActions } from '@/components/common/RowActions';
+import { FormDialog } from '@/components/common/FormDialog';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { FormInput } from '@/components/common/FormField';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import api from '@/lib/api';
+import type { Floor } from '@/lib/types';
+import type { Building as BuildingType } from '@/lib/types';
+import { occupancyRate } from '@/lib/format';
+import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
+
+const ENDPOINT = '/floors';
+
+const emptyForm = {
+  name: '', number: 1, buildingId: '',
+};
+
+export default function FloorsPage() {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Floor | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Floor | null>(null);
+
+  const { data: buildings } = useQuery({
+    queryKey: ['floors-buildings'],
+    queryFn: () => api.get<{ data: BuildingType[] }>('/buildings', { params: { pageSize: 100 } }).then((r) => r.data.data),
+  });
+  const buildingMap = new Map((buildings ?? []).map((b) => [b.id, b.name]));
+
+  const createMut = useCreate<Floor>(ENDPOINT, 'Floor');
+  const updateMut = useUpdate<Floor>(ENDPOINT, 'Floor');
+  const deleteMut = useDelete(ENDPOINT, 'Floor');
+  const form = useForm(emptyForm);
+
+  function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
+  function openEdit(row: Floor) {
+    setEditing(row);
+    form.reset({ name: row.name, number: row.number, buildingId: row.buildingId });
+    setDialogOpen(true);
+  }
+  function submit() {
+    if (!form.validate({ name: (v) => !v ? 'Required' : undefined, buildingId: (v) => !v ? 'Select a building' : undefined })) return;
+    const payload = {
+      name: form.values.name,
+      number: form.values.number,
+      floorNumber: form.values.number,
+      buildingId: form.values.buildingId,
+    };
+    if (editing) updateMut.mutate({ id: editing.id, payload }, { onSuccess: () => setDialogOpen(false) });
+    else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
+  }
+  function confirmDelete() { if (deleteTarget) deleteMut.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) }); }
+
+  const columns: Column<Floor>[] = [
+    { key: 'name', header: 'Floor', sortable: true, cell: (r) => (
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Layers className="h-5 w-5" /></div>
+        <div><p className="font-medium">{r.name}</p><p className="text-xs text-muted-foreground">Level {r.number}</p></div>
+      </div>
+    )},
+    { key: 'buildingId', header: 'Building', sortable: true, cell: (r) => <span className="text-sm">{buildingMap.get(r.buildingId) ?? '—'}</span> },
+    { key: 'rooms', header: 'Rooms', sortable: true, cell: (r) => <span className="tabular-nums">{r.rooms}</span> },
+    { key: 'beds', header: 'Beds', sortable: true, cell: (r) => <span className="tabular-nums">{r.beds}</span> },
+    { key: 'occupied', header: 'Occupancy', sortable: true, cell: (r) => {
+      const rate = occupancyRate(r.occupied, r.beds);
+      return (
+        <div className="w-28">
+          <div className="flex justify-between text-xs"><span className="font-medium">{rate}%</span><span className="text-muted-foreground">{r.occupied}/{r.beds}</span></div>
+          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${rate}%` }} /></div>
+        </div>
+      );
+    }},
+  ];
+
+  const buildingFilterOptions = (buildings ?? []).map((b) => ({ value: b.id, label: b.name }));
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Floors" description="Manage floors within buildings." icon={Layers}
+        actions={<Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" /> Add Floor</Button>} />
+      <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search floors..." exportFilename="floors" initialSortBy="name"
+        filters={buildingFilterOptions.length > 0 ? [{ key: 'buildingId', label: 'Building', options: buildingFilterOptions }] : []}
+        rowActions={(row) => (
+          <RowActions items={[
+            { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
+            { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
+          ]} />
+        )} />
+      <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Floor' : 'Add Floor'} onSubmit={submit}
+        loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormInput label="Floor Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} placeholder="Floor 1" />
+          <FormInput label="Floor Number" type="number" id="number" value={String(form.values.number)} onChange={(e) => form.setValue('number', Number(e.target.value))} />
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Building</Label>
+            <Select value={form.values.buildingId} onValueChange={(v) => form.setValue('buildingId', v)}>
+              <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
+              <SelectContent>{(buildings ?? []).map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+            </Select>
+            {form.errors.buildingId && <p className="text-xs text-destructive">{form.errors.buildingId}</p>}
+          </div>
+        </div>
+      </FormDialog>
+      <ConfirmDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)} title="Delete Floor" variant="destructive"
+        description={`Delete "${deleteTarget?.name}"? This cannot be undone.`} confirmLabel="Delete" onConfirm={confirmDelete} loading={deleteMut.isPending} />
+    </div>
+  );
+}
