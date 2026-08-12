@@ -36,7 +36,7 @@ export default function BedsPage() {
     queryKey: ['beds-rooms'],
     queryFn: () => api.get<{ data: Room[] }>('/rooms', { params: { pageSize: 100 } }).then((r) => r.data.data),
   });
-  const roomMap = new Map((rooms ?? []).map((r) => [r.id, `Room ${r.number}`]));
+  const roomMap = new Map((rooms ?? []).map((r: any) => [r.id, r.roomNumber || (r.number ? `Room ${r.number}` : '—')]));
 
   const createMut = useCreate<Bed>(ENDPOINT, 'Bed');
   const updateMut = useUpdate<Bed>(ENDPOINT, 'Bed');
@@ -70,14 +70,14 @@ export default function BedsPage() {
         <span className="font-medium">{r.number}</span>
       </div>
     )},
-    { key: 'roomId', header: 'Room', sortable: true, cell: (r) => <span className="text-sm">{roomMap.get(r.roomId) ?? '—'}</span> },
+    { key: 'roomId', header: 'Room', sortable: true, cell: (r: any) => <span className="text-sm">{r.roomNumber || roomMap.get(r.roomId) || '—'}</span> },
     { key: 'tenantId', header: 'Tenant', sortable: true, cell: (r) => (r.tenantName || r.tenantId) ? (
       <span className="inline-flex items-center gap-1.5 text-sm"><User className="h-3.5 w-3.5 text-muted-foreground" />{r.tenantName || r.tenantId}</span>
     ) : <span className="text-sm text-muted-foreground">—</span> },
     { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
   ];
 
-  const roomFilterOptions = (rooms ?? []).map((r) => ({ value: r.id, label: `Room ${r.number}` }));
+  const roomFilterOptions = (rooms ?? []).map((r: any) => ({ value: r.id, label: r.roomNumber || (r.number ? `Room ${r.number}` : r.id) }));
 
   return (
     <div className="space-y-6">
@@ -97,7 +97,7 @@ export default function BedsPage() {
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Bed' : 'Add Bed'} onSubmit={submit}
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5"><Label>Room</Label><Select value={form.values.roomId} onValueChange={(v) => form.setValue('roomId', v)}><SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger><SelectContent>{(rooms ?? []).map((r) => <SelectItem key={r.id} value={r.id}>Room {r.number}</SelectItem>)}</SelectContent></Select>{form.errors.roomId && <p className="text-xs text-destructive">{form.errors.roomId}</p>}</div>
+          <div className="space-y-1.5"><Label>Room</Label><Select value={form.values.roomId} onValueChange={(v) => form.setValue('roomId', v)}><SelectTrigger><SelectValue placeholder="Select room" /></SelectTrigger><SelectContent>{(rooms ?? []).map((r: any) => <SelectItem key={r.id} value={r.id}>{r.roomNumber || (r.number ? `Room ${r.number}` : r.id)}</SelectItem>)}</SelectContent></Select>{form.errors.roomId && <p className="text-xs text-destructive">{form.errors.roomId}</p>}</div>
           <div className="space-y-1.5"><Label>Bed Number</Label><Select value={form.values.number} onValueChange={(v) => form.setValue('number', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['B1', 'B2', 'B3', 'B4'].map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1.5 sm:col-span-2"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Bed['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
         </div>

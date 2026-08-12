@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Building2, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from '@/hooks/use-toast';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { DataTable, type Column } from '@/components/common/DataTable';
@@ -13,7 +15,6 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import type { Building, Property } from '@/lib/types';
 import { occupancyRate } from '@/lib/format';
@@ -30,10 +31,14 @@ export default function BuildingsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Building | null>(null);
 
   const { data: properties } = useQuery({
-    queryKey: ['buildings-properties'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['buildings-properties-minimal'],
+    queryFn: () => api.get<Property[]>('/properties/minimal').then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload as Property[];
+      return (payload as { data: Property[] }).data || [];
+    }),
   });
-  const propMap = new Map((properties ?? []).map((p) => [p.id, p.name]));
+  const propMap = new Map((properties ?? []).map((p: Property) => [p.id, p.name]));
 
   const createMut = useCreate<Building>(ENDPOINT, 'Building');
   const updateMut = useUpdate<Building>(ENDPOINT, 'Building');
@@ -83,7 +88,23 @@ export default function BuildingsPage() {
     { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
   ];
 
-  const propertyFilterOptions = (properties ?? []).map((p) => ({ value: p.id, label: p.name }));
+  const propertyFilterOptions = (properties ?? []).map((p: Property) => ({ value: p.id, label: p.name }));
+
+  const queryClient = useQueryClient();
+
+  const handleUnarchive = async (row: Building) => {
+    try {
+      await api.put(`/buildings/${row.id}/unarchive`);
+      toast({ title: 'Building Unarchived', description: `Building "${row.name}" and all nested floors/rooms/beds unarchived successfully.` });
+      queryClient.invalidateQueries({ queryKey: ['/buildings'] });
+      queryClient.invalidateQueries({ queryKey: ['/floors'] });
+      queryClient.invalidateQueries({ queryKey: ['/rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['/beds'] });
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast({ title: 'Action Failed', description: e?.response?.data?.message || 'Failed to unarchive building.', variant: 'destructive' });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -97,6 +118,11 @@ export default function BuildingsPage() {
         rowActions={(row) => (
           <RowActions items={[
             { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
+            ...(row.status?.toLowerCase() === 'archived' ? [{
+              label: 'Unarchive Building',
+              icon: RotateCcw,
+              onSelect: () => handleUnarchive(row),
+            }] : []),
             { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
           ]} />
         )} />
@@ -109,7 +135,7 @@ export default function BuildingsPage() {
             <Label>Property</Label>
             <Select value={form.values.propertyId} onValueChange={(v) => form.setValue('propertyId', v)}>
               <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
-              <SelectContent>{(properties ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(properties ?? []).map((p: Property) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
             </Select>
             {form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}
           </div>

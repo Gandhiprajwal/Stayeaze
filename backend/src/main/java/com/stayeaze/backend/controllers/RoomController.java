@@ -54,6 +54,9 @@ public class RoomController {
     @Autowired
     private TenantRepository tenantRepository;
 
+    @Autowired
+    private com.stayeaze.backend.services.RoomService roomService;
+
     private Room populateRoomStats(Room room) {
         if (room == null) return null;
         List<Bed> beds = bedRepository.findByRoom(room);
@@ -126,8 +129,8 @@ public class RoomController {
     private Organization getLoggedUserOrg() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
-                .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
+        if (userDetails.getOrgId() == null) return null;
+        return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
     }
 
     private Floor getAuthorizedFloor(UUID propertyId, UUID buildingId, UUID floorId) {
@@ -162,7 +165,8 @@ public class RoomController {
             room.setAmenities(request.getAmenities());
         }
 
-        Room saved = roomRepository.save(room);
+        Room saved = roomService.saveRoom(room);
+        updatePropertyAndBuildingStats(floor);
         return new ResponseEntity<>(populateRoomStats(saved), HttpStatus.CREATED);
     }
 
@@ -181,11 +185,13 @@ public class RoomController {
     }
 
     @GetMapping("/rooms")
-    public ResponseEntity<?> getFlatRooms() {
-        Organization organization = getLoggedUserOrg();
-        List<Room> rooms = roomRepository.findByOrganizationId(organization.getId());
-        rooms.forEach(this::populateRoomStats);
-        return ResponseEntity.ok(rooms);
+    public ResponseEntity<?> getFlatRooms(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        Organization organization = null;
+        try { organization = getLoggedUserOrg(); } catch (Exception ignored) {}
+        List<com.stayeaze.backend.payload.response.RoomDTO> all = roomService.getRoomsByOrg(organization);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
     }
 
     @GetMapping("/properties/{propertyId}/buildings/{buildingId}/floors/{floorId}/rooms/{roomId}")
@@ -234,7 +240,8 @@ public class RoomController {
             room.setAmenities(request.getAmenities());
         }
 
-        Room updated = roomRepository.save(room);
+        Room updated = roomService.saveRoom(room);
+        updatePropertyAndBuildingStats(room.getFloor());
         return ResponseEntity.ok(updated);
     }
 
@@ -254,7 +261,8 @@ public class RoomController {
         }
 
         room.setStatus("ARCHIVED");
-        roomRepository.save(room);
+        roomService.saveRoom(room);
+        updatePropertyAndBuildingStats(room.getFloor());
 
         return ResponseEntity.ok(new MessageResponse("Room successfully archived."));
     }
@@ -268,8 +276,13 @@ public class RoomController {
         }
         Organization organization = getLoggedUserOrg();
         Floor floor = floorRepository.findById(floorId).orElse(null);
-        if (floor == null || !floor.getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Floor not found or unauthorized"));
+        if (floor == null) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Floor not found!"));
+        }
+        if (organization != null && floor.getBuilding() != null && floor.getBuilding().getProperty() != null && floor.getBuilding().getProperty().getOrganization() != null) {
+            if (!floor.getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Floor not found or unauthorized"));
+            }
         }
 
         String roomNum = request.getRoomNumber();
@@ -291,8 +304,54 @@ public class RoomController {
         if (request.getStatus() != null) room.setStatus(request.getStatus());
         if (request.getAmenities() != null) room.setAmenities(request.getAmenities());
 
-        Room saved = roomRepository.save(room);
-        return new ResponseEntity<>(populateRoomStats(saved), HttpStatus.CREATED);
+        Room saved = roomService.saveRoom(room);
+        Room populated = populateRoomStats(saved);
+        updatePropertyAndBuildingStats(floor);
+        return new ResponseEntity<>(populated, HttpStatus.CREATED);
+    }
+
+    private void updatePropertyAndBuildingStats(Floor floor) {
+        if (floor == null) return;
+        try {
+            Building building = floor.getBuilding();
+            if (building != null) {
+                List<Floor> bFloors = floorRepository.findByBuilding(building);
+                int totalBldRooms = 0;
+                int totalBldBeds = 0;
+                int occupiedBldBeds = 0;
+                for (Floor f : bFloors) {
+                    List<Room> fRooms = roomRepository.findByFloor(f);
+                    for (Room r : fRooms) {
+                        populateRoomStats(r);
+                        totalBldRooms++;
+                        totalBldBeds += r.getBeds();
+                        occupiedBldBeds += r.getOccupied();
+                    }
+                }
+                building.setRooms(totalBldRooms);
+                building.setBeds(totalBldBeds);
+                building.setOccupied(occupiedBldBeds);
+                buildingRepository.save(building);
+
+                Property property = building.getProperty();
+                if (property != null) {
+                    List<Building> pBuildings = buildingRepository.findByProperty(property);
+                    int totalPropRooms = 0;
+                    int totalPropBeds = 0;
+                    int occupiedPropBeds = 0;
+                    for (Building b : pBuildings) {
+                        totalPropRooms += b.getRooms();
+                        totalPropBeds += b.getBeds();
+                        occupiedPropBeds += b.getOccupied();
+                    }
+                    property.setTotalBuildings(pBuildings.size());
+                    property.setTotalRooms(totalPropRooms);
+                    property.setTotalBeds(totalPropBeds);
+                    property.setOccupiedBeds(occupiedPropBeds);
+                    propertyRepository.save(property);
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     @GetMapping("/rooms/{id}")
@@ -322,8 +381,10 @@ public class RoomController {
         if (request.getStatus() != null) room.setStatus(request.getStatus());
         if (request.getAmenities() != null) room.setAmenities(request.getAmenities());
 
-        Room saved = roomRepository.save(room);
-        return ResponseEntity.ok(populateRoomStats(saved));
+        Room saved = roomService.saveRoom(room);
+        Room populated = populateRoomStats(saved);
+        updatePropertyAndBuildingStats(room.getFloor());
+        return ResponseEntity.ok(populated);
     }
 
     @DeleteMapping("/rooms/{id}")
@@ -335,7 +396,36 @@ public class RoomController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Room not found."));
         }
         room.setStatus("ARCHIVED");
-        roomRepository.save(room);
+        roomService.saveRoom(room);
+        updatePropertyAndBuildingStats(room.getFloor());
         return ResponseEntity.ok(new MessageResponse("Room deleted successfully."));
+    }
+
+    @PutMapping("/rooms/{id}/unarchive")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> unarchiveFlatRoom(@PathVariable UUID id) {
+        Organization organization = getLoggedUserOrg();
+        Room room = roomRepository.findById(id).orElse(null);
+        if (room == null || (organization != null && room.getFloor() != null && room.getFloor().getBuilding() != null && room.getFloor().getBuilding().getProperty() != null && room.getFloor().getBuilding().getProperty().getOrganization() != null && !room.getFloor().getBuilding().getProperty().getOrganization().getId().equals(organization.getId()))) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Room not found."));
+        }
+        room.setStatus("available");
+        roomService.saveRoom(room);
+
+        List<Bed> beds = bedRepository.findByRoom(room);
+        for (Bed b : beds) {
+            if ("ARCHIVED".equalsIgnoreCase(b.getStatus())) {
+                b.setStatus("AVAILABLE");
+                bedRepository.save(b);
+            }
+        }
+
+        if (room.getFloor() != null && "ARCHIVED".equalsIgnoreCase(room.getFloor().getStatus())) {
+            room.getFloor().setStatus("AVAILABLE");
+            floorRepository.save(room.getFloor());
+        }
+
+        updatePropertyAndBuildingStats(room.getFloor());
+        return ResponseEntity.ok(new MessageResponse("Room and nested beds successfully unarchived."));
     }
 }

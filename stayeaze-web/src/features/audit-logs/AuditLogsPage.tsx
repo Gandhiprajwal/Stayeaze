@@ -1,5 +1,6 @@
-import { ScrollText, Download, Filter } from 'lucide-react';
+import { ScrollText, Download, Filter, Terminal } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { DataTable, type Column } from '@/components/common/DataTable';
@@ -11,6 +12,7 @@ import api from '@/lib/api';
 import type { AuditLog } from '@/lib/types';
 import { formatDateTime, initials, exportToCSV } from '@/lib/format';
 import { roleLabels } from '@/lib/role-utils';
+import { useAuthStore } from '@/lib/stores/auth-store';
 
 const ENDPOINT = '/audit-logs';
 const modules = [
@@ -25,6 +27,9 @@ const actions = [
 ];
 
 export default function AuditLogsPage() {
+  const currentUser = useAuthStore((s) => s.user);
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+
   const { data: logs } = useQuery({
     queryKey: ['audit-summary'],
     queryFn: () => api.get<{ data: AuditLog[] }>(ENDPOINT, { params: { pageSize: 100, sortBy: 'timestamp', sortOrder: 'desc' } }).then((r) => r.data.data),
@@ -52,7 +57,18 @@ export default function AuditLogsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Audit Logs" description="Immutable record of all user actions across the console." icon={ScrollText}
-        actions={<Button variant="outline" onClick={exportLogs}><Download className="mr-1.5 h-4 w-4" /> Export Logs</Button>} />
+        actions={
+          <div className="flex items-center gap-2">
+            {isSuperAdmin && (
+              <Button asChild variant="default" className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                <Link to="/super-admin/system-logs">
+                  <Terminal className="mr-1.5 h-4 w-4" /> Live Backend Server Logs
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" onClick={exportLogs}><Download className="mr-1.5 h-4 w-4" /> Export Logs</Button>
+          </div>
+        } />
 
       <Card className="border-dashed bg-muted/20">
         <CardContent className="flex items-center gap-3 p-4">

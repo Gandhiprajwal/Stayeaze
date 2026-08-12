@@ -2,6 +2,8 @@ package com.stayeaze.backend.repository;
 
 import com.stayeaze.backend.models.Building;
 import com.stayeaze.backend.models.Floor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,4 +21,9 @@ public interface FloorRepository extends JpaRepository<Floor, UUID> {
 
     @Query("SELECT f FROM Floor f WHERE f.building.property.organization.id = :orgId")
     List<Floor> findByOrganizationId(@Param("orgId") UUID orgId);
+
+    @Query("SELECT f FROM Floor f WHERE f.building.property.organization.id = :orgId")
+    Page<Floor> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
+
+    Page<Floor> findAll(Pageable pageable);
 }

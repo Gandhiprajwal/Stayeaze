@@ -3,6 +3,7 @@ package com.stayeaze.backend.controllers;
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.payload.request.TenantRequest;
 import com.stayeaze.backend.payload.response.MessageResponse;
+import com.stayeaze.backend.payload.response.MinimalTenantDTO;
 import com.stayeaze.backend.repository.*;
 import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
@@ -42,6 +43,9 @@ public class TenantController {
     private PropertyRepository propertyRepository;
 
     @Autowired
+    private com.stayeaze.backend.services.OccupancySyncService occupancySyncService;
+
+    @Autowired
     private CheckInRepository checkInRepository;
 
     private Organization getLoggedUserOrg() {
@@ -57,19 +61,24 @@ public class TenantController {
     public ResponseEntity<?> createTenant(@Valid @RequestBody TenantRequest request) {
         Organization organization = getLoggedUserOrg();
 
-        if (tenantRepository.existsByMobile(request.getMobile())) {
+        // Mobile uniqueness scoped to the same organization
+        boolean mobileExists = tenantRepository.findByOrganization(organization).stream()
+                .anyMatch(t -> request.getMobile() != null && request.getMobile().equalsIgnoreCase(t.getMobile()));
+        if (mobileExists) {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: Mobile number already registered to an existing tenant!"));
         }
 
         if (request.getRoomNumber() != null && !request.getRoomNumber().isBlank() &&
             request.getBedNumber() != null && !request.getBedNumber().isBlank()) {
 
-            // Check if bed is already occupied by active tenant
-            boolean bedOccupied = tenantRepository.findByOrganization(organization).stream().anyMatch(t ->
-                (t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus())) &&
-                request.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
-                request.getBedNumber().equalsIgnoreCase(t.getBedNumber())
-            );
+            // Bed occupied = any non-checked-out tenant in the same bed (ACTIVE, PENDING_CHECKIN, PENDING, RESERVED, etc.)
+            boolean bedOccupied = tenantRepository.findByOrganization(organization).stream().anyMatch(t -> {
+                String ts = t.getStatus();
+                boolean isCheckedOut = "CHECKED_OUT".equalsIgnoreCase(ts);
+                return !isCheckedOut &&
+                    request.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
+                    request.getBedNumber().equalsIgnoreCase(t.getBedNumber());
+            });
             if (bedOccupied) {
                 return ResponseEntity.badRequest().body(new MessageResponse("Error: Bed " + request.getBedNumber() + " in Room " + request.getRoomNumber() + " is already occupied!"));
             }
@@ -147,7 +156,11 @@ public class TenantController {
             if (saved.getLeaseEnd() != null && !saved.getLeaseEnd().isBlank()) {
                 try { checkIn.setLeaseEnd(java.time.LocalDate.parse(saved.getLeaseEnd())); } catch(Exception ignored){}
             }
-            checkIn.setStatus("pending");
+            if ("ACTIVE".equalsIgnoreCase(saved.getStatus()) || "CHECKED_IN".equalsIgnoreCase(saved.getStatus()) || "COMPLETED".equalsIgnoreCase(saved.getStatus())) {
+                checkIn.setStatus("completed");
+            } else {
+                checkIn.setStatus("pending");
+            }
             checkIn.setCode("CI-" + (System.currentTimeMillis() % 100000000L));
             checkInRepository.save(checkIn);
         } catch(Exception e) {
@@ -155,11 +168,14 @@ public class TenantController {
             e.printStackTrace();
         }
 
+        occupancySyncService.syncStatsAndEvictCaches(null);
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
     }
 
     @GetMapping
-    public ResponseEntity<List<Tenant>> getAllTenants() {
+    public ResponseEntity<?> getAllTenants(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         Organization organization = getLoggedUserOrg();
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
@@ -167,56 +183,116 @@ public class TenantController {
                 .getAuthorities().stream()
                 .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
 
-        List<Tenant> tenants;
-        if (isSuperAdmin) {
-            tenants = tenantRepository.findByOrganization(organization);
-        } else {
-            User user = userRepository.findById(userDetails.getId()).orElse(null);
-            if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
-                tenants = tenantRepository.findByOrganization(organization).stream()
-                        .filter(t -> t.getPropertyId() != null && user.getPropertyIds().contains(t.getPropertyId()))
-                        .collect(Collectors.toList());
-            } else {
-                tenants = tenantRepository.findByOrganization(organization);
-            }
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
+
+        User user = !isSuperAdmin ? userRepository.findById(userDetails.getId()).orElse(null) : null;
+        if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
+            List<MinimalTenantDTO> dtos = tenantRepository.findByOrganization(organization).stream()
+                    .filter(t -> t.getPropertyId() != null && user.getPropertyIds().contains(t.getPropertyId()))
+                    .map(MinimalTenantDTO::fromEntity)
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(dtos, page, pageSize));
         }
-        return ResponseEntity.ok(tenants);
+
+        org.springframework.data.domain.Page<Tenant> pageResult = isSuperAdmin
+                ? tenantRepository.findAll(pageable)
+                : tenantRepository.findByOrganization(organization, pageable);
+
+        org.springframework.data.domain.Page<MinimalTenantDTO> dtoPage = pageResult.map(MinimalTenantDTO::fromEntity);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.ofPage(dtoPage));
+    }
+
+    @GetMapping("/minimal")
+    public ResponseEntity<?> getMinimalTenants() {
+        Organization organization = getLoggedUserOrg();
+        List<Tenant> tenants = tenantRepository.findByOrganization(organization);
+        List<MinimalTenantDTO> dtos = tenants.stream()
+                .map(MinimalTenantDTO::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getTenantById(@PathVariable UUID id) {
-        Organization organization = getLoggedUserOrg();
-        Tenant tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
+        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
+
+        Tenant tenant;
+        if (isSuperAdmin) {
+            tenant = tenantRepository.findById(id).orElse(null);
+        } else {
+            Organization organization = getLoggedUserOrg();
+            tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
+        }
 
         if (tenant == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant profile not found."));
         }
 
+        populateBuildingName(tenant);
         return ResponseEntity.ok(tenant);
     }
 
+    private void populateBuildingName(Tenant tenant) {
+        if (tenant == null || tenant.getRoomNumber() == null || tenant.getRoomNumber().isBlank()) return;
+        try {
+            List<Room> rooms;
+            if (tenant.getOrganization() != null) {
+                rooms = roomRepository.findByOrganizationId(tenant.getOrganization().getId());
+            } else {
+                rooms = roomRepository.findAll();
+            }
+            Room room = rooms.stream()
+                .filter(r -> r.getRoomNumber() != null && r.getRoomNumber().equalsIgnoreCase(tenant.getRoomNumber()))
+                .findFirst().orElse(null);
+            if (room != null && room.getFloor() != null && room.getFloor().getBuilding() != null) {
+                tenant.setBuildingName(room.getFloor().getBuilding().getName());
+            }
+        } catch (Exception ignored) {}
+    }
+
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
     public ResponseEntity<?> updateTenant(@PathVariable UUID id, @Valid @RequestBody TenantRequest request) {
-        Organization organization = getLoggedUserOrg();
-        Tenant tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
+        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
+
+        Tenant tenant;
+        Organization organization = null;
+        if (isSuperAdmin) {
+            tenant = tenantRepository.findById(id).orElse(null);
+            if (tenant != null) organization = tenant.getOrganization();
+        } else {
+            organization = getLoggedUserOrg();
+            tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
+        }
 
         if (tenant == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant profile not found."));
         }
 
-        if (!tenant.getMobile().equals(request.getMobile()) && tenantRepository.existsByOrganizationAndMobile(organization, request.getMobile())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Mobile number already registered to another tenant!"));
+        String reqMobile = request.getMobile();
+        if (reqMobile != null && !reqMobile.isBlank() && organization != null) {
+            boolean mobileTakenByOther = tenantRepository.findByOrganization(organization).stream()
+                .anyMatch(t -> !t.getId().equals(id) && reqMobile.equalsIgnoreCase(t.getMobile()));
+            if (mobileTakenByOther) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: Mobile number already registered to another tenant!"));
+            }
         }
 
         if (request.getRoomNumber() != null && !request.getRoomNumber().isBlank() &&
             request.getBedNumber() != null && !request.getBedNumber().isBlank()) {
-            boolean bedOccupied = tenantRepository.findByOrganization(organization).stream().anyMatch(t ->
-                !t.getId().equals(id) &&
-                (t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus())) &&
-                request.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
-                request.getBedNumber().equalsIgnoreCase(t.getBedNumber())
-            );
+            // Bed occupied = any non-checked-out OTHER tenant in the same bed
+            boolean bedOccupied = tenantRepository.findByOrganization(organization).stream().anyMatch(t -> {
+                String ts = t.getStatus();
+                boolean isCheckedOut = "CHECKED_OUT".equalsIgnoreCase(ts);
+                return !t.getId().equals(id) && !isCheckedOut &&
+                    request.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
+                    request.getBedNumber().equalsIgnoreCase(t.getBedNumber());
+            });
             if (bedOccupied) {
                 return ResponseEntity.badRequest().body(new MessageResponse("Error: Bed " + request.getBedNumber() + " in Room " + request.getRoomNumber() + " is already occupied!"));
             }
@@ -272,6 +348,22 @@ public class TenantController {
         }
 
         Tenant updated = tenantRepository.save(tenant);
+        if ("ACTIVE".equalsIgnoreCase(updated.getStatus()) || "CHECKED_IN".equalsIgnoreCase(updated.getStatus()) || "COMPLETED".equalsIgnoreCase(updated.getStatus())) {
+            final String tenantFullName = (updated.getFirstName() + " " + updated.getLastName()).trim();
+            List<CheckIn> tenantCheckIns = checkInRepository.findAll().stream()
+                .filter(c -> c.getOrganization() != null && organization != null && c.getOrganization().getId().equals(organization.getId()))
+                .filter(c -> (c.getTenantName() != null && c.getTenantName().equalsIgnoreCase(tenantFullName)) ||
+                             (updated.getRoomNumber() != null && !updated.getRoomNumber().isBlank() && updated.getRoomNumber().equalsIgnoreCase(c.getRoomNumber()) &&
+                              updated.getBedNumber() != null && !updated.getBedNumber().isBlank() && updated.getBedNumber().equalsIgnoreCase(c.getBedNumber())))
+                .collect(Collectors.toList());
+            for (CheckIn ci : tenantCheckIns) {
+                if ("pending".equalsIgnoreCase(ci.getStatus())) {
+                    ci.setStatus("completed");
+                    checkInRepository.save(ci);
+                }
+            }
+        }
+        occupancySyncService.syncStatsAndEvictCaches(null);
         return ResponseEntity.ok(updated);
     }
 
@@ -286,6 +378,7 @@ public class TenantController {
         }
 
         tenantRepository.delete(tenant);
+        occupancySyncService.syncStatsAndEvictCaches(null);
         return ResponseEntity.ok(new MessageResponse("Tenant successfully deleted."));
     }
 }

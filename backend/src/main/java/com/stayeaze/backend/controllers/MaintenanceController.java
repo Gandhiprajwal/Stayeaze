@@ -36,10 +36,14 @@ public class MaintenanceController {
     }
 
     @GetMapping
-    public ResponseEntity<?> getAllMaintenanceTasks() {
+    public ResponseEntity<?> getAllMaintenanceTasks(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         Organization organization = getLoggedUserOrg();
-        List<Maintenance> tasks = maintenanceRepository.findByOrganizationId(organization.getId());
-        return ResponseEntity.ok(tasks);
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
+        org.springframework.data.domain.Page<Maintenance> pageResult = maintenanceRepository.findByOrganizationId(organization.getId(), pageable);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.ofPage(pageResult));
     }
 
     @PostMapping

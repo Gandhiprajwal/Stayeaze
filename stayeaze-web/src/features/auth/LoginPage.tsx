@@ -19,7 +19,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   const demoAccounts = [
-    { role: 'Super Admin', email: 'admin@stayeaze.com', password: 'admin123', icon: ShieldCheck, accent: 'text-destructive' },
+    { role: 'Super Admin', email: 'superadmin@stayeaze.com', password: 'Friend@2010', icon: ShieldCheck, accent: 'text-destructive' },
     { role: 'Admin (Owner)', email: 'owner@stayeaze.com', password: 'owner123', icon: Building2, accent: 'text-info' },
     { role: 'Property Manager', email: 'manager@stayeaze.com', password: 'manager123', icon: UserRound, accent: 'text-primary' },
   ];

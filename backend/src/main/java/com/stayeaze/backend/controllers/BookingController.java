@@ -43,6 +43,9 @@ public class BookingController {
     @Autowired
     private CheckInRepository checkInRepository;
 
+    @Autowired
+    private com.stayeaze.backend.services.OccupancySyncService occupancySyncService;
+
     private Organization getLoggedUserOrg() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
@@ -224,6 +227,7 @@ public class BookingController {
                 ex.printStackTrace();
             }
 
+            occupancySyncService.syncStatsAndEvictCaches(null);
             return new ResponseEntity<>(formatBooking(saved), HttpStatus.CREATED);
         } catch (Exception e) {
             e.printStackTrace();
@@ -268,6 +272,7 @@ public class BookingController {
         }
 
         Booking saved = bookingRepository.save(booking);
+        occupancySyncService.syncStatsAndEvictCaches(null);
         return ResponseEntity.ok(formatBooking(saved));
     }
 
@@ -281,6 +286,7 @@ public class BookingController {
         }
         booking.setStatus("CANCELLED");
         bookingRepository.save(booking);
+        occupancySyncService.syncStatsAndEvictCaches(null);
         return ResponseEntity.ok(new MessageResponse("Booking cancelled successfully."));
     }
 
@@ -301,14 +307,15 @@ public class BookingController {
     }
 
     @GetMapping("/bookings")
-    public ResponseEntity<?> getFlatBookings() {
+    public ResponseEntity<?> getFlatBookings(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         Organization organization = getLoggedUserOrg();
-        List<Booking> bookings = bookingRepository.findByOrganizationId(organization.getId());
-        List<Map<String, Object>> response = new ArrayList<>();
-        for (Booking b : bookings) {
-            response.add(formatBooking(b));
-        }
-        return ResponseEntity.ok(response);
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
+        org.springframework.data.domain.Page<Booking> pageResult = bookingRepository.findByOrganizationId(organization.getId(), pageable);
+        org.springframework.data.domain.Page<Map<String, Object>> mappedPage = pageResult.map(this::formatBooking);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.ofPage(mappedPage));
     }
 
     @GetMapping("/bookings/{id}")

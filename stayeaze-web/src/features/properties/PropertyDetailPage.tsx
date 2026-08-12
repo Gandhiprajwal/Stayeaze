@@ -19,37 +19,74 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { Property, Building, Tenant, Floor, Room, Bed } from '@/lib/types';
+import { FormDialog } from '@/components/common/FormDialog';
+import { FormInput } from '@/components/common/FormField';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { formatCurrency, formatDate, initials, occupancyRate } from '@/lib/format';
+import { useUpdate, useForm } from '@/lib/hooks/use-crud';
+
+const propertyTypes = [
+  { value: 'PG', label: 'Paying Guest' },
+  { value: 'HOSTEL', label: 'Hostel' },
+  { value: 'CO_LIVING', label: 'Co-living' },
+];
+const propertyStatuses = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'maintenance', label: 'Maintenance' },
+];
 
 export default function PropertyDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [expandedBuilding, setExpandedBuilding] = useState<string | null>(null);
   const [expandedFloor, setExpandedFloor] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const updateMut = useUpdate<Property>('/properties', 'Property');
+  const form = useForm({
+    name: '', code: '', type: 'PG' as Property['type'], address: '', city: '', state: '', pincode: '',
+    manager: '', phone: '', email: '', status: 'active' as Property['status']
+  });
 
   const { data: property, isLoading } = useQuery({
-    queryKey: ['property', id],
+    queryKey: ['/properties', id],
     queryFn: () => api.get<Property>(`/properties/${id}`).then((r) => r.data),
     enabled: !!id,
   });
   const { data: buildings } = useQuery({
-    queryKey: ['property-buildings', id],
-    queryFn: () => api.get<{ data: Building[] }>('/buildings', { params: { pageSize: 50 } }).then((r) => r.data.data.filter((b) => b.propertyId === id)),
+    queryKey: ['/buildings', id],
+    queryFn: () => api.get<any>('/buildings', { params: { pageSize: 100 } }).then((r) => {
+      const d = r.data;
+      const list = Array.isArray(d) ? d : d?.data || [];
+      return list.filter((b: Building) => b.propertyId === id);
+    }),
     enabled: !!id,
   });
   const { data: floors } = useQuery({
-    queryKey: ['property-floors'],
-    queryFn: () => api.get<{ data: Floor[] }>('/floors', { params: { pageSize: 200 } }).then((r) => r.data.data),
+    queryKey: ['/floors'],
+    queryFn: () => api.get<any>('/floors', { params: { pageSize: 200 } }).then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d?.data || [];
+    }),
     enabled: !!id,
   });
   const { data: rooms } = useQuery({
-    queryKey: ['property-rooms'],
-    queryFn: () => api.get<{ data: Room[] }>('/rooms', { params: { pageSize: 300 } }).then((r) => r.data.data),
+    queryKey: ['/rooms'],
+    queryFn: () => api.get<any>('/rooms', { params: { pageSize: 300 } }).then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d?.data || [];
+    }),
     enabled: !!id,
   });
   const { data: beds } = useQuery({
-    queryKey: ['property-beds'],
-    queryFn: () => api.get<{ data: Bed[] }>('/beds', { params: { pageSize: 500 } }).then((r) => r.data.data),
+    queryKey: ['/beds'],
+    queryFn: () => api.get<any>('/beds', { params: { pageSize: 500 } }).then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d?.data || [];
+    }),
     enabled: !!id,
   });
   const { data: tenants } = useQuery({
@@ -71,9 +108,9 @@ export default function PropertyDetailPage() {
   const occRate = occupancyRate(property.occupiedBeds, property.totalBeds);
   const monthlyRent = tenants?.reduce((s, t) => s + t.rent, 0) ?? 0;
 
-  const buildingFloors = (buildingId: string) => (floors ?? []).filter((f) => f.buildingId === buildingId);
-  const floorRooms = (floorId: string) => (rooms ?? []).filter((r) => r.floorId === floorId);
-  const roomBeds = (roomId: string) => (beds ?? []).filter((b) => b.roomId === roomId);
+  const buildingFloors = (buildingId: string) => (floors ?? []).filter((f: any) => f.buildingId === buildingId);
+  const floorRooms = (floorId: string) => (rooms ?? []).filter((r: any) => r.floorId === floorId);
+  const roomBeds = (roomId: string) => (beds ?? []).filter((b: any) => b.roomId === roomId);
 
   function toggleBuilding(bid: string) {
     setExpandedBuilding((prev) => (prev === bid ? null : bid));
@@ -81,6 +118,27 @@ export default function PropertyDetailPage() {
   }
   function toggleFloor(fid: string) {
     setExpandedFloor((prev) => (prev === fid ? null : fid));
+  }
+
+  function openEdit() {
+    if (!property) return;
+    form.reset({
+      name: property.name, code: property.code, type: property.type, address: property.address,
+      city: property.city, state: property.state, pincode: property.pincode, manager: property.manager,
+      phone: property.phone, email: property.email, status: property.status
+    });
+    setEditOpen(true);
+  }
+
+  function submitEdit() {
+    if (!property) return;
+    const rules = {
+      name: (v: any) => !v ? 'Name is required' : undefined,
+      code: (v: any) => !v ? 'Code is required' : undefined,
+      city: (v: any) => !v ? 'City is required' : undefined,
+    };
+    if (!form.validate(rules)) return;
+    updateMut.mutate({ id: property.id, payload: form.values }, { onSuccess: () => setEditOpen(false) });
   }
 
   return (
@@ -95,7 +153,7 @@ export default function PropertyDetailPage() {
         title={property.name}
         description={`${property.code || 'PROP'} · ${(property.type || 'CO_LIVING').replace('_', '-')} · ${property.city || ''}, ${property.state || ''}`}
         icon={Hotel}
-        actions={<Button variant="outline"><Pencil className="mr-1.5 h-4 w-4" /> Edit Property</Button>}
+        actions={<Button variant="outline" onClick={openEdit}><Pencil className="mr-1.5 h-4 w-4" /> Edit Property</Button>}
       />
 
       {/* KPIs */}
@@ -115,7 +173,7 @@ export default function PropertyDetailPage() {
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid gap-4">
-              <InfoRow icon={MapPin} label="Address" value={`${property.address}, ${property.city}, ${property.state} ${property.pincode}`} />
+              <InfoRow icon={MapPin} label="Address" value={[property.address, property.city, property.state, property.pincode].filter(Boolean).join(', ')} allowWrap />
               <InfoRow icon={Users} label="Manager" value={property.manager} />
               <InfoRow icon={Phone} label="Phone" value={property.phone} />
               <InfoRow icon={Mail} label="Email" value={property.email} />
@@ -151,7 +209,7 @@ export default function PropertyDetailPage() {
             {!buildings || buildings.length === 0 ? (
               <Skeleton className="h-32" />
             ) : (
-              buildings.map((building) => {
+              buildings.map((building: any) => {
                 const bRate = occupancyRate(building.occupied, building.beds);
                 const bFloors = buildingFloors(building.id);
                 const isOpen = expandedBuilding === building.id;
@@ -187,7 +245,7 @@ export default function PropertyDetailPage() {
                         {bFloors.length === 0 ? (
                           <p className="py-3 text-center text-xs text-muted-foreground">No floors configured</p>
                         ) : (
-                          bFloors.map((floor) => {
+                          bFloors.map((floor: any) => {
                             const fRooms = floorRooms(floor.id);
                             const fIsOpen = expandedFloor === floor.id;
                             return (
@@ -216,7 +274,7 @@ export default function PropertyDetailPage() {
                                       <p className="py-2 text-center text-xs text-muted-foreground">No rooms configured</p>
                                     ) : (
                                       <div className="space-y-2">
-                                        {fRooms.map((room) => {
+                                        {fRooms.map((room: any) => {
                                           const rBeds = roomBeds(room.id);
                                           return (
                                             <div key={room.id} className="rounded-md border bg-card p-2.5">
@@ -233,7 +291,7 @@ export default function PropertyDetailPage() {
                                               {/* Beds */}
                                               {rBeds.length > 0 && (
                                                 <div className="mt-2.5 flex flex-wrap gap-1.5 border-t pt-2.5">
-                                                  {rBeds.map((bed) => (
+                                                  {rBeds.map((bed: any) => (
                                                     <div
                                                       key={bed.id}
                                                       className={cn(
@@ -294,19 +352,58 @@ export default function PropertyDetailPage() {
           )) ?? <Skeleton className="h-20" />}
         </CardContent>
       </Card>
+
+      <FormDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        title="Edit Property"
+        description="Update property details."
+        onSubmit={submitEdit}
+        loading={updateMut.isPending}
+        submitLabel="Save Changes"
+        size="lg"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormInput label="Property Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} />
+          <FormInput label="Property Code" required id="code" value={form.values.code} onChange={(e) => form.setValue('code', e.target.value.toUpperCase())} error={form.errors.code} />
+          <div className="space-y-1.5">
+            <Label>Property Type</Label>
+            <Select value={form.values.type} onValueChange={(v) => form.setValue('type', v as Property['type'])}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{propertyTypes.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Status</Label>
+            <Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Property['status'])}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{propertyStatuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <FormInput label="Address" id="address" className="sm:col-span-2" value={form.values.address} onChange={(e) => form.setValue('address', e.target.value)} />
+          <FormInput label="City" required id="city" value={form.values.city} onChange={(e) => form.setValue('city', e.target.value)} error={form.errors.city} />
+          <FormInput label="State" id="state" value={form.values.state} onChange={(e) => form.setValue('state', e.target.value)} />
+          <FormInput label="Pincode" id="pincode" value={form.values.pincode} onChange={(e) => form.setValue('pincode', e.target.value)} />
+          <FormInput label="Manager" id="manager" value={form.values.manager} onChange={(e) => form.setValue('manager', e.target.value)} />
+          <FormInput label="Phone" id="phone" value={form.values.phone} onChange={(e) => form.setValue('phone', e.target.value)} />
+          <FormInput label="Email" type="email" id="email" value={form.values.email} onChange={(e) => form.setValue('email', e.target.value)} />
+        </div>
+      </FormDialog>
     </div>
   );
 }
 
-function InfoRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string }) {
+function InfoRow({ icon: Icon, label, value, allowWrap }: { icon: React.ComponentType<{ className?: string }>; label: string; value?: string; allowWrap?: boolean }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+    <div className="flex items-start gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground mt-0.5">
         <Icon className="h-5 w-5" />
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="truncate text-sm font-medium capitalize">{value}</p>
+        <p className={cn("text-sm font-medium", allowWrap ? "break-words whitespace-normal" : "truncate capitalize")}>
+          {value || '—'}
+        </p>
       </div>
     </div>
   );

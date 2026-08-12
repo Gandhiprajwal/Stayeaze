@@ -36,8 +36,8 @@ export default function VisitorsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Visitor | null>(null);
 
   const { data: properties } = useQuery({
-    queryKey: ['visitors-properties'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['visitors-properties-minimal'],
+    queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
   const propMap = new Map((properties ?? []).map((p) => [p.id, p.name]));
   const { data: users } = useQuery({

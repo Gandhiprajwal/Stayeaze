@@ -6,13 +6,9 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public class TenantRequest {
-    @NotBlank
-    @Size(min = 2, max = 100)
     private String firstName;
-
-    @NotBlank
-    @Size(min = 2, max = 100)
     private String lastName;
+    private String name;
 
     private String email;
 
@@ -43,8 +39,23 @@ public class TenantRequest {
     public TenantRequest() {
     }
 
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+        if (name != null && !name.isBlank()) {
+            String[] parts = name.trim().split("\\s+", 2);
+            this.firstName = parts[0];
+            this.lastName = parts.length > 1 ? parts[1] : parts[0];
+        }
+    }
+
     public String getFirstName() {
-        return firstName;
+        if (firstName != null && !firstName.isBlank()) return firstName;
+        if (name != null && !name.isBlank()) return name.trim().split("\\s+", 2)[0];
+        return "Tenant";
     }
 
     public void setFirstName(String firstName) {
@@ -52,7 +63,12 @@ public class TenantRequest {
     }
 
     public String getLastName() {
-        return lastName;
+        if (lastName != null && !lastName.isBlank()) return lastName;
+        if (name != null && !name.isBlank()) {
+            String[] parts = name.trim().split("\\s+", 2);
+            return parts.length > 1 ? parts[1] : parts[0];
+        }
+        return "User";
     }
 
     public void setLastName(String lastName) {

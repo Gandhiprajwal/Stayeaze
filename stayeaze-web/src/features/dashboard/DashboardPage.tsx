@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 import {
   Hotel, Users, Wallet, TrendingUp, Building2, CalendarCheck,
   MessageSquareWarning, ArrowUpRight, AlertTriangle,
-  Server, Cpu, Database, Activity, Mail, MessageSquare, CreditCard, Radio, Key,
+  Server, Cpu, Database, Activity, Mail, MessageSquare, CreditCard, Radio, Key, Zap, HardDrive,
+
 } from 'lucide-react';
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer,
@@ -21,15 +22,15 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, formatDate, initials, occupancyRate } from '@/lib/format';
 import api from '@/lib/api';
-import type { Property, Tenant, Invoice, Complaint } from '@/lib/types';
+import type { Property, Tenant, Invoice, Payment, Complaint } from '@/lib/types';
 import { useAuthStore } from '@/lib/stores/auth-store';
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
 
   const { data: properties, isLoading: loadingProps } = useQuery({
-    queryKey: ['dashboard', 'properties'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['dashboard', 'properties-minimal'],
+    queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
   const { data: buildings } = useQuery({
     queryKey: ['dashboard', 'buildings'],
@@ -49,18 +50,100 @@ export default function DashboardPage() {
     queryKey: ['dashboard', 'invoices'],
     queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: { pageSize: 100 } }).then((r) => r.data.data),
   });
+  const { data: payments } = useQuery({
+    queryKey: ['dashboard', 'payments'],
+    queryFn: () => api.get<{ data: Payment[] }>('/payments', { params: { pageSize: 100 } }).then((r) => r.data?.data || []),
+  });
   const { data: complaints } = useQuery({
     queryKey: ['dashboard', 'complaints'],
     queryFn: () => api.get<{ data: Complaint[] }>('/complaints', { params: { pageSize: 5, sortBy: 'createdAt', sortOrder: 'desc' } }).then((r) => r.data.data),
   });
 
-  const totalBeds = properties?.reduce((s, p) => s + p.totalBeds, 0) ?? 0;
-  const occupiedBeds = properties?.reduce((s, p) => s + p.occupiedBeds, 0) ?? 0;
-  const occupancy = occupancyRate(occupiedBeds, totalBeds);
-  const activeTenants = tenants?.filter((t) => t.status === 'active').length ?? 0;
-  const monthlyRevenue = invoices?.filter((i) => i.status === 'paid').reduce((s, i) => s + i.paidAmount, 0) ?? 0;
+  // Accurate Active Tenants (excluding checked out / archived / inactive)
+  const activeTenantsList = (tenants ?? []).filter((t) => {
+    const st = (t.status || '').toLowerCase();
+    return st === 'active' || st === 'checked_in';
+  });
+  const activeTenants = activeTenantsList.length;
+
+  // Accurate Total & Occupied Beds calculation
+  const totalBedsFromProps = properties?.reduce((s, p) => s + (p.totalBeds || 0), 0) ?? 0;
+  const occupiedBedsFromProps = properties?.reduce((s, p) => s + (p.occupiedBeds || 0), 0) ?? 0;
+
+  const totalBedsFromBuildings = (buildings ?? []).reduce((s, b) => s + (b.beds || 0), 0);
+  const occupiedBedsFromBuildings = (buildings ?? []).reduce((s, b) => s + (b.occupied || 0), 0);
+
+  const totalBedsFromFloors = (floors ?? []).reduce((s, f) => s + (f.beds || 0), 0);
+  const occupiedBedsFromFloors = (floors ?? []).reduce((s, f) => s + (f.occupied || 0), 0);
+
+  const totalBeds = totalBedsFromProps > 0 
+    ? totalBedsFromProps 
+    : (totalBedsFromBuildings > 0 ? totalBedsFromBuildings : totalBedsFromFloors);
+
+  const rawOccupiedBeds = occupiedBedsFromProps > 0 
+    ? occupiedBedsFromProps 
+    : (occupiedBedsFromBuildings > 0 ? occupiedBedsFromBuildings : (occupiedBedsFromFloors > 0 ? occupiedBedsFromFloors : activeTenants));
+
+  const occupiedBeds = totalBeds > 0 
+    ? Math.min(totalBeds, Math.max(rawOccupiedBeds, activeTenants)) 
+    : activeTenants;
+
+  const occupancy = totalBeds > 0 ? Math.min(100, Math.max(0, Math.round((occupiedBeds / totalBeds) * 1000) / 10)) : 0;
+  const invoicePaidTotal = invoices?.filter((i) => i.status === 'paid').reduce((s, i) => s + (i.paidAmount || 0), 0) ?? 0;
+  const paymentCollectionsTotal = payments?.reduce((s, p) => s + (p.amount || 0), 0) ?? 0;
+  const monthlyRevenue = invoicePaidTotal + paymentCollectionsTotal;
   const overdue = invoices?.filter((i) => i.status === 'overdue').length ?? 0;
   const openComplaints = complaints?.filter((c) => c.status === 'open' || c.status === 'in_progress').length ?? 0;
+
+  // Accurate Real Month-over-Month (MoM) Growth Trends
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth();
+  const prevMonth = curMonth === 0 ? 11 : curMonth - 1;
+  const prevMonthYear = curMonth === 0 ? curYear - 1 : curYear;
+
+  const curMonthRev = (payments ?? []).filter((p) => {
+    if (p.status !== 'success') return false;
+    const d = new Date(p.date || (p as any).createdAt || Date.now());
+    return d.getFullYear() === curYear && d.getMonth() === curMonth;
+  }).reduce((s, p) => s + (p.amount || 0), 0);
+
+  const prevMonthRev = (payments ?? []).filter((p) => {
+    if (p.status !== 'success') return false;
+    const d = new Date(p.date || (p as any).createdAt || Date.now());
+    return d.getFullYear() === prevMonthYear && d.getMonth() === prevMonth;
+  }).reduce((s, p) => s + (p.amount || 0), 0);
+
+  let revGrowthPct = 0;
+  if (prevMonthRev > 0) {
+    revGrowthPct = Math.round(((curMonthRev - prevMonthRev) / prevMonthRev) * 1000) / 10;
+  } else if (curMonthRev > 0) {
+    revGrowthPct = 100;
+  }
+  const revenueMomTrend = (curMonthRev > 0 || prevMonthRev > 0) ? {
+    value: `${revGrowthPct >= 0 ? '+' : ''}${revGrowthPct}%`,
+    direction: revGrowthPct >= 0 ? ('up' as const) : ('down' as const),
+    positive: revGrowthPct >= 0,
+  } : undefined;
+
+  const curMonthTenantsCount = (tenants ?? []).filter((t) => {
+    if (!t.createdAt) return false;
+    const d = new Date(t.createdAt);
+    return d.getFullYear() === curYear && d.getMonth() === curMonth;
+  }).length;
+
+  const prevMonthTenantsCount = (tenants ?? []).filter((t) => {
+    if (!t.createdAt) return false;
+    const d = new Date(t.createdAt);
+    return d.getFullYear() === prevMonthYear && d.getMonth() === prevMonth;
+  }).length;
+
+  const tenantGrowthDiff = curMonthTenantsCount - prevMonthTenantsCount;
+  const activeTenantTrend = (curMonthTenantsCount > 0 || prevMonthTenantsCount > 0) ? {
+    value: `${tenantGrowthDiff >= 0 ? '+' : ''}${tenantGrowthDiff}`,
+    direction: tenantGrowthDiff >= 0 ? ('up' as const) : ('down' as const),
+    positive: tenantGrowthDiff >= 0,
+  } : undefined;
 
   const { data: allUsers } = useQuery({
     queryKey: ['dashboard', 'all-users'],
@@ -75,14 +158,35 @@ export default function DashboardPage() {
       jvm: { max: number; total: number; used: number; percent: number };
       db: { active: number; max: number; percent: number };
       services: {
+        redis?: { status: string; rtt: number };
+        postgres?: { status: string; rtt: number };
+        storage?: { status: string; rtt: number };
         twilio: { status: string; rtt: number };
         smtp: { status: string; rtt: number };
         razorpay: { status: string; rtt: number };
       }
     }>('/system/metrics').then((r) => r.data),
     refetchInterval: 5000,
-    enabled: user?.role === 'SUPER_ADMIN',
   });
+
+  const { data: orgProfile } = useQuery({
+    queryKey: ['dashboard', 'org-billing-profile'],
+    queryFn: () => api.get<any>('/organization-billing-profile').then((r) => r.data),
+    enabled: user?.role === 'OWNER' || user?.role === 'ADMIN' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'RECEPTIONIST' || user?.role === 'ACCOUNTANT',
+  });
+
+  const redisConnected = sysMetrics?.services?.redis?.status?.toLowerCase() === 'connected';
+  const postgresConnected = sysMetrics?.services?.postgres?.status?.toLowerCase() === 'connected';
+  const storageConnected = sysMetrics?.services?.storage?.status?.toLowerCase() === 'connected';
+  const twilioConnected = sysMetrics?.services?.twilio?.status?.toLowerCase() === 'connected';
+  const smtpConnected = sysMetrics?.services?.smtp?.status?.toLowerCase() === 'connected';
+  const razorpayConnected = user?.role === 'SUPER_ADMIN'
+    ? sysMetrics?.services?.razorpay?.status?.toLowerCase() === 'connected'
+    : !!((orgProfile as any)?.hasRazorpayConfigured);
+
+
+
+
 
   // Dynamic trend chart data computed from invoices
   const getRevenueTrend = () => {
@@ -151,61 +255,8 @@ export default function DashboardPage() {
   const pieColors = ['hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--info))', 'hsl(var(--destructive))'];
 
   if (user?.role === 'SUPER_ADMIN') {
-    const [showConfigModal, setShowConfigModal] = useState(false);
-    const [formData, setFormData] = useState({
-      smsProvider: 'Twilio',
-      emailProvider: 'SMTP',
-      allowSelfRegistration: true,
-      maintenanceMode: false,
-      twilioSid: '',
-      twilioAuthToken: '',
-      smtpHost: '',
-      smtpPort: '587',
-      smtpUsername: '',
-      smtpPassword: '',
-      razorpayKeyId: '',
-      razorpayKeySecret: '',
-    });
-
-    const { data: systemConfig, refetch: refetchConfig } = useQuery({
-      queryKey: ['dashboard', 'system-config'],
-      queryFn: () => api.get<any>('/system-configs').then((r) => r.data),
-      enabled: user?.role === 'SUPER_ADMIN',
-    });
-
-    useEffect(() => {
-      if (systemConfig) {
-        setFormData({
-          smsProvider: systemConfig.smsProvider || 'Twilio',
-          emailProvider: systemConfig.emailProvider || 'SMTP',
-          allowSelfRegistration: systemConfig.allowSelfRegistration ?? true,
-          maintenanceMode: systemConfig.maintenanceMode ?? false,
-          twilioSid: systemConfig.twilioSid || '',
-          twilioAuthToken: systemConfig.twilioAuthToken || '',
-          smtpHost: systemConfig.smtpHost || '',
-          smtpPort: systemConfig.smtpPort || '587',
-          smtpUsername: systemConfig.smtpUsername || '',
-          smtpPassword: systemConfig.smtpPassword || '',
-          razorpayKeyId: systemConfig.razorpayKeyId || '',
-          razorpayKeySecret: systemConfig.razorpayKeySecret || '',
-        });
-      }
-    }, [systemConfig, showConfigModal]);
-
-    const handleSaveConfig = async (e: React.FormEvent) => {
-      e.preventDefault();
-      try {
-        await api.put('/system-configs', formData);
-        setShowConfigModal(false);
-        refetchConfig();
-        refetchMetrics();
-        toast.success('System API configurations updated successfully!');
-      } catch (err) {
-        toast.error('Failed to save configuration settings.');
-      }
-    };
-
     const totalSaaSUsers = allUsers?.length ?? 0;
+
     const totalSaaSProps = properties?.length ?? 0;
     const saasMonthlyRevenue = totalSaaSProps * 4999;
     const saasProfit = Math.round(saasMonthlyRevenue * 0.85);
@@ -264,9 +315,7 @@ export default function DashboardPage() {
     const jvmPercent = Math.round(sysMetrics?.jvm.percent ?? 0);
     const dbPercent = Math.round(sysMetrics?.db.percent ?? 0);
 
-    const twilioConnected = sysMetrics?.services.twilio.status === 'Connected';
-    const smtpConnected = sysMetrics?.services.smtp.status === 'Connected';
-    const razorpayConnected = sysMetrics?.services.razorpay.status === 'Connected';
+
 
     return (
       <div className="space-y-6">
@@ -275,9 +324,12 @@ export default function DashboardPage() {
           description="Real-time multi-tenant system overview, subscription metrics, and infrastructure health."
           actions={
             <div className="flex gap-3">
-              <Button onClick={() => setShowConfigModal(true)} variant="outline">
-                <Key className="mr-1.5 h-4 w-4 text-primary" /> Configure API Gateways
+              <Button asChild variant="outline">
+                <Link to="/super-admin/integrations">
+                  <Key className="mr-1.5 h-4 w-4 text-primary" /> Configure API Gateways
+                </Link>
               </Button>
+
               <Button asChild>
                 <Link to="/users"><Users className="mr-1.5 h-4 w-4" /> User Accounts</Link>
               </Button>
@@ -342,52 +394,70 @@ export default function DashboardPage() {
               <CardTitle className="flex items-center gap-2">
                 <Radio className="h-5 w-5 text-primary" /> Service Connections
               </CardTitle>
-              <CardDescription>Integration channels & response latency</CardDescription>
+              <CardDescription>Real-time channels & response latency</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between border-b pb-2.5">
+            <CardContent className="space-y-3">
+              {/* Redis */}
+              <div className="flex items-center justify-between border-b pb-2">
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="h-4.5 w-4.5 text-primary" />
+                  <Zap className="h-4 w-4 text-amber-500" />
                   <div>
-                    <p className="text-sm font-medium">OTP Service (Twilio/SMS)</p>
-                    <p className="text-xs text-muted-foreground">Gateway status</p>
+                    <p className="text-sm font-medium">Redis Cache Engine</p>
+                    <p className="text-xs text-muted-foreground">In-memory L2 Cache</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    twilioConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+                    redisConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
                   }`}>
-                    {twilioConnected ? 'Connected' : 'Down'}
+                    {redisConnected ? 'Connected' : 'Down'}
                   </span>
-                  {twilioConnected && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services.twilio.rtt}ms</p>
-                  )}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.redis?.rtt ?? 0}ms</p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between border-b pb-2.5">
+              {/* PostgreSQL */}
+              <div className="flex items-center justify-between border-b pb-2">
                 <div className="flex items-center gap-2">
-                  <Mail className="h-4.5 w-4.5 text-primary" />
+                  <Database className="h-4 w-4 text-blue-500" />
                   <div>
-                    <p className="text-sm font-medium">Email Dispatcher (SMTP)</p>
-                    <p className="text-xs text-muted-foreground">Notification SMTP relay</p>
+                    <p className="text-sm font-medium">PostgreSQL Database</p>
+                    <p className="text-xs text-muted-foreground">Primary DB Cluster</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    smtpConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+                    postgresConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
                   }`}>
-                    {smtpConnected ? 'Connected' : 'Down'}
+                    {postgresConnected ? 'Connected' : 'Down'}
                   </span>
-                  {smtpConnected && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services.smtp.rtt}ms</p>
-                  )}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.postgres?.rtt ?? 2}ms</p>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
+              {/* AWS S3 / File Storage */}
+              <div className="flex items-center justify-between border-b pb-2">
                 <div className="flex items-center gap-2">
-                  <Key className="h-4.5 w-4.5 text-primary" />
+                  <HardDrive className="h-4 w-4 text-emerald-500" />
+                  <div>
+                    <p className="text-sm font-medium">AWS S3 / File Storage</p>
+                    <p className="text-xs text-muted-foreground">KYC & Media Storage</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    storageConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+                  }`}>
+                    {storageConnected ? 'Connected' : 'Down'}
+                  </span>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.storage?.rtt ?? 4}ms</p>
+                </div>
+              </div>
+
+              {/* Payment Gateway (Razorpay) */}
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="flex items-center gap-2">
+                  <Key className="h-4 w-4 text-purple-500" />
                   <div>
                     <p className="text-sm font-medium">Payment Gateway (Razorpay)</p>
                     <p className="text-xs text-muted-foreground">Webhook active listener</p>
@@ -400,7 +470,49 @@ export default function DashboardPage() {
                     {razorpayConnected ? 'Connected' : 'Down'}
                   </span>
                   {razorpayConnected && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services.razorpay.rtt}ms</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.razorpay?.rtt}ms</p>
+                  )}
+                </div>
+              </div>
+
+              {/* OTP Service */}
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium">OTP Service (Twilio/SMS)</p>
+                    <p className="text-xs text-muted-foreground">Gateway status</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    twilioConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+                  }`}>
+                    {twilioConnected ? 'Connected' : 'Down'}
+                  </span>
+                  {twilioConnected && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.twilio?.rtt}ms</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Email Dispatcher (SMTP) */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium">Email Dispatcher (SMTP)</p>
+                    <p className="text-xs text-muted-foreground">Notification SMTP relay</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    smtpConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+                  }`}>
+                    {smtpConnected ? 'Connected' : 'Down'}
+                  </span>
+                  {smtpConnected && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.smtp?.rtt}ms</p>
                   )}
                 </div>
               </div>
@@ -465,146 +577,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* API Configurations Modal Overlay */}
-        {showConfigModal && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-card border rounded-xl shadow-2xl max-w-2xl w-full text-card-foreground my-8">
-              <div className="flex items-center justify-between p-6 border-b">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Key className="h-5 w-5 text-primary" /> API Gateways & Credentials Configuration
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowConfigModal(false)}
-                  className="text-muted-foreground hover:text-foreground rounded-lg p-1 hover:bg-muted"
-                >
-                  <span className="sr-only">Close</span>
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
 
-              <form onSubmit={handleSaveConfig} className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
-                {/* SMS Section */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-primary flex items-center gap-1.5 border-b pb-1">
-                    <Radio className="h-4 w-4" /> Twilio SMS Gateway
-                  </h4>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Twilio Account SID</label>
-                      <input
-                        type="text"
-                        placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxx"
-                        value={formData.twilioSid}
-                        onChange={(e) => setFormData({ ...formData, twilioSid: e.target.value })}
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Twilio Auth Token</label>
-                      <input
-                        type="password"
-                        placeholder="••••••••••••••••••••••••••••••••"
-                        value={formData.twilioAuthToken}
-                        onChange={(e) => setFormData({ ...formData, twilioAuthToken: e.target.value })}
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* SMTP Section */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-primary flex items-center gap-1.5 border-b pb-1">
-                    <Mail className="h-4 w-4" /> SMTP Email Server
-                  </h4>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">SMTP Host</label>
-                      <input
-                        type="text"
-                        placeholder="smtp.mailgun.org"
-                        value={formData.smtpHost}
-                        onChange={(e) => setFormData({ ...formData, smtpHost: e.target.value })}
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">SMTP Port</label>
-                      <input
-                        type="text"
-                        placeholder="587"
-                        value={formData.smtpPort}
-                        onChange={(e) => setFormData({ ...formData, smtpPort: e.target.value })}
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">SMTP Username</label>
-                      <input
-                        type="text"
-                        placeholder="postmaster@yourdomain.com"
-                        value={formData.smtpUsername}
-                        onChange={(e) => setFormData({ ...formData, smtpUsername: e.target.value })}
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">SMTP Password</label>
-                      <input
-                        type="password"
-                        placeholder="••••••••••••••••••••••••••••••••"
-                        value={formData.smtpPassword}
-                        onChange={(e) => setFormData({ ...formData, smtpPassword: e.target.value })}
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Razorpay Section */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-sm text-primary flex items-center gap-1.5 border-b pb-1">
-                    <CreditCard className="h-4 w-4" /> Razorpay Payment Gateway
-                  </h4>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Razorpay Key ID</label>
-                      <input
-                        type="text"
-                        placeholder="rzp_live_xxxxxxxxxxxxxx"
-                        value={formData.razorpayKeyId}
-                        onChange={(e) => setFormData({ ...formData, razorpayKeyId: e.target.value })}
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium">Razorpay Key Secret</label>
-                      <input
-                        type="password"
-                        placeholder="••••••••••••••••••••••••••••••••"
-                        value={formData.razorpayKeySecret}
-                        onChange={(e) => setFormData({ ...formData, razorpayKeySecret: e.target.value })}
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </form>
-
-              <div className="flex items-center justify-end gap-3 p-6 border-t">
-                <Button type="button" variant="outline" onClick={() => setShowConfigModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" onClick={handleSaveConfig}>
-                  Save Settings
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -628,9 +601,9 @@ export default function DashboardPage() {
         ) : (
           <>
             <StatCard label="Total Buildings" value={buildings?.length ?? 0} icon={Building2} accent="primary" hint={`${buildings?.length ?? 0} buildings registered`} />
-            <StatCard label="Occupancy Rate" value={`${occupancy}%`} icon={Building2} accent="success" trend={{ value: '+4.2%', direction: 'up', positive: true }} hint={`${occupiedBeds}/${totalBeds} beds occupied`} />
-            <StatCard label="Active Tenants" value={activeTenants} icon={Users} accent="info" trend={{ value: '+12', direction: 'up', positive: true }} hint="Currently checked in" />
-            <StatCard label="Monthly Revenue" value={formatCurrency(monthlyRevenue)} icon={Wallet} accent="warning" trend={{ value: '+7.8%', direction: 'up', positive: true }} hint="Collected this month" />
+            <StatCard label="Occupancy Rate" value={`${occupancy}%`} icon={Building2} accent="success" hint={`${occupiedBeds}/${totalBeds} beds occupied`} />
+            <StatCard label="Active Tenants" value={activeTenants} icon={Users} accent="info" trend={activeTenantTrend} hint="Currently checked in" />
+            <StatCard label="Monthly Revenue" value={formatCurrency(monthlyRevenue)} icon={Wallet} accent="warning" trend={revenueMomTrend} hint="Collected this month" />
           </>
         )}
       </div>
@@ -706,26 +679,39 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Payment Gateway Status Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Invoice Status</CardTitle>
-            <CardDescription>Current billing cycle</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-primary" /> Payment Gateway Status
+            </CardTitle>
+            <CardDescription>Razorpay online payment system status</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie data={statusDist} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
-                  {statusDist.map((_, i) => (
-                    <Cell key={i} fill={pieColors[i]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <CreditCard className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Razorpay Gateway</p>
+                  <p className="text-xs text-muted-foreground">Online rent payments & auto-reconciliation</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                  razorpayConnected 
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+                    : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                }`}>
+                  {razorpayConnected ? 'UP' : 'NOT CONFIGURED'}
+                </span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
+
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

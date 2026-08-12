@@ -4,6 +4,7 @@ import com.stayeaze.backend.models.Building;
 import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.models.Property;
 import com.stayeaze.backend.payload.request.BuildingRequest;
+import com.stayeaze.backend.payload.response.BuildingDTO;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.BuildingRepository;
 import com.stayeaze.backend.repository.OrganizationRepository;
@@ -48,6 +49,9 @@ public class BuildingController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private com.stayeaze.backend.services.BuildingService buildingService;
 
     @Autowired
     private FloorRepository floorRepository;
@@ -152,7 +156,7 @@ public class BuildingController {
         }
 
         Building building = new Building(property, request.getName(), request.getCode());
-        Building saved = buildingRepository.save(building);
+        Building saved = buildingService.saveBuilding(building);
         return new ResponseEntity<>(populateBuildingStats(saved), HttpStatus.CREATED);
     }
 
@@ -171,7 +175,9 @@ public class BuildingController {
     }
 
     @GetMapping("/buildings")
-    public ResponseEntity<?> getFlatBuildings() {
+    public ResponseEntity<?> getFlatBuildings(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         Organization organization = getLoggedUserOrg();
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
@@ -179,21 +185,24 @@ public class BuildingController {
                 .getAuthorities().stream()
                 .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
 
-        List<Building> buildings;
-        if (isSuperAdmin) {
-            buildings = buildingRepository.findAll();
-        } else {
-            User user = userRepository.findById(userDetails.getId()).orElse(null);
-            if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
-                buildings = buildingRepository.findByOrganizationId(organization.getId()).stream()
-                        .filter(b -> b.getProperty() != null && user.getPropertyIds().contains(b.getProperty().getId()))
-                        .collect(Collectors.toList());
-            } else {
-                buildings = buildingRepository.findByOrganizationId(organization.getId());
-            }
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
+
+        // Property-restricted users: bypass cache (filtered list is user-specific)
+        User user = !isSuperAdmin ? userRepository.findById(userDetails.getId()).orElse(null) : null;
+        if (organization != null && user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
+            List<Building> buildings = buildingRepository.findByOrganizationId(organization.getId()).stream()
+                    .filter(b -> b.getProperty() != null && user.getPropertyIds().contains(b.getProperty().getId()))
+                    .collect(Collectors.toList());
+            buildings.forEach(this::populateBuildingStats);
+            return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(buildings, page, pageSize));
         }
-        buildings.forEach(this::populateBuildingStats);
-        return ResponseEntity.ok(buildings);
+
+        // Use cached service for standard org/superAdmin queries
+        List<BuildingDTO> all = (isSuperAdmin || organization == null)
+                ? buildingService.getAllBuildings()
+                : buildingService.getBuildingsByOrg(organization);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
     }
 
     @PostMapping("/buildings")
@@ -214,7 +223,7 @@ public class BuildingController {
         }
 
         Building building = new Building(property, request.getName(), request.getCode());
-        Building saved = buildingRepository.save(building);
+        Building saved = buildingService.saveBuilding(building);
         return new ResponseEntity<>(populateBuildingStats(saved), HttpStatus.CREATED);
     }
 
@@ -238,7 +247,7 @@ public class BuildingController {
 
         building.setName(request.getName());
         building.setCode(request.getCode());
-        Building saved = buildingRepository.save(building);
+        Building saved = buildingService.saveBuilding(building);
         return ResponseEntity.ok(populateBuildingStats(saved));
     }
 
@@ -255,7 +264,7 @@ public class BuildingController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Unauthorized to delete this building."));
         }
 
-        buildingRepository.delete(building);
+        buildingService.deleteBuilding(building.getId());
         return ResponseEntity.ok(new MessageResponse("Building deleted successfully."));
     }
 
@@ -299,7 +308,7 @@ public class BuildingController {
         building.setName(request.getName());
         building.setCode(request.getCode());
 
-        Building updated = buildingRepository.save(building);
+        Building updated = buildingService.saveBuilding(building);
         return ResponseEntity.ok(populateBuildingStats(updated));
     }
 
@@ -318,9 +327,136 @@ public class BuildingController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Building not found."));
         }
 
-        building.setStatus("ARCHIVED");
-        buildingRepository.save(building);
-
+        archiveBuildingCascade(building);
         return ResponseEntity.ok(new MessageResponse("Building successfully archived."));
+    }
+
+    private void archiveBuildingCascade(Building building) {
+        if (building == null) return;
+        building.setStatus("ARCHIVED");
+        buildingService.saveBuilding(building);
+
+        List<Floor> floors = floorRepository.findByBuilding(building);
+        for (Floor f : floors) {
+            f.setStatus("ARCHIVED");
+            floorRepository.save(f);
+
+            List<Room> rooms = roomRepository.findByFloor(f);
+            for (Room r : rooms) {
+                r.setStatus("ARCHIVED");
+                roomRepository.save(r);
+
+                List<Bed> beds = bedRepository.findByRoom(r);
+                for (Bed b : beds) {
+                    b.setStatus("ARCHIVED");
+                    bedRepository.save(b);
+
+                    if (r.getRoomNumber() != null && b.getBedNumber() != null) {
+                        List<Tenant> tenants = tenantRepository.findAll();
+                        for (Tenant t : tenants) {
+                            if (r.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
+                                b.getBedNumber().equalsIgnoreCase(t.getBedNumber()) &&
+                                (t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()))) {
+                                t.setStatus("INACTIVE");
+                                tenantRepository.save(t);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Property property = building.getProperty();
+        if (property != null) {
+            List<Building> activeBuildings = buildingRepository.findByProperty(property).stream()
+                    .filter(b -> b.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(b.getStatus()))
+                    .collect(Collectors.toList());
+
+            int propRooms = activeBuildings.stream().mapToInt(Building::getRooms).sum();
+            int propBeds = activeBuildings.stream().mapToInt(Building::getBeds).sum();
+            int propOcc = activeBuildings.stream().mapToInt(Building::getOccupied).sum();
+
+            property.setTotalBuildings(activeBuildings.size());
+            property.setTotalRooms(propRooms);
+            property.setTotalBeds(propBeds);
+            property.setOccupiedBeds(propOcc);
+            propertyRepository.save(property);
+        }
+
+        buildingService.deleteBuilding(building.getId());
+    }
+
+    @PutMapping("/buildings/{id}/unarchive")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> unarchiveFlatBuilding(@PathVariable UUID id) {
+        Organization organization = getLoggedUserOrg();
+        Building building = buildingRepository.findById(id).orElse(null);
+        if (building == null || (organization != null && building.getProperty() != null && building.getProperty().getOrganization() != null && !building.getProperty().getOrganization().getId().equals(organization.getId()))) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Building not found."));
+        }
+        unarchiveBuildingCascade(building);
+        return ResponseEntity.ok(new MessageResponse("Building and all nested floors/rooms/beds successfully unarchived."));
+    }
+
+    @PutMapping("/properties/{propertyId}/buildings/{id}/unarchive")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> unarchiveBuilding(@PathVariable UUID propertyId, @PathVariable UUID id) {
+        Property property;
+        try {
+            property = getAuthorizedProperty(propertyId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
+        }
+
+        Building building = buildingRepository.findByIdAndProperty(id, property).orElse(null);
+        if (building == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Building not found."));
+        }
+
+        unarchiveBuildingCascade(building);
+        return ResponseEntity.ok(new MessageResponse("Building successfully unarchived."));
+    }
+
+    private void unarchiveBuildingCascade(Building building) {
+        if (building == null) return;
+        building.setStatus("ACTIVE");
+        buildingService.saveBuilding(building);
+
+        List<Floor> floors = floorRepository.findByBuilding(building);
+        for (Floor f : floors) {
+            f.setStatus("AVAILABLE");
+            floorRepository.save(f);
+
+            List<Room> rooms = roomRepository.findByFloor(f);
+            for (Room r : rooms) {
+                r.setStatus("available");
+                roomRepository.save(r);
+
+                List<Bed> beds = bedRepository.findByRoom(r);
+                for (Bed b : beds) {
+                    b.setStatus("AVAILABLE");
+                    bedRepository.save(b);
+                }
+            }
+        }
+
+        Property property = building.getProperty();
+        if (property != null) {
+            List<Building> activeBuildings = buildingRepository.findByProperty(property).stream()
+                    .filter(b -> b.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(b.getStatus()))
+                    .collect(Collectors.toList());
+
+            int propRooms = activeBuildings.stream().mapToInt(Building::getRooms).sum();
+            int propBeds = activeBuildings.stream().mapToInt(Building::getBeds).sum();
+            int propOcc = activeBuildings.stream().mapToInt(Building::getOccupied).sum();
+
+            property.setTotalBuildings(activeBuildings.size());
+            property.setTotalRooms(propRooms);
+            property.setTotalBeds(propBeds);
+            property.setOccupiedBeds(propOcc);
+            propertyRepository.save(property);
+        }
+
+        buildingService.saveBuilding(building);
     }
 }

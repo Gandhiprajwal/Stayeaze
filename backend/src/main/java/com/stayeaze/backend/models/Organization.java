@@ -4,8 +4,11 @@ import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 @Entity
 @Table(name = "organizations")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Organization {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)

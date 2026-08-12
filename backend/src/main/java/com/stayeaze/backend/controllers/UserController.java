@@ -57,6 +57,11 @@ public class UserController {
 
     @GetMapping
     public ResponseEntity<?> getAllUsers(@RequestParam Map<String, String> params) {
+        int page = 1;
+        int pageSize = 10;
+        try { if (params.containsKey("page")) page = Integer.parseInt(params.get("page")); } catch (Exception ignored) {}
+        try { if (params.containsKey("pageSize")) pageSize = Integer.parseInt(params.get("pageSize")); } catch (Exception ignored) {}
+
         boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
                 .getAuthorities().stream()
                 .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
@@ -102,7 +107,14 @@ public class UserController {
             map.put("status", user.getStatus() != null ? user.getStatus().toLowerCase() : "active");
             map.put("createdAt", user.getCreatedAt());
             map.put("lastActive", user.getLastLogin() != null ? user.getLastLogin() : user.getCreatedAt());
-            map.put("propertyIds", user.getPropertyIds().stream().map(UUID::toString).collect(Collectors.toList()));
+            List<UUID> pIds = new ArrayList<>(user.getPropertyIds() != null ? user.getPropertyIds() : Collections.emptyList());
+            if (pIds.isEmpty() && user.getOrganization() != null) {
+                List<Property> orgProps = propertyRepository.findByOrganizationId(user.getOrganization().getId());
+                for (Property p : orgProps) {
+                    pIds.add(p.getId());
+                }
+            }
+            map.put("propertyIds", pIds.stream().map(UUID::toString).collect(Collectors.toList()));
             
             // Map the role back to frontend keys
             String roleName = "PROPERTY_MANAGER";
@@ -122,7 +134,7 @@ public class UserController {
             return map;
         }).collect(Collectors.toList());
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(response, page, pageSize));
     }
 
     @PostMapping

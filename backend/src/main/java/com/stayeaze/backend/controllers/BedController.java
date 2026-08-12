@@ -46,6 +46,12 @@ public class BedController {
     @Autowired
     private BookingRepository bookingRepository;
 
+    @Autowired
+    private com.stayeaze.backend.services.BedService bedService;
+
+    @Autowired
+    private com.stayeaze.backend.services.OccupancySyncService occupancySyncService;
+
     @Transactional(readOnly = true)
     public Bed populateBedDetails(Bed bed) {
         if (bed == null) return bed;
@@ -104,8 +110,8 @@ public class BedController {
     private Organization getLoggedUserOrg() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
-                .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
+        if (userDetails.getOrgId() == null) return null;
+        return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
     }
 
     private Room getAuthorizedRoom(UUID roomId) {
@@ -178,11 +184,13 @@ public class BedController {
 
     @GetMapping("/beds")
     @Transactional(readOnly = true)
-    public ResponseEntity<?> getFlatBeds() {
-        Organization organization = getLoggedUserOrg();
-        List<Bed> beds = bedRepository.findByOrganizationId(organization.getId());
-        beds.forEach(this::populateBedDetails);
-        return ResponseEntity.ok(beds);
+    public ResponseEntity<?> getFlatBeds(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        Organization organization = null;
+        try { organization = getLoggedUserOrg(); } catch (Exception ignored) {}
+        List<com.stayeaze.backend.payload.response.BedDTO> all = bedService.getBedsByOrg(organization);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
     }
 
     @PostMapping("/beds")
@@ -224,6 +232,7 @@ public class BedController {
         }
 
         Bed saved = bedRepository.save(bed);
+        occupancySyncService.syncStatsForRoom(room);
         return new ResponseEntity<>(populateBedDetails(saved), HttpStatus.CREATED);
     }
 
@@ -268,6 +277,7 @@ public class BedController {
         }
 
         Bed updated = bedRepository.save(bed);
+        occupancySyncService.syncStatsForRoom(bed.getRoom());
         return ResponseEntity.ok(updated);
     }
 
@@ -288,6 +298,7 @@ public class BedController {
 
         bed.setStatus("ARCHIVED");
         bedRepository.save(bed);
+        occupancySyncService.syncStatsForRoom(room);
 
         return ResponseEntity.ok(new MessageResponse("Bed successfully archived."));
     }
@@ -316,6 +327,7 @@ public class BedController {
         }
 
         Bed saved = bedRepository.save(bed);
+        occupancySyncService.syncStatsForRoom(bed.getRoom());
         return ResponseEntity.ok(saved);
     }
 
@@ -329,6 +341,7 @@ public class BedController {
         }
         bed.setStatus("ARCHIVED");
         bedRepository.save(bed);
+        occupancySyncService.syncStatsForRoom(bed.getRoom());
         return ResponseEntity.ok(new MessageResponse("Bed deleted successfully."));
     }
 }

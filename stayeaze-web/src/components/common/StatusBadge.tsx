@@ -13,22 +13,24 @@ const toneClasses: Record<Tone, string> = {
 };
 
 interface StatusBadgeProps {
-  status: string;
+  status?: string | null;
   tone?: Tone;
   className?: string;
 }
 
 export function StatusBadge({ status, tone = 'neutral', className }: StatusBadgeProps) {
+  const safeStatus = (status ?? '').toString();
   return (
     <Badge variant="outline" className={cn('capitalize', toneClasses[tone], className)}>
-      {status.replace(/_/g, ' ')}
+      {safeStatus ? safeStatus.replace(/_/g, ' ') : 'N/A'}
     </Badge>
   );
 }
 
 // Helper to map common statuses to tones.
-export function statusTone(status: string): Tone {
-  const s = status.toLowerCase();
+export function statusTone(status?: string | null): Tone {
+  if (!status) return 'neutral';
+  const s = status.toString().toLowerCase();
   if (['active', 'paid', 'success', 'completed', 'resolved', 'closed', 'confirmed', 'checked_in', 'available', 'checked_out'].includes(s)) return 'success';
   if (['pending', 'partial', 'notice_period', 'partially_occupied', 'in_progress'].includes(s)) return 'warning';
   if (['reserved', 'partially_reserved', 'open', 'low', 'medium', 'high'].includes(s)) return 'info';

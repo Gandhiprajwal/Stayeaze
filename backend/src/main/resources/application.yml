@@ -1,5 +1,12 @@
 server:
   port: 8080
+  address: 0.0.0.0
+
+  tomcat:
+    threads:
+      max: 300
+      min-spare: 50
+    accept-count: 1000
 
 spring:
   application:
@@ -9,16 +16,37 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:root}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+      idle-timeout: 30000
+      connection-timeout: 20000
+      max-lifetime: 1800000
+      leak-detection-threshold: 5000
+      pool-name: StayEazeHikariPool
   jpa:
+    open-in-view: true
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  jackson:
+    serialization:
+      FAIL_ON_EMPTY_BEANS: false
+      WRITE_DATES_AS_TIMESTAMPS: false
+    deserialization:
+      FAIL_ON_UNKNOWN_PROPERTIES: false
 
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250655368566D5970} # 256-bit key
   expiration: 900000 # 15 minutes (in ms)
   refresh-expiration: 604800000 # 7 days (in ms)
+
+razorpay:
+  key:
+    id: ${RAZORPAY_KEY_ID:rzp_test_TMzrAcqaVP9Rns}
+    secret: ${RAZORPAY_KEY_SECRET:bX0tO4IY9Gzw4lN7CQE4L12O}

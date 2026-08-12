@@ -6,7 +6,10 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "payments")
+@Table(name = "payments", indexes = {
+    @Index(name = "idx_payment_invoice", columnList = "invoice_id"),
+    @Index(name = "idx_payment_date", columnList = "payment_date")
+})
 public class Payment {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)

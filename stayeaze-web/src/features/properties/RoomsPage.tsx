@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { DoorOpen, Plus, Pencil, Trash2 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { DoorOpen, Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from '@/hooks/use-toast';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { DataTable, type Column } from '@/components/common/DataTable';
@@ -39,7 +40,7 @@ const allAmenities = ['AC', 'WiFi', 'Geyser', 'Wardrobe', 'Study Table', 'Balcon
 
 const emptyForm = {
   number: '', type: 'double' as Room['type'], sharing: 2, beds: 2, occupied: 0,
-  rent: 10000, status: 'available' as Room['status'], floorId: '', amenities: [] as string[],
+  rent: 0, status: 'available' as Room['status'], floorId: '', amenities: [] as string[],
 };
 
 export default function RoomsPage() {
@@ -49,7 +50,11 @@ export default function RoomsPage() {
 
   const { data: floors } = useQuery({
     queryKey: ['rooms-floors'],
-    queryFn: () => api.get<{ data: Floor[] }>('/floors', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryFn: () => api.get<Floor[]>('/floors', { params: { pageSize: 100 } }).then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload as Floor[];
+      return (payload as { data: Floor[] }).data ?? [];
+    }),
   });
   const floorMap = new Map((floors ?? []).map((f) => [f.id, f.name]));
 
@@ -61,9 +66,19 @@ export default function RoomsPage() {
   function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
   function openEdit(row: Room) {
     setEditing(row);
+    const num = row.roomNumber || row.number || '';
+    const rawType = (row.type || row.sharingType || 'double').toString().toLowerCase();
+    const normalizedType = rawType.includes('single') ? 'single' : rawType.includes('double') ? 'double' : rawType.includes('triple') ? 'triple' : rawType.includes('dorm') ? 'dorm' : 'double';
     form.reset({
-      number: row.number, type: row.type, sharing: row.sharing, beds: row.beds, occupied: row.occupied,
-      rent: row.rent, status: row.status, floorId: row.floorId, amenities: row.amenities,
+      number: num,
+      type: normalizedType as Room['type'],
+      sharing: row.sharing || (normalizedType === 'single' ? 1 : normalizedType === 'double' ? 2 : normalizedType === 'triple' ? 3 : 4),
+      beds: row.beds || 2,
+      occupied: row.occupied || 0,
+      rent: row.rent || row.baseRent || 10000,
+      status: (row.status || 'available').toLowerCase() as Room['status'],
+      floorId: row.floorId || '',
+      amenities: row.amenities ?? [],
     });
     setDialogOpen(true);
   }
@@ -77,29 +92,31 @@ export default function RoomsPage() {
       baseRent: form.values.rent,
       rent: form.values.rent,
       status: form.values.status,
-      amenities: form.values.amenities,
+      amenities: form.values.amenities ?? [],
     };
     if (editing) updateMut.mutate({ id: editing.id, payload }, { onSuccess: () => setDialogOpen(false) });
     else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
   }
   function confirmDelete() { if (deleteTarget) deleteMut.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) }); }
   function toggleAmenity(a: string) {
-    form.setValue('amenities', form.values.amenities.includes(a)
-      ? form.values.amenities.filter((x) => x !== a)
-      : [...form.values.amenities, a]);
+    const current = form.values.amenities || [];
+    form.setValue('amenities', current.includes(a)
+      ? current.filter((x) => x !== a)
+      : [...current, a]);
   }
 
   const columns: Column<Room>[] = [
-    { key: 'number', header: 'Room', sortable: true, cell: (r) => {
-      const display = r.number?.toString().toLowerCase().startsWith('room') ? r.number : `Room ${r.number}`;
+    { key: 'number', header: 'Room', sortable: true, cell: (r: any) => {
+      const num = r.roomNumber || r.number || '';
+      const display = num.toString().toLowerCase().startsWith('room') ? num : `Room ${num}`;
       return (
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><DoorOpen className="h-5 w-5" /></div>
-          <div><p className="font-medium">{display}</p><p className="text-xs text-muted-foreground capitalize">{r.type ?? '—'}</p></div>
+          <div><p className="font-medium">{display}</p><p className="text-xs text-muted-foreground capitalize">{r.type || r.sharingType || '—'}</p></div>
         </div>
       );
     }},
-    { key: 'floorId', header: 'Floor', sortable: true, cell: (r) => <span className="text-sm">{floorMap.get(r.floorId) ?? '—'}</span> },
+    { key: 'floorId', header: 'Floor', sortable: true, cell: (r: any) => <span className="text-sm">{r.floorNumber !== undefined && r.floorNumber !== null ? `Floor ${r.floorNumber}` : (floorMap.get(r.floorId) ?? '—')}</span> },
     { key: 'sharing', header: 'Sharing', sortable: true, cell: (r) => <span className="tabular-nums">{r.sharing ?? 1} share</span> },
     { key: 'beds', header: 'Beds', sortable: true, cell: (r) => {
       const total = r.beds || r.sharing || 1;
@@ -117,16 +134,32 @@ export default function RoomsPage() {
       );
     }},
     { key: 'rent', header: 'Rent', sortable: true, cell: (r) => <span className="font-medium tabular-nums">{formatCurrency(r.rent)}</span> },
-    { key: 'amenities', header: 'Amenities', cell: (r) => (
+    { key: 'amenities', header: 'Amenities', cell: (r: any) => (
       <div className="flex flex-wrap gap-1 max-w-[200px]">
-        {r.amenities.slice(0, 3).map((a) => <Badge key={a} variant="secondary" className="text-[10px]">{a}</Badge>)}
-        {r.amenities.length > 3 && <Badge variant="outline" className="text-[10px]">+{r.amenities.length - 3}</Badge>}
+        {(r.amenities || []).slice(0, 3).map((a: string) => <Badge key={a} variant="secondary" className="text-[10px]">{a}</Badge>)}
+        {(r.amenities || []).length > 3 && <Badge variant="outline" className="text-[10px]">+{r.amenities.length - 3}</Badge>}
       </div>
     )},
     { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
   ];
 
   const floorFilterOptions = (floors ?? []).map((f) => ({ value: f.id, label: f.name }));
+
+  const queryClient = useQueryClient();
+
+  const handleUnarchive = async (row: Room) => {
+    try {
+      await api.put(`/rooms/${row.id}/unarchive`);
+      toast({ title: 'Room Unarchived', description: `Room "${row.roomNumber || row.number}" and nested beds unarchived successfully.` });
+      queryClient.invalidateQueries({ queryKey: ['/rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['/beds'] });
+      queryClient.invalidateQueries({ queryKey: ['/floors'] });
+      queryClient.invalidateQueries({ queryKey: ['/buildings'] });
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast({ title: 'Action Failed', description: e?.response?.data?.message || 'Failed to unarchive room.', variant: 'destructive' });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -141,6 +174,11 @@ export default function RoomsPage() {
         rowActions={(row) => (
           <RowActions items={[
             { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
+            ...(row.status?.toLowerCase() === 'archived' ? [{
+              label: 'Unarchive Room',
+              icon: RotateCcw,
+              onSelect: () => handleUnarchive(row),
+            }] : []),
             { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
           ]} />
         )} />
@@ -158,7 +196,7 @@ export default function RoomsPage() {
             <div className="flex flex-wrap gap-2 rounded-lg border p-3">
               {allAmenities.map((a) => (
                 <button key={a} type="button" onClick={() => toggleAmenity(a)}
-                  className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${form.values.amenities.includes(a) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'}`}>
+                  className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${(form.values.amenities || []).includes(a) ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'}`}>
                   {a}
                 </button>
               ))}

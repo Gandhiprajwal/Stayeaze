@@ -21,6 +21,7 @@ const resourceMap: Record<string, { resource: string; searchFields: string[] }> 
   '/maintenance': { resource: 'maintenance', searchFields: ['ticketNumber', 'asset', 'description'] },
   '/visitors': { resource: 'visitors', searchFields: ['visitorName', 'tenantName'] },
   '/audit-logs': { resource: 'auditLogs', searchFields: ['user', 'action', 'module'] },
+  '/super-admin/system-logs': { resource: 'auditLogs', searchFields: ['user', 'action', 'module'] },
 };
 
 function matchResource(url: string) {

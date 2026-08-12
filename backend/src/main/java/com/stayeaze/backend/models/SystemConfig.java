@@ -50,6 +50,9 @@ public class SystemConfig {
     @Column(name = "razorpay_key_secret", length = 255)
     private String razorpayKeySecret;
 
+    @Column(name = "default_security_deposit", precision = 10, scale = 2)
+    private java.math.BigDecimal defaultSecurityDeposit = java.math.BigDecimal.ZERO;
+
     public SystemConfig() {
     }
 
@@ -167,5 +170,13 @@ public class SystemConfig {
 
     public void setRazorpayKeySecret(String razorpayKeySecret) {
         this.razorpayKeySecret = razorpayKeySecret;
+    }
+
+    public java.math.BigDecimal getDefaultSecurityDeposit() {
+        return defaultSecurityDeposit != null ? defaultSecurityDeposit : java.math.BigDecimal.ZERO;
+    }
+
+    public void setDefaultSecurityDeposit(java.math.BigDecimal defaultSecurityDeposit) {
+        this.defaultSecurityDeposit = defaultSecurityDeposit;
     }
 }

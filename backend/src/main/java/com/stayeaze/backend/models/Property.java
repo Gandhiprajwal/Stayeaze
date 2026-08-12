@@ -6,8 +6,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 @Entity
 @Table(name = "properties")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Property {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -74,7 +79,7 @@ public class Property {
     @Column(name = "authorized_signatory", length = 150)
     private String authorizedSignatory = "StayEaze Management Authorized Signatory";
 
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "property_amenities", joinColumns = @JoinColumn(name = "property_id"))
     @Column(name = "amenity")
     private List<String> amenities = new ArrayList<>();
@@ -89,13 +94,13 @@ public class Property {
     private String timezone = "Asia/Kolkata";
 
     @Column(name = "total_buildings")
-    private Integer totalBuildings = 1;
+    private Integer totalBuildings = 0;
 
     @Column(name = "total_rooms")
-    private Integer totalRooms = 12;
+    private Integer totalRooms = 0;
 
     @Column(name = "total_beds")
-    private Integer totalBeds = 24;
+    private Integer totalBeds = 0;
 
     @Column(name = "occupied_beds")
     private Integer occupiedBeds = 0;
@@ -120,8 +125,19 @@ public class Property {
         this.id = id;
     }
 
+    @JsonIgnore
     public Organization getOrganization() {
         return organization;
+    }
+
+    @JsonProperty("orgId")
+    public UUID getOrgId() {
+        return organization != null ? organization.getId() : null;
+    }
+
+    @JsonProperty("organizationName")
+    public String getOrganizationName() {
+        return organization != null ? organization.getName() : null;
     }
 
     public void setOrganization(Organization organization) {
@@ -321,7 +337,7 @@ public class Property {
     }
 
     public Integer getTotalBuildings() {
-        return totalBuildings != null ? totalBuildings : 1;
+        return totalBuildings != null ? totalBuildings : 0;
     }
 
     public void setTotalBuildings(Integer totalBuildings) {
@@ -329,7 +345,7 @@ public class Property {
     }
 
     public Integer getTotalRooms() {
-        return totalRooms != null ? totalRooms : 12;
+        return totalRooms != null ? totalRooms : 0;
     }
 
     public void setTotalRooms(Integer totalRooms) {
@@ -337,7 +353,7 @@ public class Property {
     }
 
     public Integer getTotalBeds() {
-        return totalBeds != null ? totalBeds : 24;
+        return totalBeds != null ? totalBeds : 0;
     }
 
     public void setTotalBeds(Integer totalBeds) {

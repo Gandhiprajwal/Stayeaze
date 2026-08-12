@@ -24,6 +24,7 @@ public class SystemConfigRequest {
     private String smtpPassword;
     private String razorpayKeyId;
     private String razorpayKeySecret;
+    private java.math.BigDecimal defaultSecurityDeposit;
 
     public SystemConfigRequest() {
     }
@@ -122,5 +123,13 @@ public class SystemConfigRequest {
 
     public void setRazorpayKeySecret(String razorpayKeySecret) {
         this.razorpayKeySecret = razorpayKeySecret;
+    }
+
+    public java.math.BigDecimal getDefaultSecurityDeposit() {
+        return defaultSecurityDeposit;
+    }
+
+    public void setDefaultSecurityDeposit(java.math.BigDecimal defaultSecurityDeposit) {
+        this.defaultSecurityDeposit = defaultSecurityDeposit;
     }
 }

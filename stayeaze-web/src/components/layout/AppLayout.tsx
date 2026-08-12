@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Hotel, ChevronLeft, ChevronRight, Menu, Search, Sun, Moon, LogOut,
-  Settings as SettingsIcon, UserCog, Command,
+  Settings as SettingsIcon, UserCog, Command, RotateCcw,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/stores/auth-store';
@@ -21,6 +21,12 @@ import { initials } from '@/lib/format';
 import { roleLabels } from '@/lib/role-utils';
 import { CommandPalette } from './CommandPalette';
 import { NotificationBell } from './NotificationBell';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { toast } from '@/hooks/use-toast';
+import api from '@/lib/api';
+
+import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle } from 'lucide-react';
 
 export function AppLayout() {
   const { user, logout } = useAuthStore();
@@ -28,12 +34,44 @@ export function AppLayout() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [resetDbOpen, setResetDbOpen] = useState(false);
+  const [resettingDb, setResettingDb] = useState(false);
+
+  const { data: orgProfile } = useQuery({
+    queryKey: ['org-billing-profile-onboarding'],
+    queryFn: () => api.get<any>('/organization-billing-profile').then((r) => r.data),
+    enabled: !!user && (user.role === 'OWNER' || user.role === 'ADMIN'),
+  });
 
   const sections = user ? filterNavForRole(user.role) : [];
 
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleResetDatabase = async () => {
+    setResettingDb(true);
+    try {
+      await api.post('/super-admin/reset-database');
+      toast({
+        title: 'Database Reset Successfully',
+        description: 'All operational data has been purged. Fresh empty environment initialized.',
+      });
+      setResetDbOpen(false);
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast({
+        title: 'Reset Failed',
+        description: e?.response?.data?.message || 'Failed to reset database.',
+        variant: 'destructive',
+      });
+    } finally {
+      setResettingDb(false);
+    }
   };
 
   // Global Cmd+K / Ctrl+K shortcut
@@ -168,7 +206,21 @@ export function AppLayout() {
             </kbd>
           </button>
 
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto flex items-center gap-2">
+            {/* Super Admin Reset DB Topbar Button */}
+            {user?.role === 'SUPER_ADMIN' && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-1.5 font-medium shadow-sm"
+                onClick={() => setResetDbOpen(true)}
+                title="Reset Database to clean empty state"
+              >
+                <RotateCcw className="h-4 w-4" />
+                <span className="hidden sm:inline">Reset DB</span>
+              </Button>
+            )}
+
             {/* Notification bell */}
             <NotificationBell />
 
@@ -208,6 +260,17 @@ export function AppLayout() {
                 <DropdownMenuItem disabled>
                   <UserCog className="mr-2 h-4 w-4" /> My Profile
                 </DropdownMenuItem>
+                {user?.role === 'SUPER_ADMIN' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="cursor-pointer text-destructive focus:text-destructive"
+                      onClick={() => setResetDbOpen(true)}
+                    >
+                      <RotateCcw className="mr-2 h-4 w-4" /> Reset Database
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" /> Sign out
@@ -216,6 +279,23 @@ export function AppLayout() {
             </DropdownMenu>
           </div>
         </header>
+
+        {/* Organization Onboarding Guard Banner */}
+        {orgProfile && !orgProfile.isSetupComplete && (
+          <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 text-amber-900 dark:text-amber-200 shrink-0">
+            <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 text-xs font-medium sm:text-sm">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>
+                  <strong>Organization Setup Required:</strong> Please complete your organization legal name, address, and Razorpay credentials to enable full feature access.
+                </span>
+              </div>
+              <Button size="sm" className="h-7 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shrink-0" onClick={() => navigate('/settings?tab=organization')}>
+                Complete Setup
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto">
@@ -226,6 +306,18 @@ export function AppLayout() {
       </div>
 
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
+
+      <ConfirmDialog
+        open={resetDbOpen}
+        onOpenChange={setResetDbOpen}
+        title="Reset Database to Fresh Empty State?"
+        description="This action will permanently delete all properties, buildings, floors, rooms, beds, tenants, bookings, invoices, payments, and operational records. The system will start fresh with default Super Admin credentials."
+        confirmLabel="Yes, Reset Database"
+        cancelLabel="Cancel"
+        variant="destructive"
+        onConfirm={handleResetDatabase}
+        loading={resettingDb}
+      />
     </div>
   );
 }

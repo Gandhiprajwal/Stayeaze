@@ -78,10 +78,14 @@ public class VisitorController {
     }
 
     @GetMapping("/visitors")
-    public ResponseEntity<?> getFlatVisitors() {
+    public ResponseEntity<?> getFlatVisitors(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         Organization organization = getLoggedUserOrg();
-        List<Visitor> visitors = visitorRepository.findByOrganizationId(organization.getId());
-        return ResponseEntity.ok(visitors);
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
+        org.springframework.data.domain.Page<Visitor> pageResult = visitorRepository.findByOrganizationId(organization.getId(), pageable);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.ofPage(pageResult));
     }
 
     @PutMapping("/tenants/{tenantId}/visitors/{id}/checkin")

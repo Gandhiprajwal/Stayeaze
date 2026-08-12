@@ -2,6 +2,8 @@ package com.stayeaze.backend.repository;
 
 import com.stayeaze.backend.models.Tenant;
 import com.stayeaze.backend.models.Visitor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,4 +20,9 @@ public interface VisitorRepository extends JpaRepository<Visitor, UUID> {
 
     @Query("SELECT v FROM Visitor v WHERE v.tenant.organization.id = :orgId")
     List<Visitor> findByOrganizationId(@Param("orgId") UUID orgId);
+
+    @Query("SELECT v FROM Visitor v WHERE v.tenant.organization.id = :orgId")
+    Page<Visitor> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
+
+    Page<Visitor> findAll(Pageable pageable);
 }

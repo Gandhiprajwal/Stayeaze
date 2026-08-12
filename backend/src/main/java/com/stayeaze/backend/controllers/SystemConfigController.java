@@ -85,6 +85,9 @@ public class SystemConfigController {
         config.setSmtpPassword(request.getSmtpPassword());
         config.setRazorpayKeyId(request.getRazorpayKeyId());
         config.setRazorpayKeySecret(request.getRazorpayKeySecret());
+        if (request.getDefaultSecurityDeposit() != null) {
+            config.setDefaultSecurityDeposit(request.getDefaultSecurityDeposit());
+        }
 
         SystemConfig saved = systemConfigRepository.save(config);
         return ResponseEntity.ok(saved);

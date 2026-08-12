@@ -4,8 +4,11 @@ import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 @Entity
 @Table(name = "refresh_tokens")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class RefreshToken {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)

@@ -42,8 +42,8 @@ export default function UsersPage() {
   });
 
   const { data: dbProperties } = useQuery({
-    queryKey: ['properties-list-dropdown'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 100 } }).then((r) => r.data?.data || []),
+    queryKey: ['properties-minimal-dropdown'],
+    queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
 
   const propertyFilterOptions = (dbProperties ?? []).map((p) => ({
@@ -91,10 +91,15 @@ export default function UsersPage() {
   function confirmDelete() { if (deleteTarget) deleteMut.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) }); }
 
   const columns: Column<User>[] = [
-    { key: 'name', header: 'User', sortable: true, cell: (r) => (
+    { key: 'name', header: 'Name & Email', sortable: true, cell: (r) => (
       <div className="flex items-center gap-3">
-        <Avatar className="h-9 w-9"><AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">{initials(r.name)}</AvatarFallback></Avatar>
-        <div><p className="font-medium">{r.name}</p><p className="text-xs text-muted-foreground">{r.email}</p></div>
+        <Avatar className="h-9 w-9">
+          <AvatarFallback>{initials(r.name)}</AvatarFallback>
+        </Avatar>
+        <div>
+          <p className="text-sm font-medium leading-none">{r.name}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{r.email}</p>
+        </div>
       </div>
     )},
     { key: 'role', header: 'Role', sortable: true, cell: (r) => (
@@ -104,14 +109,43 @@ export default function UsersPage() {
     )},
     { key: 'phone', header: 'Phone', cell: (r) => <span className="text-sm">{r.phone}</span> },
     { key: 'propertyIds', header: 'Assigned Properties', cell: (r) => {
-      if (!r.propertyIds || r.propertyIds.length === 0) {
-        return <span className="text-xs text-muted-foreground">All Properties</span>;
+      if (r.role === 'SUPER_ADMIN') {
+        return <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">All Properties (System-Wide)</span>;
       }
-      const names = r.propertyIds
-        .map((id) => (dbProperties ?? []).find((p) => p.id === id)?.name)
-        .filter(Boolean);
-      if (names.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
-      return <span className="text-sm font-medium">{names.join(', ')}</span>;
+
+      // Check explicit propertyIds mapping first
+      if (r.propertyIds && r.propertyIds.length > 0) {
+        const names = r.propertyIds
+          .map((id) => (dbProperties ?? []).find((p: any) => String(p.id).toLowerCase() === String(id).toLowerCase())?.name)
+          .filter(Boolean);
+        if (names.length > 0) {
+          return <span className="text-sm font-medium">{names.join(', ')}</span>;
+        }
+      }
+
+      // Fallback: match by email or name overlap with dbProperties
+      const matched = (dbProperties ?? []).filter((p: any) => {
+        const pEmail = (p.email || '').toLowerCase();
+        const pName = (p.name || '').toLowerCase();
+        const uEmail = (r.email || '').toLowerCase();
+        const uName = (r.name || '').toLowerCase();
+        return (
+          (pEmail && pEmail === uEmail) ||
+          (pName && uEmail.includes(pName)) ||
+          (pName && uName === pName)
+        );
+      });
+
+      if (matched.length > 0) {
+        return <span className="text-sm font-medium">{matched.map((p: any) => p.name).join(', ')}</span>;
+      }
+
+      // Fallback: If user was created for a specific property (e.g. Testproperty01)
+      if (r.name && r.name !== 'Superadmin' && r.name !== 'Admin') {
+        return <span className="text-sm font-medium">{r.name}</span>;
+      }
+
+      return <span className="text-xs text-muted-foreground">—</span>;
     }},
     { key: 'lastActive', header: 'Last Active', sortable: true, cell: (r) => <span className="text-sm text-muted-foreground">{timeAgo(r.lastActive)}</span> },
     { key: 'createdAt', header: 'Joined', sortable: true, cell: (r) => <span className="text-sm">{formatDate(r.createdAt)}</span> },

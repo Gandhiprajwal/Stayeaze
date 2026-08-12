@@ -37,33 +37,39 @@ public class RoleController {
 
     @GetMapping
     public ResponseEntity<?> getAllRoles() {
+
         List<Role> roles = roleRepository.findAll();
         List<User> allUsers = userRepository.findAll();
+
+        Map<UUID, Long> roleUserCountMap = new HashMap<>();
+        for (User u : allUsers) {
+            try {
+                if (u.getRoles() != null) {
+                    for (Role r : u.getRoles()) {
+                        roleUserCountMap.put(r.getId(), roleUserCountMap.getOrDefault(r.getId(), 0L) + 1);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
 
         List<Map<String, Object>> response = roles.stream().map(role -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", role.getId());
             
-            // Map name back to frontend key (e.g. OWNER -> ADMIN)
             String roleName = role.getName();
-            if (roleName.startsWith("ROLE_")) {
+            if (roleName != null && roleName.startsWith("ROLE_")) {
                 roleName = roleName.substring(5);
             }
             if ("OWNER".equals(roleName)) {
                 roleName = "ADMIN";
             }
             map.put("name", roleName);
-
             map.put("description", "System defined role for " + roleName + " operations.");
             map.put("isSystem", SYSTEM_ROLES.contains(role.getName()));
 
-            // Compute userCount
-            long userCount = allUsers.stream()
-                    .filter(u -> u.getRoles().stream().anyMatch(r -> r.getId().equals(role.getId())))
-                    .count();
+            long userCount = roleUserCountMap.getOrDefault(role.getId(), 0L);
             map.put("userCount", userCount);
 
-            // Parse permissions list from JSON
             List<String> permList = new ArrayList<>();
             try {
                 if (role.getPermissions() != null) {
@@ -85,8 +91,11 @@ public class RoleController {
         return ResponseEntity.ok(response);
     }
 
+
     @PostMapping
     public ResponseEntity<?> createRole(@RequestBody Map<String, Object> request) {
+
+
         String name = (String) request.get("name");
         if (name == null || name.trim().isEmpty()) {
             return ResponseEntity.badRequest().body(new com.stayeaze.backend.payload.response.MessageResponse("Error: Role name is required!"));

@@ -41,7 +41,9 @@ public class AuditLogController {
 
     @GetMapping
     @PreAuthorize("hasRole('OWNER') or hasRole('SUPER_ADMIN')")
-    public ResponseEntity<?> getAuditLogs() {
+    public ResponseEntity<?> getAuditLogs(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
                 .getAuthorities().stream()
                 .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
@@ -94,7 +96,7 @@ public class AuditLogController {
             map.put("details", details);
 
             String userRole = "ADMIN";
-            if (log.getUsername().contains("admin@stayeaze.com")) {
+            if (log.getUsername().contains("superadmin@stayeaze.com") || log.getUsername().contains("admin@stayeaze.com")) {
                 userRole = "SUPER_ADMIN";
             } else if (log.getUsername().contains("owner") || log.getUsername().contains("rahul")) {
                 userRole = "ADMIN";
@@ -108,7 +110,7 @@ public class AuditLogController {
             return map;
         }).collect(Collectors.toList());
 
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(response, page, pageSize));
     }
 
     @PostMapping

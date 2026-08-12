@@ -3,6 +3,7 @@ import type { UserRole } from './types';
 export const roleLabels: Record<UserRole, string> = {
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Admin (Owner)',
+  OWNER: 'Property Owner',
   PROPERTY_MANAGER: 'Property Manager',
   RECEPTIONIST: 'Receptionist',
   ACCOUNTANT: 'Accountant',
@@ -14,6 +15,7 @@ export const roleLabels: Record<UserRole, string> = {
 export const roleTone: Record<UserRole, 'destructive' | 'info' | 'default'> = {
   SUPER_ADMIN: 'destructive',
   ADMIN: 'info',
+  OWNER: 'info',
   PROPERTY_MANAGER: 'default',
   RECEPTIONIST: 'default',
   ACCOUNTANT: 'default',
@@ -22,12 +24,12 @@ export const roleTone: Record<UserRole, 'destructive' | 'info' | 'default'> = {
   TENANT: 'default',
 };
 
-// Modules a role may access (for guards). SUPER_ADMIN = everything.
+// Modules a role may access (for guards).
 export const rolePermissions: Record<UserRole, string[]> = {
-  SUPER_ADMIN: ['*'],
+  SUPER_ADMIN: ['dashboard', 'properties', 'users', 'roles', 'audit-logs', 'integrations', 'settings'],
   ADMIN: ['dashboard', 'buildings', 'tenants', 'bookings', 'check-ins', 'check-outs', 'billing', 'payments', 'complaints', 'maintenance', 'visitors', 'reports', 'users', 'audit-logs', 'settings'],
-  PROPERTY_MANAGER: ['dashboard', 'buildings', 'tenants', 'bookings', 'check-ins', 'check-outs', 'billing', 'payments', 'complaints', 'maintenance', 'visitors', 'reports', 'settings'],
-  RECEPTIONIST: ['dashboard', 'tenants', 'bookings', 'check-ins', 'check-outs', 'visitors', 'settings'],
+  OWNER: ['dashboard', 'buildings', 'tenants', 'bookings', 'check-ins', 'check-outs', 'billing', 'payments', 'complaints', 'maintenance', 'visitors', 'reports', 'users', 'audit-logs', 'settings'],
+  PROPERTY_MANAGER: ['dashboard', 'buildings', 'tenants', 'bookings', 'check-ins', 'check-outs', 'billing', 'payments', 'complaints', 'maintenance', 'visitors', 'reports', 'settings'],  RECEPTIONIST: ['dashboard', 'tenants', 'bookings', 'check-ins', 'check-outs', 'visitors', 'settings'],
   ACCOUNTANT: ['dashboard', 'billing', 'payments', 'reports', 'settings'],
   SECURITY_GUARD: ['visitors', 'settings'],
   STAFF: ['complaints', 'maintenance', 'settings'],

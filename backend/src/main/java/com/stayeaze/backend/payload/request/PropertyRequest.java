@@ -29,6 +29,15 @@ public class PropertyRequest {
 
     private String timezone;
 
+    private String landlordPan;
+    private String pgLicenseNo;
+    private String bankAccountName;
+    private String bankName;
+    private String bankAccountNumber;
+    private String bankIfsc;
+    private String upiVpa;
+    private String authorizedSignatory;
+
     public PropertyRequest() {
     }
 
@@ -150,5 +159,69 @@ public class PropertyRequest {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getLandlordPan() {
+        return landlordPan;
+    }
+
+    public void setLandlordPan(String landlordPan) {
+        this.landlordPan = landlordPan;
+    }
+
+    public String getPgLicenseNo() {
+        return pgLicenseNo;
+    }
+
+    public void setPgLicenseNo(String pgLicenseNo) {
+        this.pgLicenseNo = pgLicenseNo;
+    }
+
+    public String getBankAccountName() {
+        return bankAccountName;
+    }
+
+    public void setBankAccountName(String bankAccountName) {
+        this.bankAccountName = bankAccountName;
+    }
+
+    public String getBankName() {
+        return bankName;
+    }
+
+    public void setBankName(String bankName) {
+        this.bankName = bankName;
+    }
+
+    public String getBankAccountNumber() {
+        return bankAccountNumber;
+    }
+
+    public void setBankAccountNumber(String bankAccountNumber) {
+        this.bankAccountNumber = bankAccountNumber;
+    }
+
+    public String getBankIfsc() {
+        return bankIfsc;
+    }
+
+    public void setBankIfsc(String bankIfsc) {
+        this.bankIfsc = bankIfsc;
+    }
+
+    public String getUpiVpa() {
+        return upiVpa;
+    }
+
+    public void setUpiVpa(String upiVpa) {
+        this.upiVpa = upiVpa;
+    }
+
+    public String getAuthorizedSignatory() {
+        return authorizedSignatory;
+    }
+
+    public void setAuthorizedSignatory(String authorizedSignatory) {
+        this.authorizedSignatory = authorizedSignatory;
     }
 }

@@ -14,7 +14,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import api from '@/lib/api';
-import type { Booking, Property } from '@/lib/types';
+import { propertyService } from '@/lib/services';
+import type { Booking } from '@/lib/types';
 import { formatCurrency, formatDate, initials } from '@/lib/format';
 
 export default function BookingDetailPage() {
@@ -27,11 +28,12 @@ export default function BookingDetailPage() {
     enabled: !!id,
   });
 
-  const { data: property } = useQuery({
-    queryKey: ['booking-property', booking?.propertyId],
-    queryFn: () => api.get<Property>(`/properties/${booking?.propertyId}`).then((r) => r.data),
-    enabled: !!booking?.propertyId,
+  const { data: minimalProperties } = useQuery({
+    queryKey: ['properties-minimal'],
+    queryFn: () => propertyService.getMinimal(),
   });
+  const propList = Array.isArray(minimalProperties) ? minimalProperties : (minimalProperties as any)?.data || [];
+  const propertyName = propList.find((p: any) => p.id === booking?.propertyId)?.name;
 
   if (isLoading) return <div className="space-y-6"><Skeleton className="h-24" /><Skeleton className="h-64" /></div>;
   if (!booking) return (
@@ -97,7 +99,7 @@ export default function BookingDetailPage() {
             <CardDescription>Property &amp; bed assignment</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <InfoRow icon={Home} label="Property" value={property?.name ?? '—'} />
+            <InfoRow icon={Home} label="Property" value={propertyName ?? '—'} />
             <InfoRow icon={MapPin} label="Room Number" value={booking.roomNumber ? `Room ${booking.roomNumber}` : '—'} />
             <InfoRow icon={ShieldCheck} label="Bed Number" value={booking.bedNumber || '—'} />
             <Separator />

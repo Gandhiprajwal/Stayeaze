@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Building2, Layers, DoorOpen, BedDouble, Users, CalendarCheck, LogIn, LogOut, Receipt,
   Wallet, MessageSquareWarning, Wrench, UserCheck, BarChart3, UserCog,
-  ShieldCheck, Settings, ScrollText, Hotel,
+  ShieldCheck, Settings, ScrollText, Hotel, Terminal,
 } from 'lucide-react';
 import type { UserRole } from '@/lib/types';
 
@@ -63,10 +63,12 @@ export const navSections: NavSection[] = [
   {
     title: 'Administration',
     items: [
-      { label: 'Users', to: '/users', icon: UserCog, roles: ['SUPER_ADMIN', 'ADMIN'] },
+      { label: 'Users', to: '/users', icon: UserCog, roles: ['SUPER_ADMIN', 'ADMIN', 'OWNER'] },
       { label: 'Roles', to: '/roles', icon: ShieldCheck, roles: ['SUPER_ADMIN'] },
-      { label: 'Audit Logs', to: '/audit-logs', icon: ScrollText, roles: ['SUPER_ADMIN', 'ADMIN'] },
-      { label: 'Settings', to: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN', 'PROPERTY_MANAGER'] },
+      { label: 'Audit Logs', to: '/audit-logs', icon: ScrollText, roles: ['SUPER_ADMIN', 'ADMIN', 'OWNER'] },
+      { label: 'Backend System Logs', to: '/super-admin/system-logs', icon: Terminal, roles: ['SUPER_ADMIN'] },
+      { label: 'Cloud Infrastructure', to: '/super-admin/integrations', icon: ShieldCheck, roles: ['SUPER_ADMIN'] },
+      { label: 'Settings', to: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN', 'OWNER', 'PROPERTY_MANAGER', 'ACCOUNTANT', 'RECEPTIONIST', 'SECURITY_GUARD', 'STAFF', 'TENANT'] },
     ],
   },
 ];

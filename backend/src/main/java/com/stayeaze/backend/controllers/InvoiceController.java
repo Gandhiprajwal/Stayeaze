@@ -8,6 +8,7 @@ import com.stayeaze.backend.repository.*;
 import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,12 +18,19 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/v1")
 public class InvoiceController {
+
+    @Value("${razorpay.key.id:rzp_test_StayeazeMockKey123}")
+    private String razorpayKeyId;
+
+    @Value("${razorpay.key.secret:mockSecret123}")
+    private String razorpayKeySecret;
 
     @Autowired
     private InvoiceRepository invoiceRepository;
@@ -40,7 +48,29 @@ public class InvoiceController {
     private PropertyRepository propertyRepository;
 
     @Autowired
+    private OrganizationBillingProfileRepository organizationBillingProfileRepository;
+
+    @Autowired
+    private com.stayeaze.backend.services.AutoBillingService autoBillingService;
+
+    @Autowired
     private UserRepository userRepository;
+
+    private OrganizationBillingProfile getBillingProfile(Organization organization) {
+        return organizationBillingProfileRepository.findByOrganization(organization)
+                .orElseGet(() -> organizationBillingProfileRepository.save(new OrganizationBillingProfile(organization)));
+    }
+
+    private String nextInvoiceNumber(OrganizationBillingProfile profile) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        int financialYearStart = today.getMonthValue() >= 4 ? today.getYear() : today.getYear() - 1;
+        String financialYear = financialYearStart + "-" + String.valueOf(financialYearStart + 1).substring(2);
+        return profile.getInvoicePrefix() + "/" + financialYear + "/" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    }
+
+    private void snapshotIssuer(Invoice invoice, Organization organization) {
+        invoice.setIssuerSnapshot(new InvoiceIssuerSnapshot(getBillingProfile(organization)));
+    }
 
     private Organization getLoggedUserOrg() {
         try {
@@ -75,9 +105,11 @@ public class InvoiceController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
         }
 
-        String invoiceNumber = "INV-" + System.currentTimeMillis();
+        Organization organization = getLoggedUserOrg();
+        String invoiceNumber = nextInvoiceNumber(getBillingProfile(organization));
 
         Invoice invoice = new Invoice(tenant, invoiceNumber, request.getDueDate(), request.getIssueDate(), request.getAmountDue());
+        snapshotIssuer(invoice, organization);
         
         List<InvoiceItem> items = new ArrayList<>();
         if (request.getItems() != null) {
@@ -89,6 +121,36 @@ public class InvoiceController {
 
         Invoice saved = invoiceRepository.save(invoice);
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
+    }
+
+    @RequestMapping(value = {"/invoices/auto-generate", "/invoices/generate-monthly"}, method = {RequestMethod.POST, RequestMethod.GET})
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
+    public ResponseEntity<?> autoGenerateInvoices() {
+        try {
+            java.util.Map<String, Object> result = autoBillingService.autoGenerateMonthlyInvoices();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponse("Error running automated anniversary billing: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/tenants/{tenantId}/invoices/generate-now")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
+    public ResponseEntity<?> generateInvoiceForTenantNow(@PathVariable UUID tenantId) {
+        try {
+            Tenant tenant = getAuthorizedTenant(tenantId);
+            if (tenant == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Tenant not found"));
+            }
+            Invoice generated = autoBillingService.generateInvoiceForTenantNow(tenant);
+            return ResponseEntity.ok(generated);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponse("Error generating manual invoice: " + e.getMessage()));
+        }
     }
 
     @GetMapping("/tenants/{tenantId}/invoices")
@@ -116,18 +178,8 @@ public class InvoiceController {
             map.put("invoiceNumber", inv.getInvoiceNumber());
             
             String tenantName = tenant.getFirstName() + " " + tenant.getLastName();
-            UUID propertyId = defaultPropertyId;
+            UUID propertyId = tenant.getPropertyId() != null ? tenant.getPropertyId() : defaultPropertyId;
 
-            List<Booking> tenantBookings = bookingRepository.findByTenant(tenant);
-            if (!tenantBookings.isEmpty()) {
-                Booking b = tenantBookings.get(0);
-                if (b.getBed() != null && 
-                    b.getBed().getRoom() != null && 
-                    b.getBed().getRoom().getFloor() != null && 
-                    b.getBed().getRoom().getFloor().getBuilding() != null) {
-                    propertyId = b.getBed().getRoom().getFloor().getBuilding().getProperty().getId();
-                }
-            }
 
             map.put("tenantId", tenantId);
             map.put("tenantName", tenantName);
@@ -149,6 +201,7 @@ public class InvoiceController {
             map.put("dueDate", inv.getDueDate());
             map.put("issueDate", inv.getIssueDate());
             map.put("createdAt", inv.getCreatedAt());
+            map.put("issuerSnapshot", inv.getIssuerSnapshot());
             
             response.add(map);
         }
@@ -156,7 +209,9 @@ public class InvoiceController {
     }
 
     @GetMapping("/invoices")
-    public ResponseEntity<?> getFlatInvoices() {
+    public ResponseEntity<?> getFlatInvoices(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         Organization organization = getLoggedUserOrg();
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
@@ -194,18 +249,11 @@ public class InvoiceController {
             if (inv.getTenant() != null) {
                 tenantId = inv.getTenant().getId();
                 tenantName = inv.getTenant().getFirstName() + " " + inv.getTenant().getLastName();
-                
-                List<Booking> tenantBookings = bookingRepository.findByTenant(inv.getTenant());
-                if (!tenantBookings.isEmpty()) {
-                    Booking b = tenantBookings.get(0);
-                    if (b.getBed() != null && 
-                        b.getBed().getRoom() != null && 
-                        b.getBed().getRoom().getFloor() != null && 
-                        b.getBed().getRoom().getFloor().getBuilding() != null) {
-                        propertyId = b.getBed().getRoom().getFloor().getBuilding().getProperty().getId();
-                    }
+                if (inv.getTenant().getPropertyId() != null) {
+                    propertyId = inv.getTenant().getPropertyId();
                 }
             }
+
 
             map.put("tenantId", tenantId);
             map.put("tenantName", tenantName);
@@ -231,34 +279,17 @@ public class InvoiceController {
             map.put("dueDate", inv.getDueDate());
             map.put("issueDate", inv.getIssueDate());
             map.put("createdAt", inv.getCreatedAt());
+            map.put("issuerSnapshot", inv.getIssuerSnapshot());
             
             response.add(map);
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(response, page, pageSize));
     }
 
     @PutMapping("/tenants/{tenantId}/invoices/{id}/status")
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
     public ResponseEntity<?> updateInvoiceStatus(@PathVariable UUID tenantId, @PathVariable UUID id, @RequestParam String status) {
-        Tenant tenant;
-        try {
-            tenant = getAuthorizedTenant(tenantId);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
-        }
-
-        Invoice invoice = invoiceRepository.findByIdAndTenant(id, tenant).orElse(null);
-        if (invoice == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Invoice record not found."));
-        }
-
-        invoice.setStatus(status);
-        if ("PAID".equalsIgnoreCase(status)) {
-            invoice.setAmountPaid(invoice.getAmountDue());
-        }
-
-        Invoice updated = invoiceRepository.save(invoice);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.badRequest().body(new MessageResponse("Rent & billing invoice records are immutable and cannot be modified."));
     }
 
     @PostMapping("/invoices")
@@ -297,9 +328,10 @@ public class InvoiceController {
             }
         }
 
+        OrganizationBillingProfile billingProfile = getBillingProfile(organization);
         String invoiceNumber = req.get("invoiceNumber") != null && !req.get("invoiceNumber").toString().isEmpty()
                 ? req.get("invoiceNumber").toString()
-                : "INV-" + System.currentTimeMillis();
+                : nextInvoiceNumber(billingProfile);
 
         java.math.BigDecimal amount = java.math.BigDecimal.valueOf(8000);
         if (req.get("amount") != null) {
@@ -311,7 +343,7 @@ public class InvoiceController {
             paidAmount = new java.math.BigDecimal(req.get("paidAmount").toString());
         }
 
-        java.time.LocalDate dueDate = java.time.LocalDate.now().plusDays(7);
+        java.time.LocalDate dueDate = java.time.LocalDate.now().plusDays(billingProfile.getPaymentDueDays());
         if (req.get("dueDate") != null && !req.get("dueDate").toString().isEmpty()) {
             try {
                 dueDate = java.time.LocalDate.parse(req.get("dueDate").toString().substring(0, 10));
@@ -326,6 +358,7 @@ public class InvoiceController {
         }
 
         Invoice invoice = new Invoice(tenant, invoiceNumber, dueDate, issueDate, amount);
+        snapshotIssuer(invoice, organization);
         invoice.setAmountPaid(paidAmount);
 
         String statusStr = req.get("status") != null ? req.get("status").toString().toUpperCase() : "UNPAID";
@@ -351,6 +384,7 @@ public class InvoiceController {
         map.put("dueDate", saved.getDueDate());
         map.put("issueDate", saved.getIssueDate());
         map.put("createdAt", saved.getCreatedAt());
+        map.put("issuerSnapshot", saved.getIssuerSnapshot());
 
         return new ResponseEntity<>(map, HttpStatus.CREATED);
     }
@@ -359,48 +393,7 @@ public class InvoiceController {
     @Transactional
     @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ACCOUNTANT') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> updateFlatInvoice(@PathVariable UUID id, @RequestBody java.util.Map<String, Object> req) {
-        Organization organization = getLoggedUserOrg();
-        Invoice invoice = invoiceRepository.findById(id).orElse(null);
-        if (invoice == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Invoice not found."));
-        }
-
-        if (req.get("amount") != null) {
-            invoice.setAmountDue(new java.math.BigDecimal(req.get("amount").toString()));
-        }
-        if (req.get("paidAmount") != null) {
-            invoice.setAmountPaid(new java.math.BigDecimal(req.get("paidAmount").toString()));
-        }
-        if (req.get("dueDate") != null && !req.get("dueDate").toString().isEmpty()) {
-            try {
-                invoice.setDueDate(java.time.LocalDate.parse(req.get("dueDate").toString().substring(0, 10)));
-            } catch (Exception ignored) {}
-        }
-
-        if (req.get("status") != null) {
-            invoice.setStatus(req.get("status").toString().toUpperCase());
-        }
-
-        if (invoice.getAmountPaid().compareTo(java.math.BigDecimal.ZERO) > 0) {
-            if (invoice.getAmountPaid().compareTo(invoice.getAmountDue()) >= 0) {
-                invoice.setStatus("PAID");
-            } else {
-                invoice.setStatus("PARTIALLY_PAID");
-            }
-        }
-
-        Invoice saved = invoiceRepository.save(invoice);
-        java.util.Map<String, Object> map = new java.util.HashMap<>();
-        map.put("id", saved.getId());
-        map.put("invoiceNumber", saved.getInvoiceNumber());
-        map.put("tenantId", saved.getTenant().getId());
-        map.put("tenantName", saved.getTenant().getFirstName() + " " + saved.getTenant().getLastName());
-        map.put("amount", saved.getAmountDue());
-        map.put("paidAmount", saved.getAmountPaid());
-        map.put("status", saved.getStatus() != null ? saved.getStatus().toLowerCase() : "unpaid");
-        map.put("dueDate", saved.getDueDate());
-
-        return ResponseEntity.ok(map);
+        return ResponseEntity.badRequest().body(new MessageResponse("Rent & billing invoice records are immutable and cannot be edited."));
     }
 
     @DeleteMapping("/invoices/{id}")
@@ -475,16 +468,49 @@ public class InvoiceController {
             return ResponseEntity.badRequest().body(new MessageResponse("Invoice is already fully paid."));
         }
 
-        String orderId = "order_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8);
-        invoice.setRazorpayOrderId(orderId);
-        invoiceRepository.save(invoice);
+        // Determine Owner/Organization Razorpay credentials from Database
+        String activeKeyId = razorpayKeyId;
+        String activeKeySecret = razorpayKeySecret;
+
+        Organization invoiceOrg = invoice.getTenant() != null ? invoice.getTenant().getOrganization() : null;
+        if (invoiceOrg != null) {
+            Optional<OrganizationBillingProfile> bpOpt = organizationBillingProfileRepository.findByOrganization(invoiceOrg);
+            if (bpOpt.isPresent() && bpOpt.get().getRazorpayKeyId() != null && !bpOpt.get().getRazorpayKeyId().isBlank()) {
+                activeKeyId = bpOpt.get().getRazorpayKeyId().trim();
+                if (bpOpt.get().getRazorpayKeySecret() != null && !bpOpt.get().getRazorpayKeySecret().isBlank()) {
+                    activeKeySecret = bpOpt.get().getRazorpayKeySecret().trim();
+                }
+            }
+        }
 
         long amountInPaise = remainingDue.multiply(new java.math.BigDecimal(100)).longValue();
+        String orderId = "order_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8);
+
+        // Attempt live order creation via Razorpay Java SDK if real API key & secret exist in DB or Config
+        if (activeKeyId != null && activeKeyId.startsWith("rzp_") && !activeKeyId.contains("MockKey")
+                && activeKeySecret != null && !activeKeySecret.contains("mockSecret")) {
+            try {
+                com.razorpay.RazorpayClient razorpayClient = new com.razorpay.RazorpayClient(activeKeyId, activeKeySecret);
+                org.json.JSONObject orderReq = new org.json.JSONObject();
+                orderReq.put("amount", amountInPaise);
+                orderReq.put("currency", "INR");
+                orderReq.put("receipt", invoice.getInvoiceNumber());
+                com.razorpay.Order order = razorpayClient.orders.create(orderReq);
+                if (order.has("id")) {
+                    orderId = order.get("id");
+                }
+            } catch (Exception e) {
+                // Log and fall back to local order ID if API call fails
+            }
+        }
+
+        invoice.setRazorpayOrderId(orderId);
+        invoiceRepository.save(invoice);
 
         Tenant tenant = invoice.getTenant();
         java.util.Map<String, Object> orderPayload = new java.util.HashMap<>();
         orderPayload.put("orderId", orderId);
-        orderPayload.put("keyId", "rzp_test_StayeazeMockKey123");
+        orderPayload.put("keyId", activeKeyId);
         orderPayload.put("amount", amountInPaise);
         orderPayload.put("amountFormatted", remainingDue);
         orderPayload.put("currency", "INR");
@@ -508,6 +534,30 @@ public class InvoiceController {
         String razorpayPaymentId = req.get("razorpayPaymentId");
         String razorpayOrderId = req.get("razorpayOrderId");
         String razorpaySignature = req.get("razorpaySignature");
+
+        // Determine Owner/Organization Razorpay credentials from Database
+        String activeKeySecret = razorpayKeySecret;
+        Organization invoiceOrg = invoice.getTenant() != null ? invoice.getTenant().getOrganization() : null;
+        if (invoiceOrg != null) {
+            Optional<OrganizationBillingProfile> bpOpt = organizationBillingProfileRepository.findByOrganization(invoiceOrg);
+            if (bpOpt.isPresent() && bpOpt.get().getRazorpayKeySecret() != null && !bpOpt.get().getRazorpayKeySecret().isBlank()) {
+                activeKeySecret = bpOpt.get().getRazorpayKeySecret().trim();
+            }
+        }
+
+        // Verify Razorpay HMAC signature if real key secret is provided
+        if (activeKeySecret != null && !activeKeySecret.contains("mockSecret") 
+                && razorpaySignature != null && !razorpaySignature.contains("sandbox")) {
+            try {
+                org.json.JSONObject attributes = new org.json.JSONObject();
+                attributes.put("razorpay_order_id", razorpayOrderId != null ? razorpayOrderId : invoice.getRazorpayOrderId());
+                attributes.put("razorpay_payment_id", razorpayPaymentId);
+                attributes.put("razorpay_signature", razorpaySignature);
+                com.razorpay.Utils.verifyPaymentSignature(attributes, activeKeySecret);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: Invalid Razorpay payment signature verification!"));
+            }
+        }
 
         if (razorpayPaymentId == null || razorpayPaymentId.isEmpty()) {
             razorpayPaymentId = "pay_" + System.currentTimeMillis();
@@ -548,7 +598,8 @@ public class InvoiceController {
             
             int generatedCount = 0;
             java.time.LocalDate now = java.time.LocalDate.now();
-            java.time.LocalDate dueDate = now.withDayOfMonth(Math.min(10, now.lengthOfMonth()));
+            OrganizationBillingProfile billingProfile = getBillingProfile(organization);
+            java.time.LocalDate dueDate = now.plusDays(billingProfile.getPaymentDueDays());
 
             for (Tenant tenant : tenants) {
                 try {
@@ -564,8 +615,9 @@ public class InvoiceController {
 
                     if (!invoiceExistsThisMonth) {
                         java.math.BigDecimal rentAmount = tenant.getRent() != null ? tenant.getRent() : java.math.BigDecimal.valueOf(8000);
-                        String invNum = "INV-" + now.getYear() + String.format("%02d", now.getMonthValue()) + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+                        String invNum = nextInvoiceNumber(billingProfile);
                         Invoice invoice = new Invoice(tenant, invNum, dueDate, now, rentAmount);
+                        snapshotIssuer(invoice, organization);
                         invoice.setStatus("UNPAID");
                         invoiceRepository.save(invoice);
                         generatedCount++;

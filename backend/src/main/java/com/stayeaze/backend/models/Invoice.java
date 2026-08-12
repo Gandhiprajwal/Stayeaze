@@ -9,7 +9,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "invoices")
+@Table(name = "invoices", indexes = {
+    @Index(name = "idx_invoice_tenant_due", columnList = "tenant_id, due_date"),
+    @Index(name = "idx_invoice_status", columnList = "status")
+})
 public class Invoice {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -54,6 +57,11 @@ public class Invoice {
 
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<InvoiceItem> items = new ArrayList<>();
+
+    // This is copied from the organization billing profile when the invoice is issued.
+    // It must not change if the owner later edits their billing settings.
+    @Embedded
+    private InvoiceIssuerSnapshot issuerSnapshot;
 
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
@@ -179,6 +187,14 @@ public class Invoice {
 
     public void setItems(List<InvoiceItem> items) {
         this.items = items;
+    }
+
+    public InvoiceIssuerSnapshot getIssuerSnapshot() {
+        return issuerSnapshot;
+    }
+
+    public void setIssuerSnapshot(InvoiceIssuerSnapshot issuerSnapshot) {
+        this.issuerSnapshot = issuerSnapshot;
     }
 
     public OffsetDateTime getCreatedAt() {

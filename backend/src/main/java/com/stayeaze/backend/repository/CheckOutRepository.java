@@ -2,6 +2,8 @@ package com.stayeaze.backend.repository;
 
 import com.stayeaze.backend.models.CheckOut;
 import com.stayeaze.backend.models.Organization;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,4 +18,9 @@ public interface CheckOutRepository extends JpaRepository<CheckOut, UUID> {
 
     @Query("SELECT c FROM CheckOut c WHERE c.organization.id = :orgId")
     List<CheckOut> findByOrganizationId(@Param("orgId") UUID orgId);
+
+    @Query("SELECT c FROM CheckOut c WHERE c.organization.id = :orgId")
+    Page<CheckOut> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
+
+    Page<CheckOut> findAll(Pageable pageable);
 }

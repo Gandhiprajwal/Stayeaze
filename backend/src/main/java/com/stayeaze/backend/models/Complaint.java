@@ -28,6 +28,9 @@ public class Complaint {
     @Column(length = 50)
     private String status = "OPEN"; // OPEN, IN_PROGRESS, RESOLVED
 
+    @Column(length = 50)
+    private String priority = "MEDIUM"; // LOW, MEDIUM, HIGH, CRITICAL
+
     @Column(name = "assigned_staff", length = 150)
     private String assignedStaff;
 
@@ -98,6 +101,14 @@ public class Complaint {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getPriority() {
+        return priority != null ? priority : "MEDIUM";
+    }
+
+    public void setPriority(String priority) {
+        this.priority = priority;
     }
 
     public String getAssignedStaff() {

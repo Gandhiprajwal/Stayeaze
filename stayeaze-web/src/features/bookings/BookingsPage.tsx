@@ -46,8 +46,8 @@ export default function BookingsPage() {
   const [selectedRoomId, setSelectedRoomId] = useState('');
 
   const { data: properties } = useQuery({
-    queryKey: ['bookings-properties'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['bookings-properties-minimal'],
+    queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
   const propMap = new Map((properties ?? []).map((p) => [p.id, p.name]));
 

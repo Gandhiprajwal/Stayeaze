@@ -1,6 +1,6 @@
 // Domain types shared across the StayEaze back-office.
 
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'PROPERTY_MANAGER' | 'RECEPTIONIST' | 'ACCOUNTANT' | 'SECURITY_GUARD' | 'STAFF' | 'TENANT';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'OWNER' | 'PROPERTY_MANAGER' | 'RECEPTIONIST' | 'ACCOUNTANT' | 'SECURITY_GUARD' | 'STAFF' | 'TENANT';
 
 export interface User {
   id: string;
@@ -42,6 +42,14 @@ export interface Property {
   manager: string;
   phone: string;
   email: string;
+  landlordPan?: string;
+  pgLicenseNo?: string;
+  bankAccountName?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfsc?: string;
+  upiVpa?: string;
+  authorizedSignatory?: string;
   createdAt: string;
 }
 
@@ -60,24 +68,35 @@ export interface Building {
 export interface Floor {
   id: string;
   buildingId: string;
+  buildingName?: string;
+  propertyId?: string;
+  propertyName?: string;
   name: string;
   number: number;
+  floorNumber?: number;
   rooms: number;
   beds: number;
   occupied: number;
+  status?: string;
 }
 
 export interface Room {
   id: string;
   floorId: string;
-  buildingId: string;
-  propertyId: string;
+  floorNumber?: number;
+  buildingId?: string;
+  buildingName?: string;
+  propertyId?: string;
+  propertyName?: string;
   number: string;
-  type: 'single' | 'double' | 'triple' | 'dorm';
+  roomNumber?: string;
+  type: string;
+  sharingType?: string;
   sharing: number;
   beds: number;
   occupied: number;
   rent: number;
+  baseRent?: number;
   status: 'available' | 'occupied' | 'partially_occupied' | 'maintenance' | 'reserved' | 'partially_reserved' | 'archived' | 'blocked';
   amenities: string[];
 }
@@ -85,36 +104,61 @@ export interface Room {
 export interface Bed {
   id: string;
   roomId: string;
+  roomNumber?: string;
+  floorId?: string;
+  floorNumber?: number;
+  buildingId?: string;
+  buildingName?: string;
+  propertyId?: string;
+  propertyName?: string;
   number: string;
+  bedNumber?: string;
   status: 'available' | 'occupied' | 'reserved' | 'maintenance' | 'archived' | 'blocked';
   tenantId?: string;
   tenantName?: string;
+  tenantMobile?: string;
 }
 
 export interface Tenant {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   phone: string;
+  mobile?: string;
   alternatePhone?: string;
   gender: 'male' | 'female' | 'other';
   dob: string;
   occupation: string;
   idType: 'aadhaar' | 'pan' | 'passport' | 'driving_license';
   idNumber: string;
+  idProofNumber?: string;
   emergencyContact: string;
   emergencyName: string;
+  emergencyContactName?: string;
+  emergencyContactMobile?: string;
   propertyId: string;
-  buildingName: string;
+  buildingName?: string;
   roomNumber: string;
   bedNumber: string;
   rent: number;
   deposit: number;
   leaseStart: string;
   leaseEnd: string;
-  status: 'active' | 'inactive' | 'notice_period' | 'checked_out';
+  status: 'active' | 'inactive' | 'notice_period' | 'checked_out' | 'pending_checkin';
+  kycStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
   photo?: string;
-  createdAt: string;
+  createdAt?: string;
+}
+
+export interface TenantDocument {
+  id: string;
+  documentType: 'AADHAAR' | 'PAN' | 'PASSPORT' | 'DRIVING_LICENSE' | 'OTHER';
+  documentNumber: string;
+  fileUrl?: string;
+  verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  verifiedAt?: string;
 }
 
 export interface Booking {
@@ -182,7 +226,29 @@ export interface Invoice {
   paymentReference?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
+  issuerSnapshot?: InvoiceIssuerSnapshot;
   createdAt: string;
+}
+
+export interface InvoiceIssuerSnapshot {
+  legalName?: string;
+  billingAddress?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  gstin?: string;
+  pan?: string;
+  registrationNumber?: string;
+  bankAccountName?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfsc?: string;
+  upiVpa?: string;
+  authorizedSignatory?: string;
+  invoiceTerms?: string;
+  lateFeeNote?: string;
 }
 
 export interface Payment {
@@ -191,11 +257,17 @@ export interface Payment {
   invoiceId: string;
   tenantName: string;
   propertyId: string;
+  propertyName?: string;
+  roomNumber?: string;
   amount: number;
-  method: 'cash' | 'upi' | 'card' | 'bank_transfer' | 'cheque';
+  method: 'cash' | 'upi' | 'card' | 'bank_transfer' | 'cheque' | 'razorpay';
   status: 'success' | 'pending' | 'failed';
   date: string;
   collectedBy: string;
+  paymentReference?: string;
+  razorpayPaymentId?: string;
+  landlordPan?: string;
+  pgLicenseNo?: string;
 }
 
 export interface Complaint {

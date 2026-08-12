@@ -91,8 +91,8 @@ export const roles: Role[] = [
 export const users: User[] = [
   {
     id: 'user-1',
-    name: 'Arjun Mehta',
-    email: 'superadmin@stayeaze.in',
+    name: 'Super Admin',
+    email: 'superadmin@stayeaze.com',
     phone: '+91 98100 11223',
     role: 'SUPER_ADMIN',
     status: 'active',

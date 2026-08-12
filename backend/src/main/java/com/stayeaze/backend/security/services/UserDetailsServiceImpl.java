@@ -40,7 +40,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
         return new UserDetailsImpl(
                 user.getId(),
-                user.getOrganization().getId(),
+                user.getOrganization() != null ? user.getOrganization().getId() : null,
                 user.getEmail(),
                 user.getPassword(),
                 authorities);

@@ -47,6 +47,9 @@ public class FloorController {
     private OrganizationRepository organizationRepository;
 
     @Autowired
+    private com.stayeaze.backend.services.FloorService floorService;
+
+    @Autowired
     private RoomRepository roomRepository;
 
     @Autowired
@@ -97,8 +100,8 @@ public class FloorController {
     private Organization getLoggedUserOrg() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
-                .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
+        if (userDetails.getOrgId() == null) return null;
+        return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
     }
 
     private Building getAuthorizedBuilding(UUID propertyId, UUID buildingId) {
@@ -143,11 +146,13 @@ public class FloorController {
     }
 
     @GetMapping("/floors")
-    public ResponseEntity<?> getFlatFloors() {
-        Organization organization = getLoggedUserOrg();
-        List<Floor> floors = floorRepository.findByOrganizationId(organization.getId());
-        floors.forEach(this::populateFloorStats);
-        return ResponseEntity.ok(floors);
+    public ResponseEntity<?> getFlatFloors(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        Organization organization = null;
+        try { organization = getLoggedUserOrg(); } catch (Exception ignored) {}
+        List<com.stayeaze.backend.payload.response.FloorDTO> all = floorService.getFloorsByOrg(organization);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
     }
 
     @DeleteMapping("/properties/{propertyId}/buildings/{buildingId}/floors/{id}")
@@ -165,10 +170,7 @@ public class FloorController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Floor not found in this building."));
         }
 
-        // We archive it by setting status
-        floor.setStatus("ARCHIVED");
-        floorRepository.save(floor);
-
+        archiveFloorCascade(floor);
         return ResponseEntity.ok(new MessageResponse("Floor successfully archived."));
     }
 
@@ -199,7 +201,7 @@ public class FloorController {
         }
 
         Floor floor = new Floor(building, floorNum);
-        Floor saved = floorRepository.save(floor);
+        Floor saved = floorService.saveFloor(floor);
         return new ResponseEntity<>(populateFloorStats(saved), HttpStatus.CREATED);
     }
 
@@ -224,7 +226,7 @@ public class FloorController {
         if (request.getFloorNumber() != null) {
             floor.setFloorNumber(request.getFloorNumber());
         }
-        Floor saved = floorRepository.save(floor);
+        Floor saved = floorService.saveFloor(floor);
         return ResponseEntity.ok(populateFloorStats(saved));
     }
 
@@ -236,8 +238,174 @@ public class FloorController {
         if (floor == null || !floor.getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Floor not found."));
         }
-        floor.setStatus("ARCHIVED");
-        floorRepository.save(floor);
+        archiveFloorCascade(floor);
         return ResponseEntity.ok(new MessageResponse("Floor deleted successfully."));
+    }
+
+    private void archiveFloorCascade(Floor floor) {
+        if (floor == null) return;
+        floor.setStatus("ARCHIVED");
+        floorService.saveFloor(floor);
+
+        List<Room> rooms = roomRepository.findByFloor(floor);
+        for (Room r : rooms) {
+            r.setStatus("ARCHIVED");
+            roomRepository.save(r);
+
+            List<Bed> beds = bedRepository.findByRoom(r);
+            for (Bed b : beds) {
+                b.setStatus("ARCHIVED");
+                bedRepository.save(b);
+
+                if (r.getRoomNumber() != null && b.getBedNumber() != null) {
+                    List<Tenant> tenants = tenantRepository.findAll();
+                    for (Tenant t : tenants) {
+                        if (r.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
+                            b.getBedNumber().equalsIgnoreCase(t.getBedNumber()) &&
+                            (t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()))) {
+                            t.setStatus("INACTIVE");
+                            tenantRepository.save(t);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (floor.getBuilding() != null) {
+            Building building = floor.getBuilding();
+            List<Floor> activeFloors = floorRepository.findByBuilding(building).stream()
+                    .filter(f -> f.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(f.getStatus()))
+                    .collect(java.util.stream.Collectors.toList());
+
+            int bldRooms = 0, bldBeds = 0, bldOcc = 0;
+            for (Floor f : activeFloors) {
+                List<Room> fRooms = roomRepository.findByFloor(f).stream()
+                        .filter(r -> r.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(r.getStatus()))
+                        .collect(java.util.stream.Collectors.toList());
+                bldRooms += fRooms.size();
+                for (Room r : fRooms) {
+                    List<Bed> rBeds = bedRepository.findByRoom(r).stream()
+                            .filter(b -> b.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(b.getStatus()))
+                            .collect(java.util.stream.Collectors.toList());
+                    bldBeds += rBeds.size();
+                    bldOcc += (int) rBeds.stream().filter(b -> "OCCUPIED".equalsIgnoreCase(b.getStatus())).count();
+                }
+            }
+            building.setRooms(bldRooms);
+            building.setBeds(bldBeds);
+            building.setOccupied(bldOcc);
+            buildingRepository.save(building);
+
+            Property property = building.getProperty();
+            if (property != null) {
+                List<Building> pBuildings = buildingRepository.findByProperty(property);
+                int propRooms = pBuildings.stream().mapToInt(Building::getRooms).sum();
+                int propBeds = pBuildings.stream().mapToInt(Building::getBeds).sum();
+                int propOcc = pBuildings.stream().mapToInt(Building::getOccupied).sum();
+                property.setTotalRooms(propRooms);
+                property.setTotalBeds(propBeds);
+                property.setOccupiedBeds(propOcc);
+                propertyRepository.save(property);
+            }
+        }
+
+        floorService.evictCaches();
+    }
+
+    @PutMapping("/floors/{id}/unarchive")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> unarchiveFlatFloor(@PathVariable UUID id) {
+        Organization organization = getLoggedUserOrg();
+        Floor floor = floorRepository.findById(id).orElse(null);
+        if (floor == null || (organization != null && floor.getBuilding() != null && floor.getBuilding().getProperty() != null && floor.getBuilding().getProperty().getOrganization() != null && !floor.getBuilding().getProperty().getOrganization().getId().equals(organization.getId()))) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Floor not found."));
+        }
+        unarchiveFloorCascade(floor);
+        return ResponseEntity.ok(new MessageResponse("Floor and all nested rooms/beds successfully unarchived."));
+    }
+
+    @PutMapping("/properties/{propertyId}/buildings/{buildingId}/floors/{id}/unarchive")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> unarchiveFloor(@PathVariable UUID propertyId, @PathVariable UUID buildingId, @PathVariable UUID id) {
+        Building building;
+        try {
+            building = getAuthorizedBuilding(propertyId, buildingId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
+        }
+
+        Floor floor = floorRepository.findByIdAndBuilding(id, building).orElse(null);
+        if (floor == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Floor not found in this building."));
+        }
+
+        unarchiveFloorCascade(floor);
+        return ResponseEntity.ok(new MessageResponse("Floor and all nested rooms/beds successfully unarchived."));
+    }
+
+    private void unarchiveFloorCascade(Floor floor) {
+        if (floor == null) return;
+        floor.setStatus("AVAILABLE");
+        floorService.saveFloor(floor);
+
+        List<Room> rooms = roomRepository.findByFloor(floor);
+        for (Room r : rooms) {
+            if ("ARCHIVED".equalsIgnoreCase(r.getStatus())) {
+                r.setStatus("available");
+                roomRepository.save(r);
+            }
+
+            List<Bed> beds = bedRepository.findByRoom(r);
+            for (Bed b : beds) {
+                if ("ARCHIVED".equalsIgnoreCase(b.getStatus())) {
+                    b.setStatus("AVAILABLE");
+                    bedRepository.save(b);
+                }
+            }
+        }
+
+        if (floor.getBuilding() != null) {
+            Building building = floor.getBuilding();
+            if ("ARCHIVED".equalsIgnoreCase(building.getStatus())) {
+                building.setStatus("ACTIVE");
+                buildingRepository.save(building);
+            }
+            List<Floor> activeFloors = floorRepository.findByBuilding(building).stream()
+                    .filter(f -> f.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(f.getStatus()))
+                    .collect(java.util.stream.Collectors.toList());
+
+            int bldRooms = 0, bldBeds = 0, bldOcc = 0;
+            for (Floor f : activeFloors) {
+                List<Room> fRooms = roomRepository.findByFloor(f).stream()
+                        .filter(r -> r.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(r.getStatus()))
+                        .collect(java.util.stream.Collectors.toList());
+                bldRooms += fRooms.size();
+                for (Room r : fRooms) {
+                    List<Bed> rBeds = bedRepository.findByRoom(r).stream()
+                            .filter(b -> b.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(b.getStatus()))
+                            .collect(java.util.stream.Collectors.toList());
+                    bldBeds += rBeds.size();
+                    bldOcc += (int) rBeds.stream().filter(b -> "OCCUPIED".equalsIgnoreCase(b.getStatus())).count();
+                }
+            }
+            building.setRooms(bldRooms);
+            building.setBeds(bldBeds);
+            building.setOccupied(bldOcc);
+            buildingRepository.save(building);
+
+            Property property = building.getProperty();
+            if (property != null) {
+                List<Building> pBuildings = buildingRepository.findByProperty(property);
+                int propRooms = pBuildings.stream().mapToInt(Building::getRooms).sum();
+                int propBeds = pBuildings.stream().mapToInt(Building::getBeds).sum();
+                int propOcc = pBuildings.stream().mapToInt(Building::getOccupied).sum();
+                property.setTotalRooms(propRooms);
+                property.setTotalBeds(propBeds);
+                property.setOccupiedBeds(propOcc);
+                propertyRepository.save(property);
+            }
+        }
+
+        floorService.evictCaches();
     }
 }

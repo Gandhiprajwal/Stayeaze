@@ -58,8 +58,9 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       debugPrint('Connection Error exception details: $e');
+      final activeHost = await ApiService.getActiveBaseUrl();
       setState(() {
-        _errorMessage = 'Connection failed ($e). Ensure backend is running.';
+        _errorMessage = 'Unable to reach backend ($activeHost). Tap ⚙️ top-right to configure host IP (e.g. 10.0.2.2:8080 or 192.168.1.6:8080).';
       });
     } finally {
       if (mounted) {
@@ -70,9 +71,81 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _showServerConfigDialog() async {
+    final currentUrl = await ApiService.getActiveBaseUrl();
+    final controller = TextEditingController(text: currentUrl.replaceAll('http://', '').replaceAll('/api/v1', ''));
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Row(
+          children: [
+            Icon(Icons.dns_rounded, color: Color(0xFF4F46E5)),
+            SizedBox(width: 10),
+            Text('Server Connection IP', style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Specify host PC IP & port (e.g. 192.168.1.6:8080 or 10.0.2.2:8080):',
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
+              decoration: const InputDecoration(
+                hintText: '192.168.1.6:8080 or 10.0.2.2:8080',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F46E5)),
+            onPressed: () async {
+              if (controller.text.trim().isNotEmpty) {
+                await ApiService.setCustomHost(controller.text.trim());
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('API Host updated to ${controller.text.trim()}')),
+                );
+              }
+              if (!ctx.mounted) return;
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save Host', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_ethernet_rounded, color: Color(0xFF4F46E5)),
+            tooltip: 'Configure Backend Server IP',
+            onPressed: _showServerConfigDialog,
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -83,20 +156,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Modern Gradient Icon Container
                   Center(
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
+                          colors: [Color(0xFF4F46E5), Color(0xFF3730A3)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Color(0x4C6366F1),
+                            color: Color(0x334F46E5),
                             blurRadius: 20,
                             spreadRadius: 2,
                             offset: Offset(0, 8),
@@ -110,122 +182,91 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
                   const Text(
-                    'StayEaze',
+                    'StayEaze Console',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 36,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: 1.5,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF0F172A),
+                      letterSpacing: 0.5,
                     ),
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Co-living Operations Center',
+                    'PG & Hostel Enterprise SaaS Mobile Portal',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 15,
-                      color: Color(0xFF94A3B8),
-                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                      color: Color(0xFF64748B),
                     ),
                   ),
-                  const SizedBox(height: 40),
-                  
+                  const SizedBox(height: 36),
+
                   if (_errorMessage.isNotEmpty) ...[
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0x1AEF4444),
+                        color: const Color(0xFFFEF2F2),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0x4DEF4444)),
+                        border: Border.all(color: const Color(0xFFFECACA)),
                       ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.error_outline, color: Color(0xFFFCA5A5), size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _errorMessage,
-                              style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        _errorMessage,
+                        style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 18),
                   ],
 
                   TextFormField(
                     controller: _emailController,
-                    style: const TextStyle(color: Colors.white),
+                    keyboardType: TextInputType.emailAddress,
+                    style: const TextStyle(color: Color(0xFF0F172A)),
                     decoration: const InputDecoration(
-                      labelText: 'Username or Email',
-                      prefixIcon: Icon(Icons.mail_outline, color: Color(0xFF64748B)),
+                      labelText: 'Email Address',
+                      hintText: 'admin@stayeaze.com',
+                      prefixIcon: Icon(Icons.email_outlined, color: Color(0xFF64748B)),
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return 'Enter account credentials';
-                      return null;
-                    },
+                    validator: (v) => v == null || v.isEmpty ? 'Please enter email' : null,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
+
                   TextFormField(
                     controller: _passwordController,
                     obscureText: true,
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Color(0xFF0F172A)),
                     decoration: const InputDecoration(
-                      labelText: 'Access Password',
-                      prefixIcon: Icon(Icons.lock_outlined, color: Color(0xFF64748B)),
+                      labelText: 'Password',
+                      hintText: '••••••••',
+                      prefixIcon: Icon(Icons.lock_outline, color: Color(0xFF64748B)),
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return 'Enter secure password';
-                      return null;
-                    },
+                    validator: (v) => v == null || v.isEmpty ? 'Please enter password' : null,
                   ),
-                  const SizedBox(height: 36),
-                  
-                  // Gradient Submit Button
-                  Container(
-                    height: 56,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x3F6366F1),
-                          blurRadius: 15,
-                          offset: Offset(0, 6),
-                        )
-                      ],
+                  const SizedBox(height: 24),
+
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _handleLogin,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4F46E5),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleLogin,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text(
-                              'Sign In to Dashboard',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                          )
+                        : const Text(
+                            'Sign In to Console',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
                             ),
-                    ),
+                          ),
                   ),
                 ],
               ),

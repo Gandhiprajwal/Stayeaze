@@ -46,6 +46,9 @@ public class CheckOutController {
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
+    @Autowired
+    private com.stayeaze.backend.services.OccupancySyncService occupancySyncService;
+
     private void processCheckOutCompletion(CheckOut checkOut, Organization organization) {
         // 1. Find matching Tenant and archive (do NOT delete!)
         List<Tenant> orgTenants = tenantRepository.findByOrganization(organization);
@@ -78,6 +81,7 @@ public class CheckOutController {
         }
 
         // 2. Release Bed back to AVAILABLE
+        Room matchedRoom = null;
         if (checkOut.getRoomNumber() != null && checkOut.getBedNumber() != null) {
             try {
                 List<Bed> orgBeds = bedRepository.findByOrganizationId(organization.getId());
@@ -92,16 +96,28 @@ public class CheckOutController {
                     bed.setTenantId(null);
                     bed.setTenantName(null);
                     bedRepository.save(bed);
+                    matchedRoom = bed.getRoom();
                 }
             } catch (Exception ignored) {}
         }
+
+        if (matchedRoom != null) {
+            occupancySyncService.syncStatsForRoom(matchedRoom);
+        }
+        occupancySyncService.syncAllStatsForOrg(organization);
     }
 
     @GetMapping
-    public ResponseEntity<?> getAllCheckOuts() {
+    public ResponseEntity<?> getAllCheckOuts(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         Organization organization = getLoggedUserOrg();
-        List<CheckOut> checkOuts = checkOutRepository.findByOrganization(organization);
-        return ResponseEntity.ok(checkOuts);
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
+        org.springframework.data.domain.Page<CheckOut> pageResult = checkOutRepository.findByOrganizationId(organization.getId(), pageable);
+        org.springframework.data.domain.Page<com.stayeaze.backend.payload.response.CheckOutDTO> dtoPage =
+                pageResult.map(com.stayeaze.backend.payload.response.CheckOutDTO::fromEntity);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.ofPage(dtoPage));
     }
 
     @PostMapping
@@ -134,42 +150,24 @@ public class CheckOutController {
 
     @PutMapping("/{id}")
     @Transactional
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
     public ResponseEntity<?> updateCheckOut(@PathVariable UUID id, @Valid @RequestBody CheckOut request) {
-        Organization organization = getLoggedUserOrg();
-        CheckOut checkOut = checkOutRepository.findById(id).orElse(null);
-        if (checkOut == null || !checkOut.getOrganization().getId().equals(organization.getId())) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Check-out record not found."));
-        }
-
-        checkOut.setTenantName(request.getTenantName());
-        checkOut.setPropertyId(request.getPropertyId());
-        checkOut.setRoomNumber(request.getRoomNumber());
-        checkOut.setBedNumber(request.getBedNumber());
-        checkOut.setCheckOutDate(request.getCheckOutDate());
-        checkOut.setNoticeDate(request.getNoticeDate());
-        checkOut.setDepositRefund(request.getDepositRefund());
-        checkOut.setDeductions(request.getDeductions());
-        checkOut.setReason(request.getReason());
-        checkOut.setStatus(request.getStatus());
-
-        if ("completed".equalsIgnoreCase(request.getStatus())) {
-            processCheckOutCompletion(checkOut, organization);
-        }
-
-        CheckOut updated = checkOutRepository.save(checkOut);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.badRequest().body(new MessageResponse("Check-out records are immutable and cannot be edited."));
     }
 
     @PostMapping("/{id}/mark-completed")
     @Transactional
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
     public ResponseEntity<?> markCheckOutCompleted(@PathVariable UUID id, @RequestBody(required = false) CheckOut payload) {
         try {
             Organization organization = getLoggedUserOrg();
             CheckOut checkOut = checkOutRepository.findById(id).orElse(null);
             if (checkOut == null || !checkOut.getOrganization().getId().equals(organization.getId())) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Check-out record not found."));
+            }
+
+            if ("completed".equalsIgnoreCase(checkOut.getStatus())) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Check-out is already completed."));
             }
 
             if (payload != null) {

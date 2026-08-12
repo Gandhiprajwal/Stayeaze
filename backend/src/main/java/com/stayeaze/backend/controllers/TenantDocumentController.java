@@ -53,9 +53,13 @@ public class TenantDocumentController {
                 .orElseThrow(() -> new IllegalArgumentException("Tenant profile not found or unauthorized"));
     }
 
+    @Autowired
+    private com.stayeaze.backend.services.FileStorageService fileStorageService;
+
     @PostMapping
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
-    public ResponseEntity<?> uploadDocument(@PathVariable UUID tenantId, @Valid @RequestBody TenantDocumentRequest request) {
+    public ResponseEntity<?> uploadDocument(@PathVariable UUID tenantId,
+            @Valid @RequestBody TenantDocumentRequest request) {
         Tenant tenant;
         try {
             tenant = getAuthorizedTenant(tenantId);
@@ -67,6 +71,32 @@ public class TenantDocumentController {
         doc.setFileUrl(request.getFileUrl());
         TenantDocument saved = tenantDocumentRepository.save(doc);
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
+    }
+
+    @PostMapping(value = "/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
+    public ResponseEntity<?> uploadDocumentFile(
+            @PathVariable UUID tenantId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam("documentType") String documentType,
+            @RequestParam(value = "documentNumber", required = false) String documentNumber) {
+        Tenant tenant;
+        try {
+            tenant = getAuthorizedTenant(tenantId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
+        }
+
+        try {
+            String fileUrl = fileStorageService.storeFile(file, "kyc");
+            TenantDocument doc = new TenantDocument(tenant, documentType, documentNumber);
+            doc.setFileUrl(fileUrl);
+            TenantDocument saved = tenantDocumentRepository.save(doc);
+            return new ResponseEntity<>(saved, HttpStatus.CREATED);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponse("Failed to upload document file: " + e.getMessage()));
+        }
     }
 
     @GetMapping
@@ -84,7 +114,8 @@ public class TenantDocumentController {
 
     @PutMapping("/{id}/verify")
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
-    public ResponseEntity<?> verifyDocument(@PathVariable UUID tenantId, @PathVariable UUID id, @RequestParam String status) {
+    public ResponseEntity<?> verifyDocument(@PathVariable UUID tenantId, @PathVariable UUID id,
+            @RequestParam String status) {
         Tenant tenant;
         try {
             tenant = getAuthorizedTenant(tenantId);
@@ -98,10 +129,12 @@ public class TenantDocumentController {
         }
 
         if (!"VERIFIED".equals(status) && !"REJECTED".equals(status)) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Invalid verification status. Use 'VERIFIED' or 'REJECTED'."));
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Error: Invalid verification status. Use 'VERIFIED' or 'REJECTED'."));
         }
 
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication()
+                .getPrincipal();
         User verifier = userRepository.findById(userDetails.getId()).orElse(null);
 
         doc.setVerificationStatus(status);
@@ -110,14 +143,56 @@ public class TenantDocumentController {
 
         TenantDocument updated = tenantDocumentRepository.save(doc);
 
-        // If verified, we can check if all documents are verified to update Tenant KYC status
+        // Evaluate overall tenant KYC status
         List<TenantDocument> allDocs = tenantDocumentRepository.findByTenant(tenant);
-        boolean allVerified = allDocs.stream().allMatch(d -> "VERIFIED".equals(d.getVerificationStatus()));
-        if (allVerified && !allDocs.isEmpty()) {
+        boolean anyRejected = allDocs.stream().anyMatch(d -> "REJECTED".equalsIgnoreCase(d.getVerificationStatus()));
+        boolean allVerified = !allDocs.isEmpty() && allDocs.stream().allMatch(d -> "VERIFIED".equalsIgnoreCase(d.getVerificationStatus()));
+
+        if (anyRejected) {
+            tenant.setKycStatus("REJECTED");
+        } else if (allVerified) {
             tenant.setKycStatus("VERIFIED");
-            tenantRepository.save(tenant);
+        } else {
+            tenant.setKycStatus("PENDING");
         }
+        tenantRepository.save(tenant);
 
         return ResponseEntity.ok(updated);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> deleteDocument(@PathVariable UUID tenantId, @PathVariable UUID id) {
+        Tenant tenant;
+        try {
+            tenant = getAuthorizedTenant(tenantId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
+        }
+
+        TenantDocument doc = tenantDocumentRepository.findByIdAndTenant(id, tenant).orElse(null);
+        if (doc == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Document not found."));
+        }
+
+        tenantDocumentRepository.delete(doc);
+
+        // Re-evaluate tenant KYC status
+        List<TenantDocument> remainingDocs = tenantDocumentRepository.findByTenant(tenant);
+        if (remainingDocs.isEmpty()) {
+            tenant.setKycStatus("PENDING");
+        } else {
+            boolean allVerified = remainingDocs.stream().allMatch(d -> "VERIFIED".equals(d.getVerificationStatus()));
+            boolean anyRejected = remainingDocs.stream().anyMatch(d -> "REJECTED".equals(d.getVerificationStatus()));
+            if (allVerified)
+                tenant.setKycStatus("VERIFIED");
+            else if (anyRejected)
+                tenant.setKycStatus("REJECTED");
+            else
+                tenant.setKycStatus("PENDING");
+        }
+        tenantRepository.save(tenant);
+
+        return ResponseEntity.ok(new MessageResponse("Document deleted successfully."));
     }
 }

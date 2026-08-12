@@ -56,6 +56,32 @@ public class DatabaseSeeder implements CommandLineRunner {
             // ignore if database is different or constraint does not exist
         }
 
+        /*
+        // Clear all operational table data for clean manual testing
+        System.out.println("==================================================");
+        System.out.println("🧹 PURGING OLD DATABASE DATA FOR FRESH APPLICATION START...");
+        try {
+            jdbcTemplate.execute("TRUNCATE TABLE user_properties, user_roles, refresh_tokens, payments, invoices, complaints, maintenance, check_outs, check_ins, bookings, tenants, beds, rooms, floors, buildings, properties, audit_logs RESTART IDENTITY CASCADE");
+        } catch (Exception e) {
+            String[] tables = new String[]{
+                "user_properties", "user_roles", "refresh_tokens", "payments", "invoices",
+                "complaints", "maintenance", "check_outs", "check_ins", "bookings",
+                "tenants", "beds", "rooms", "floors", "buildings", "properties", "audit_logs"
+            };
+            for (String t : tables) {
+                try {
+                    jdbcTemplate.execute("DELETE FROM " + t);
+                } catch (Exception ignored) {}
+            }
+        }
+
+        try {
+            jdbcTemplate.execute("DELETE FROM users WHERE email <> 'superadmin@stayeaze.com'");
+        } catch (Exception ignored) {}
+        System.out.println("✨ Database tables purged successfully!");
+        System.out.println("==================================================");
+        */
+
         // 1. Seed Core Roles
         seedRoleIfNotFound(ERole.SUPER_ADMIN, "[\"ALL\"]");
         seedRoleIfNotFound(ERole.OWNER, "[\"ALL\"]");
@@ -66,41 +92,42 @@ public class DatabaseSeeder implements CommandLineRunner {
         seedRoleIfNotFound(ERole.STAFF, "[\"SUPPORT_WRITE\", \"SUPPORT_READ\"]");
         seedRoleIfNotFound(ERole.TENANT, "[\"COMPLAINT_WRITE\"]");
 
-        // 2. Seed Super Admin User if none exists
+        // 2. Seed Super Admin User
         Optional<Role> superAdminRoleOpt = roleRepository.findByName(ERole.SUPER_ADMIN);
         if (superAdminRoleOpt.isPresent()) {
             Role superAdminRole = superAdminRoleOpt.get();
-            long count = userRepository.findAll().stream()
-                    .filter(u -> u.getRoles().contains(superAdminRole))
-                    .count();
 
-            if (count == 0) {
-                // Ensure system organization exists
-                Organization systemOrg = organizationRepository.findBySubdomain("system")
-                        .orElseGet(() -> {
-                            Organization org = new Organization("StayEaze SaaS System", "system");
-                            return organizationRepository.save(org);
-                        });
+            Organization systemOrg = organizationRepository.findBySubdomain("system")
+                    .orElseGet(() -> {
+                        Organization org = new Organization("StayEaze SaaS System", "system");
+                        return organizationRepository.save(org);
+                    });
 
-                // Create default Super Admin user
-                User admin = new User(
-                        systemOrg,
-                        "admin@stayeaze.com",
-                        encoder.encode("admin123"),
-                        "0000000000"
-                );
+            // Convert legacy admin@stayeaze.com if present, or create superadmin@stayeaze.com
+            User superAdmin = userRepository.findByEmail("superadmin@stayeaze.com")
+                    .orElseGet(() -> userRepository.findByEmail("admin@stayeaze.com")
+                    .orElseGet(() -> new User(
+                            systemOrg,
+                            "superadmin@stayeaze.com",
+                            encoder.encode("Friend@2010"),
+                            "0000000000"
+                    )));
 
-                Set<Role> roles = new HashSet<>();
-                roles.add(superAdminRole);
-                admin.setRoles(roles);
-
-                userRepository.save(admin);
-                System.out.println("==================================================");
-                System.out.println("🟢 SEEDING: Default Super Admin User Created!");
-                System.out.println("   Username / Email: admin@stayeaze.com");
-                System.out.println("   Password:         admin123");
-                System.out.println("==================================================");
+            superAdmin.setEmail("superadmin@stayeaze.com");
+            superAdmin.setPassword(encoder.encode("Friend@2010"));
+            if (superAdmin.getRoles() == null) {
+                superAdmin.setRoles(new HashSet<>());
             }
+            if (!superAdmin.getRoles().contains(superAdminRole)) {
+                superAdmin.getRoles().add(superAdminRole);
+            }
+            userRepository.save(superAdmin);
+
+            System.out.println("==================================================");
+            System.out.println("🟢 SEEDING: Super Admin User Configured!");
+            System.out.println("   Username / Email: superadmin@stayeaze.com");
+            System.out.println("   Password:         Friend@2010");
+            System.out.println("==================================================");
         }
 
     }

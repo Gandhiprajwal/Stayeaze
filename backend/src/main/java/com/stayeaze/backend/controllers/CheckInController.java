@@ -49,6 +49,9 @@ public class CheckInController {
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
+    @Autowired
+    private com.stayeaze.backend.services.OccupancySyncService occupancySyncService;
+
     private void processCheckInCompletion(CheckIn checkIn, Organization organization) {
         java.time.LocalDate effectiveCheckInDate = checkIn.getCheckInDate();
         // If checkInDate is null or in the future when performing early check-in, set to today's date
@@ -60,7 +63,8 @@ public class CheckInController {
         // 1. Update Tenant status to ACTIVE & sync tenant leaseStart to early checkInDate
         List<Tenant> orgTenants = tenantRepository.findByOrganization(organization);
         Tenant tenant = orgTenants.stream().filter(t ->
-            (t.getFirstName() + " " + t.getLastName()).equalsIgnoreCase(checkIn.getTenantName()) ||
+            (t.getFirstName() + " " + t.getLastName()).trim().equalsIgnoreCase(checkIn.getTenantName().trim()) ||
+            (t.getName() != null && t.getName().trim().equalsIgnoreCase(checkIn.getTenantName().trim())) ||
             (checkIn.getRoomNumber() != null && checkIn.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
              checkIn.getBedNumber() != null && checkIn.getBedNumber().equalsIgnoreCase(t.getBedNumber()))
         ).findFirst().orElse(null);
@@ -87,12 +91,13 @@ public class CheckInController {
             }
         }
 
-        // 2. Mark Bed OCCUPIED
+        // 3. Mark Bed OCCUPIED
+        Room matchedRoom = null;
         if (checkIn.getRoomNumber() != null && checkIn.getBedNumber() != null) {
             List<Room> orgRooms = roomRepository.findByOrganizationId(organization.getId());
-            Room room = orgRooms.stream().filter(r -> checkIn.getRoomNumber().equalsIgnoreCase(r.getRoomNumber())).findFirst().orElse(null);
-            if (room != null) {
-                List<Bed> rBeds = bedRepository.findByRoom(room);
+            matchedRoom = orgRooms.stream().filter(r -> checkIn.getRoomNumber().equalsIgnoreCase(r.getRoomNumber())).findFirst().orElse(null);
+            if (matchedRoom != null) {
+                List<Bed> rBeds = bedRepository.findByRoom(matchedRoom);
                 Bed bed = rBeds.stream().filter(b -> checkIn.getBedNumber().equalsIgnoreCase(b.getBedNumber())).findFirst().orElse(null);
                 if (bed != null) {
                     bed.setStatus("OCCUPIED");
@@ -104,78 +109,107 @@ public class CheckInController {
                 }
             }
         }
+
+        occupancySyncService.syncStatsForRoom(matchedRoom);
     }
 
     @GetMapping
-    @Transactional
-    public ResponseEntity<?> getAllCheckIns() {
+    public ResponseEntity<?> getAllCheckIns(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         Organization organization = getLoggedUserOrg();
         List<CheckIn> checkIns = checkInRepository.findAll().stream()
                 .filter(c -> c.getOrganization() != null && c.getOrganization().getId().equals(organization.getId()))
                 .collect(java.util.stream.Collectors.toList());
 
         try {
-            List<Booking> activeBookings = bookingRepository.findByOrganizationId(organization.getId());
-            for (Booking b : activeBookings) {
-                boolean isPendingCheckIn = b.getStatus() == null || "CONFIRMED".equalsIgnoreCase(b.getStatus()) || "PENDING".equalsIgnoreCase(b.getStatus());
-                if (isPendingCheckIn) {
-                    boolean exists = checkIns.stream().anyMatch(c -> b.getId().equals(c.getBookingId()) 
-                        || (b.getTenantName() != null && b.getTenantName().equalsIgnoreCase(c.getTenantName()))
-                        || (b.getTenant() != null && (b.getTenant().getFirstName() + " " + b.getTenant().getLastName()).equalsIgnoreCase(c.getTenantName())));
-                    if (!exists) {
-                        CheckIn newCheckIn = new CheckIn();
-                        newCheckIn.setOrganization(organization);
-                        newCheckIn.setCode(b.getBookingCode() != null ? "CI-" + b.getBookingCode() : "CI-B" + String.valueOf(System.currentTimeMillis()).substring(8));
-                        newCheckIn.setBookingId(b.getId());
-                        String name = b.getTenantName();
-                        if (name == null && b.getTenant() != null) name = b.getTenant().getName();
-                        if (name == null || name.isBlank()) name = "Guest";
-                        newCheckIn.setTenantName(name);
+            List<Tenant> orgTenants = tenantRepository.findByOrganization(organization);
 
-                        UUID propId = b.getPropertyId();
-                        if (propId == null && b.getTenant() != null) propId = b.getTenant().getPropertyId();
-                        if (propId == null) {
-                            List<Property> props = propertyRepository.findByOrganization(organization);
-                            if (props != null && !props.isEmpty()) propId = props.get(0).getId();
-                        }
-                        if (propId != null) {
-                            newCheckIn.setPropertyId(propId);
-
-                            String rNum = b.getRoomNumber();
-                            try {
-                                if (rNum == null && b.getBed() != null && b.getBed().getRoom() != null) rNum = b.getBed().getRoom().getRoomNumber();
-                            } catch (Exception ignored) {}
-                            if (rNum == null && b.getTenant() != null) rNum = b.getTenant().getRoomNumber();
-                            newCheckIn.setRoomNumber(rNum != null ? rNum : "101");
-
-                            String bNum = b.getBedNumber();
-                            try {
-                                if (bNum == null && b.getBed() != null) bNum = b.getBed().getBedNumber();
-                            } catch (Exception ignored) {}
-                            if (bNum == null && b.getTenant() != null) bNum = b.getTenant().getBedNumber();
-                            newCheckIn.setBedNumber(bNum != null ? bNum : "B1");
-
-                            newCheckIn.setCheckInDate(b.getCheckinDate() != null ? b.getCheckinDate() : java.time.LocalDate.now());
-                            if (b.getCheckoutDate() != null) {
-                                newCheckIn.setLeaseEnd(b.getCheckoutDate());
-                            }
-
-                            newCheckIn.setRent(b.getRentAgreed() != null ? b.getRentAgreed() : java.math.BigDecimal.valueOf(8000));
-                            newCheckIn.setDepositPaid(b.getDepositAgreed() != null ? b.getDepositAgreed() : java.math.BigDecimal.valueOf(16000));
-                            newCheckIn.setStatus("pending");
-                            newCheckIn.setIdVerified(false);
-
-                            CheckIn saved = checkInRepository.save(newCheckIn);
-                            checkIns.add(saved);
-                        }
+            // If a tenant is already checked-in (ACTIVE, CHECKED_IN, COMPLETED), sync existing CheckIn record status to completed
+            for (CheckIn c : checkIns) {
+                if ("pending".equalsIgnoreCase(c.getStatus())) {
+                    boolean tenantCheckedIn = orgTenants.stream().anyMatch(t -> {
+                        String ts = t.getStatus();
+                        boolean isCheckedIn = ts != null && ("ACTIVE".equalsIgnoreCase(ts) || "CHECKED_IN".equalsIgnoreCase(ts) || "COMPLETED".equalsIgnoreCase(ts));
+                        if (!isCheckedIn) return false;
+                        String fullName = ((t.getFirstName() != null ? t.getFirstName() : "") + " " + (t.getLastName() != null ? t.getLastName() : "")).trim();
+                        return (c.getTenantName() != null && c.getTenantName().equalsIgnoreCase(fullName)) ||
+                               (t.getRoomNumber() != null && !t.getRoomNumber().isBlank() && t.getRoomNumber().equalsIgnoreCase(c.getRoomNumber()) &&
+                                t.getBedNumber() != null && !t.getBedNumber().isBlank() && t.getBedNumber().equalsIgnoreCase(c.getBedNumber()));
+                    });
+                    if (tenantCheckedIn) {
+                        c.setStatus("completed");
+                        checkInRepository.save(c);
                     }
                 }
+            }
+
+            // Auto-discover pending tenants (PENDING_CHECKIN status) — add VIRTUAL (unsaved) entries for display
+            for (Tenant t : orgTenants) {
+                String tStat = t.getStatus();
+                boolean isPendingTenant = tStat != null && (
+                    "PENDING_CHECKIN".equalsIgnoreCase(tStat) ||
+                    "PENDING".equalsIgnoreCase(tStat) ||
+                    "RESERVED".equalsIgnoreCase(tStat) ||
+                    "CHECKIN_PENDING".equalsIgnoreCase(tStat)
+                );
+                if (!isPendingTenant) continue;
+
+                String fullName = ((t.getFirstName() != null ? t.getFirstName() : "") + " " + (t.getLastName() != null ? t.getLastName() : "")).trim();
+                if (fullName.isBlank()) fullName = t.getName() != null ? t.getName() : "Tenant";
+
+                final String finalFullName = fullName;
+                final Tenant finalTenant = t;
+
+                // Skip if real check-in already exists for this tenant
+                boolean exists = checkIns.stream().anyMatch(c ->
+                    (c.getTenantName() != null && c.getTenantName().equalsIgnoreCase(finalFullName)) ||
+                    (finalTenant.getRoomNumber() != null && !finalTenant.getRoomNumber().isBlank() &&
+                     finalTenant.getRoomNumber().equalsIgnoreCase(c.getRoomNumber()) &&
+                     finalTenant.getBedNumber() != null && !finalTenant.getBedNumber().isBlank() &&
+                     finalTenant.getBedNumber().equalsIgnoreCase(c.getBedNumber()))
+                );
+                if (exists) continue;
+
+                UUID propId = t.getPropertyId();
+                if (propId == null) {
+                    List<Property> props = propertyRepository.findByOrganization(organization);
+                    if (props != null && !props.isEmpty()) propId = props.get(0).getId();
+                }
+                if (propId == null) continue;
+
+                // Build a VIRTUAL (unsaved) check-in for display only
+                CheckIn virtual = new CheckIn();
+                virtual.setId(UUID.randomUUID());
+                virtual.setOrganization(organization);
+                virtual.setCode("CI-T" + String.valueOf(System.currentTimeMillis() % 100000000L));
+                virtual.setTenantName(fullName);
+                virtual.setPropertyId(propId);
+                virtual.setRoomNumber(t.getRoomNumber() != null ? t.getRoomNumber() : "");
+                virtual.setBedNumber(t.getBedNumber() != null ? t.getBedNumber() : "");
+
+                if (t.getLeaseStart() != null && !t.getLeaseStart().isBlank()) {
+                    try { virtual.setCheckInDate(java.time.LocalDate.parse(t.getLeaseStart())); }
+                    catch (Exception ignored) { virtual.setCheckInDate(java.time.LocalDate.now()); }
+                } else {
+                    virtual.setCheckInDate(java.time.LocalDate.now());
+                }
+                if (t.getLeaseEnd() != null && !t.getLeaseEnd().isBlank()) {
+                    try { virtual.setLeaseEnd(java.time.LocalDate.parse(t.getLeaseEnd())); }
+                    catch (Exception ignored) {}
+                }
+
+                virtual.setRent(t.getRent() != null ? t.getRent() : java.math.BigDecimal.valueOf(8000));
+                virtual.setDepositPaid(t.getDeposit() != null ? t.getDeposit() : java.math.BigDecimal.valueOf(16000));
+                virtual.setStatus("pending");
+                virtual.setIdVerified("VERIFIED".equalsIgnoreCase(t.getKycStatus()));
+                checkIns.add(virtual); // NOT saved to DB
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        return ResponseEntity.ok(checkIns);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(checkIns, page, pageSize));
     }
 
     @PostMapping
@@ -234,6 +268,10 @@ public class CheckInController {
         CheckIn checkIn = checkInRepository.findById(id).orElse(null);
         if (checkIn == null || !checkIn.getOrganization().getId().equals(organization.getId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Check-in record not found."));
+        }
+
+        if (checkIn.getStatus() != null && ("completed".equalsIgnoreCase(checkIn.getStatus()) || "checked_in".equalsIgnoreCase(checkIn.getStatus()) || "active".equalsIgnoreCase(checkIn.getStatus()))) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Check-in is already completed."));
         }
 
         if (requestPayload != null && requestPayload.getCheckInDate() != null) {

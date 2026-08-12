@@ -18,9 +18,11 @@ import {
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import api from '@/lib/api';
-import type { Invoice, Property, Tenant } from '@/lib/types';
+import type { Invoice, InvoiceIssuerSnapshot, Property, Tenant } from '@/lib/types';
 import { formatCurrency, formatDate, numberToWords } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm, useBulkDelete } from '@/lib/hooks/use-crud';
+
+import { TenantSelect } from '@/components/common/TenantSelect';
 
 const ENDPOINT = '/invoices';
 const statuses = [
@@ -45,10 +47,10 @@ export default function BillingPage() {
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
 
   const { data: properties } = useQuery({
-    queryKey: ['billing-properties'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['billing-properties-minimal'],
+    queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
-  const propMap = new Map((properties ?? []).map((p) => [p.id, p.name]));
+  const propMap = new Map((properties ?? []).map((p: any) => [p.id, p.name]));
 
   const { data: tenants } = useQuery({
     queryKey: ['billing-tenants'],
@@ -58,6 +60,11 @@ export default function BillingPage() {
   const { data: invoices } = useQuery({
     queryKey: ['billing-stats'],
     queryFn: () => api.get<{ data: Invoice[] }>(ENDPOINT, { params: { pageSize: 200 } }).then((r) => r.data.data),
+  });
+  // Old invoices created before issuer snapshots use the current organization profile as a fallback.
+  const { data: currentBillingProfile } = useQuery({
+    queryKey: ['organization-billing-profile'],
+    queryFn: () => api.get<InvoiceIssuerSnapshot>('/organization-billing-profile').then((r) => r.data),
   });
   const totalBilled = invoices?.reduce((s, i) => s + i.amount, 0) ?? 0;
   const totalCollected = invoices?.reduce((s, i) => s + i.paidAmount, 0) ?? 0;
@@ -80,11 +87,17 @@ export default function BillingPage() {
   // Batch Monthly Invoices Generation
   const batchGenerateMut = useMutation({
     mutationFn: async () => {
-      const res = await api.post('/invoices/generate-monthly');
+      const res = await api.post('/invoices/auto-generate');
       return res.data;
     },
     onSuccess: (res: any) => {
-      toast.success(res.message || 'Generated monthly rent invoices for active tenants.');
+      const count = res.generatedCount ?? 0;
+      const skipped = res.skippedCheckedOutCount ?? 0;
+      if (count > 0) {
+        toast.success(`Generated ${count} monthly rent invoice(s) for due 1-month check-in anniversaries! (${skipped} checked-out tenants excluded)`);
+      } else {
+        toast.info(`No invoices due today. Checked active tenants' check-in anniversaries (${skipped} checked-out tenants excluded).`);
+      }
       queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
       queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
     },
@@ -117,7 +130,25 @@ export default function BillingPage() {
       const orderRes = await api.post(`/invoices/${invoice.id}/create-razorpay-order`);
       const orderData = orderRes.data;
 
-      // Load Razorpay JS SDK
+      const isMockKey = !orderData.keyId || orderData.keyId.includes('MockKey') || orderData.keyId.startsWith('rzp_test_Stayeaze');
+
+      if (isMockKey) {
+        // Instant simulated sandbox payment for demo/test environments
+        await new Promise((r) => setTimeout(r, 600));
+        const demoPayId = `pay_sandbox_${Date.now()}`;
+        await api.post(`/invoices/${invoice.id}/verify-razorpay-payment`, {
+          razorpayOrderId: orderData.orderId,
+          razorpayPaymentId: demoPayId,
+          razorpaySignature: 'verified_sandbox_sig',
+        });
+        toast.success(`Razorpay Sandbox payment (${demoPayId}) completed & verified successfully!`);
+        setPaymentInvoice(null);
+        queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+        queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
+        return;
+      }
+
+      // Load Real Razorpay JS SDK for live / registered test keys
       const loaded = await new Promise((resolve) => {
         if ((window as any).Razorpay) {
           resolve(true);
@@ -165,26 +196,16 @@ export default function BillingPage() {
         const rzp = new (window as any).Razorpay(options);
         rzp.open();
       } else {
-        // Fallback demo online verification if checkout SDK is blocked locally
-        await api.post(`/invoices/${invoice.id}/verify-razorpay-payment`, {
-          razorpayOrderId: orderData.orderId,
-          razorpayPaymentId: `pay_demo_${Date.now()}`,
-          razorpaySignature: 'demo_signature',
-        });
-        toast.success('Razorpay test payment completed & verified successfully!');
-        setPaymentInvoice(null);
-        queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
-        queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
+        toast.error('Razorpay SDK failed to load. Please try again.');
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Razorpay initialization failed');
+      toast.error('Razorpay checkout failed. Please try cash payment or retry.');
     } finally {
       setIsRazorpayProcessing(false);
     }
   }
 
   function openCreate() {
-    setEditing(null);
     form.reset(emptyForm);
     setDialogOpen(true);
   }
@@ -200,21 +221,6 @@ export default function BillingPage() {
     }
   }
 
-  function openEdit(row: Invoice) {
-    setEditing(row);
-    form.reset({
-      tenantId: row.tenantId,
-      tenantName: row.tenantName,
-      propertyId: row.propertyId,
-      period: row.period ?? new Date().toISOString().slice(0, 7),
-      amount: row.amount,
-      paidAmount: row.paidAmount,
-      dueDate: row.dueDate ? row.dueDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
-      status: row.status,
-    });
-    setDialogOpen(true);
-  }
-
   function openRecordPayment(row: Invoice) {
     setPaymentInvoice(row);
     setPaymentAmount(Math.max(0, row.amount - row.paidAmount));
@@ -225,11 +231,10 @@ export default function BillingPage() {
     if (!form.validate({ tenantName: (v) => (!v ? 'Required' : undefined), amount: (v) => (Number(v) <= 0 ? 'Amount must be positive' : undefined) })) return;
     const payload = {
       ...form.values,
-      invoiceNumber: editing?.invoiceNumber ?? `INV-${String(Date.now()).slice(-6)}`,
-      createdAt: editing?.createdAt ?? new Date().toISOString(),
+      invoiceNumber: `INV-${String(Date.now()).slice(-6)}`,
+      createdAt: new Date().toISOString(),
     };
-    if (editing) updateMut.mutate({ id: editing.id, payload }, { onSuccess: () => setDialogOpen(false) });
-    else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
+    createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
   }
 
   function confirmDelete() {
@@ -301,7 +306,7 @@ export default function BillingPage() {
     { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
   ];
 
-  const propertyFilterOptions = (properties ?? []).map((p) => ({ value: p.id, label: p.name }));
+  const propertyFilterOptions = (properties ?? []).map((p: any) => ({ value: p.id, label: p.name }));
 
   return (
     <div className="space-y-6">
@@ -356,38 +361,39 @@ export default function BillingPage() {
             items={[
               { label: 'Record Payment', icon: CreditCard, onSelect: () => openRecordPayment(row) },
               { label: 'View Rent Receipt', icon: Printer, onSelect: () => setViewInvoice(row) },
-              { label: 'Edit Invoice', icon: Pencil, onSelect: () => openEdit(row) },
               { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
             ]}
           />
         )}
       />
 
-      {/* Create / Edit Dialog */}
+      {/* Create Dialog */}
       <FormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        title={editing ? 'Edit Invoice' : 'New Rent Invoice'}
+        title="New Rent Invoice"
         onSubmit={submit}
-        loading={createMut.isPending || updateMut.isPending}
-        submitLabel={editing ? 'Save Changes' : 'Generate Invoice'}
+        loading={createMut.isPending}
+        submitLabel="Generate Invoice"
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          {!editing && tenants && tenants.length > 0 && (
+          {tenants && tenants.length > 0 && (
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>Select Active Tenant</Label>
-              <Select value={form.values.tenantId} onValueChange={handleSelectTenant}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick tenant to auto-fill details..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenants.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name} ({t.email || t.phone})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Select Active Registered Tenant</Label>
+              <TenantSelect
+                tenants={tenants}
+                selectedTenantId={form.values.tenantId}
+                onSelectTenant={(t) => {
+                  if (!t) {
+                    form.setValue('tenantId', '');
+                    return;
+                  }
+                  form.setValue('tenantId', t.id);
+                  form.setValue('tenantName', t.name);
+                  if (t.propertyId) form.setValue('propertyId', t.propertyId);
+                  if (t.rent) form.setValue('amount', t.rent);
+                }}
+              />
             </div>
           )}
 
@@ -406,7 +412,7 @@ export default function BillingPage() {
                 <SelectValue placeholder="Select property" />
               </SelectTrigger>
               <SelectContent>
-                {(properties ?? []).map((p) => (
+                {(properties ?? []).map((p: any) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
                   </SelectItem>
@@ -664,27 +670,29 @@ export default function BillingPage() {
           {viewInvoice && (() => {
             const prop = properties?.find((p) => p.id === viewInvoice.propertyId);
             const tenant = tenants?.find((t) => t.id === viewInvoice.tenantId);
-            const propAddress = prop?.address || 'Plot 42, Sector 62, Knowledge Park III';
-            const propCityState = `${prop?.city || 'Noida'}, ${prop?.state || 'Uttar Pradesh'} - ${prop?.pincode || '201309'}`;
+            const issuer = viewInvoice.issuerSnapshot ?? currentBillingProfile;
+            const issuerName = issuer?.legalName || prop?.name || 'Business name not configured';
+            const issuerAddress = issuer?.billingAddress || prop?.address || 'Address not configured';
+            const issuerCityState = [issuer?.city || prop?.city, issuer?.state || prop?.state, issuer?.pincode || prop?.pincode].filter(Boolean).join(', ');
             const remainingDue = Math.max(0, viewInvoice.amount - viewInvoice.paidAmount);
 
             return (
-              <div id="printable-gst-invoice" className="p-8 bg-white text-slate-900 font-sans text-xs leading-normal">
+              <div id="printable-gst-invoice" className="printable-receipt-card p-8 bg-white text-slate-900 font-sans text-xs leading-normal">
                 {/* Header Banner */}
                 <div className="border-b-2 border-slate-800 pb-4 mb-4 flex justify-between items-start">
                   <div>
                     <div className="flex items-center gap-2.5">
                       <div className="h-9 w-9 rounded-lg bg-indigo-700 text-white font-extrabold flex items-center justify-center text-lg shadow-sm">SE</div>
                       <div>
-                        <h1 className="font-extrabold text-lg tracking-tight text-slate-900 uppercase">StayEaze Living Solutions</h1>
+                        <h1 className="font-extrabold text-lg tracking-tight text-slate-900 uppercase">{issuerName}</h1>
                         <p className="text-[11px] font-semibold text-indigo-900">{prop?.name || 'Executive PG & Student Residence'}</p>
                       </div>
                     </div>
                     <div className="mt-2 text-[11px] text-slate-600 leading-snug">
-                      <p className="font-medium">{propAddress}</p>
-                      <p className="font-medium">{propCityState}, India</p>
-                      <p className="mt-0.5"><span className="font-bold text-slate-800">Landlord PAN:</span> ABCDE1234F &nbsp;|&nbsp; <span className="font-bold text-slate-800">PG License No:</span> PG-REG/UP/NOIDA/2024/09812</p>
-                      <p><span className="font-bold text-slate-800">Email:</span> billing@stayeaze.com &nbsp;|&nbsp; <span className="font-bold text-slate-800">Helpline:</span> +91 98765 43210</p>
+                      <p className="font-medium">{issuerAddress}</p>
+                      {issuerCityState && <p className="font-medium">{issuerCityState}, India</p>}
+                      {(issuer?.pan || issuer?.gstin || issuer?.registrationNumber) && <p className="mt-0.5">{issuer?.pan && <><span className="font-bold text-slate-800">PAN:</span> {issuer.pan} &nbsp;</>}{issuer?.gstin && <><span className="font-bold text-slate-800">GSTIN:</span> {issuer.gstin} &nbsp;</>}{issuer?.registrationNumber && <><span className="font-bold text-slate-800">License No:</span> {issuer.registrationNumber}</>}</p>}
+                      {(issuer?.supportEmail || issuer?.supportPhone) && <p>{issuer?.supportEmail && <><span className="font-bold text-slate-800">Email:</span> {issuer.supportEmail} </>}{issuer?.supportPhone && <>&nbsp;|&nbsp; <span className="font-bold text-slate-800">Helpline:</span> {issuer.supportPhone}</>}</p>}
                     </div>
                   </div>
 
@@ -716,6 +724,8 @@ export default function BillingPage() {
                     </div>
                     <p className="text-slate-600">Total Monthly Rent: <span className="font-bold text-slate-900">{formatCurrency(viewInvoice.amount)}</span></p>
                     <p className="text-slate-600">Amount Received: <span className="font-bold text-emerald-700">{formatCurrency(viewInvoice.paidAmount)}</span></p>
+                    <p className="text-slate-600">Paid By (Method): <span className="font-bold text-indigo-900 uppercase">{(viewInvoice.paymentMethod || 'CASH / ONLINE GATEWAY').replace('_', ' ')}</span></p>
+                    <p className="text-slate-600">Transaction Ref ID: <span className="font-mono font-bold text-slate-800">{viewInvoice.paymentReference || ('TXN-' + viewInvoice.invoiceNumber.replace(/^INV-/, ''))}</span></p>
                     <p className="text-slate-600">Balance Outstanding: <span className={`font-bold ${remainingDue > 0 ? 'text-red-600' : 'text-slate-700'}`}>{formatCurrency(remainingDue)}</span></p>
                   </div>
                 </div>
@@ -789,7 +799,7 @@ export default function BillingPage() {
                       "Received with thanks from <span className="font-bold">{viewInvoice.tenantName}</span> a sum of <span className="font-bold">{formatCurrency(viewInvoice.amount)}</span> ({numberToWords(viewInvoice.amount)}) towards room rent for the month of <span className="font-bold">{viewInvoice.period || 'August 2026'}</span>."
                     </p>
                     <p><span className="font-semibold text-slate-900">HRA Tax Compliance:</span> Valid rent receipt for claiming HRA tax exemption under Section 10(13A) of Income Tax Act 1961.</p>
-                    <p><span className="font-semibold text-slate-900">Landlord PAN:</span> <span className="font-mono font-bold text-indigo-950">ABCDE1234F</span> &nbsp;|&nbsp; <span className="font-semibold text-slate-900">Verification Hash:</span> <span className="font-mono text-indigo-900">RCP-SHA256:{viewInvoice.invoiceNumber.replace(/[^A-Z0-9]/gi, '')}</span></p>
+                    <p><span className="font-semibold text-slate-900">Landlord PAN:</span> <span className="font-mono font-bold text-indigo-950">{issuer?.pan || 'Not provided'}</span> &nbsp;|&nbsp; <span className="font-semibold text-slate-900">Verification Hash:</span> <span className="font-mono text-indigo-900">RCP-SHA256:{viewInvoice.invoiceNumber.replace(/[^A-Z0-9]/gi, '')}</span></p>
                   </div>
                 </div>
 
@@ -798,22 +808,19 @@ export default function BillingPage() {
                   <div>
                     <p className="font-bold text-[11px] text-slate-900 uppercase tracking-wider mb-1">Bank Payment Details</p>
                     <div className="text-[10px] text-slate-600 space-y-0.5 leading-tight font-mono">
-                      <p><span className="font-semibold text-slate-700">Account Name:</span> StayEaze Living Solutions</p>
-                      <p><span className="font-semibold text-slate-700">Bank Name:</span> HDFC Bank Ltd</p>
-                      <p><span className="font-semibold text-slate-700">Account No:</span> 502000987654321</p>
-                      <p><span className="font-semibold text-slate-700">IFSC Code:</span> HDFC0001234</p>
-                      <p><span className="font-semibold text-slate-700">UPI VPA:</span> stayeaze@icici</p>
+                      {issuer?.bankAccountName && <p><span className="font-semibold text-slate-700">Account Name:</span> {issuer.bankAccountName}</p>}
+                      {issuer?.bankName && <p><span className="font-semibold text-slate-700">Bank Name:</span> {issuer.bankName}</p>}
+                      {issuer?.bankAccountNumber && <p><span className="font-semibold text-slate-700">Account No:</span> {issuer.bankAccountNumber}</p>}
+                      {issuer?.bankIfsc && <p><span className="font-semibold text-slate-700">IFSC Code:</span> {issuer.bankIfsc}</p>}
+                      {issuer?.upiVpa && <p><span className="font-semibold text-slate-700">UPI VPA:</span> {issuer.upiVpa}</p>}
+                      {!issuer?.bankAccountName && !issuer?.bankName && !issuer?.upiVpa && <p>Payment details not configured.</p>}
                     </div>
                   </div>
 
                   <div>
                     <p className="font-bold text-[11px] text-slate-900 uppercase tracking-wider mb-1">Receipt Terms & Rules</p>
-                    <ol className="text-[10px] text-slate-600 list-decimal pl-3 space-y-0.5 leading-tight">
-                      <li>Rent is payable on or before the due date of each month.</li>
-                      <li>This receipt is issued for room accommodation services.</li>
-                      <li>Valid official receipt for tenant records and HRA tax submission.</li>
-                      <li>Computer-generated verified receipt with security QR verification code.</li>
-                    </ol>
+                    <div className="text-[10px] text-slate-600 whitespace-pre-line leading-tight">{issuer?.invoiceTerms || 'Rent is payable on or before the due date. This computer-generated receipt is valid for tenant records.'}</div>
+                    {issuer?.lateFeeNote && <p className="mt-2 text-[10px] text-slate-700"><span className="font-semibold">Late fee:</span> {issuer.lateFeeNote}</p>}
                   </div>
                 </div>
 
@@ -831,7 +838,7 @@ export default function BillingPage() {
                         <svg className="h-4 w-4 text-indigo-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span>STAYEAZE MANAGEMENT<br />AUTHORIZED SIGNATORY</span>
+                        <span>{issuer?.authorizedSignatory || issuerName}<br />AUTHORIZED SIGNATORY</span>
                       </div>
                     </div>
                     <div className="border-t border-slate-800 w-48 pt-1 font-bold text-[11px] text-slate-900">
@@ -860,4 +867,3 @@ export default function BillingPage() {
 }
 
 void TrendingUp;
-

@@ -16,15 +16,17 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import api from '@/lib/api';
-import type { CheckIn, Property, Room, Bed } from '@/lib/types';
+import type { CheckIn, Property, Room, Bed, Tenant } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
+
+import { TenantSelect } from '@/components/common/TenantSelect';
 
 const ENDPOINT = '/check-ins';
 const statuses = [{ value: 'completed', label: 'Completed' }, { value: 'pending', label: 'Pending' }];
 
 const emptyForm = {
-  tenantName: '', propertyId: '', roomNumber: '', bedNumber: 'B1',
+  tenantId: '', tenantName: '', propertyId: '', roomNumber: '', bedNumber: 'B1',
   checkInDate: new Date().toISOString().slice(0, 10), leaseEnd: '',
   rent: 8000, depositPaid: 16000, idVerified: true, status: 'pending' as CheckIn['status'],
 };
@@ -41,10 +43,20 @@ export default function CheckInsPage() {
   const queryClient = useQueryClient();
 
   const { data: properties } = useQuery({
-    queryKey: ['checkins-properties'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['checkins-properties-minimal'],
+    queryFn: () => api.get<Property[]>('/properties/minimal').then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload as Property[];
+      return (payload as { data: Property[] }).data || [];
+    }),
   });
-  const propMap = new Map((properties ?? []).map((p) => [p.id, p.name]));
+  const propMap = new Map((properties ?? []).map((p: Property) => [p.id, p.name]));
+
+  const { data: tenants } = useQuery({
+    queryKey: ['checkins-tenants'],
+    queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    enabled: dialogOpen,
+  });
 
   // Fetch all rooms for dropdown
   const { data: allRooms } = useQuery({
@@ -75,6 +87,18 @@ export default function CheckInsPage() {
   const deleteMut = useDelete(ENDPOINT, 'Check-in');
   const form = useForm(emptyForm);
 
+  function handleSelectTenant(tenantId: string) {
+    form.setValue('tenantId', tenantId);
+    const selected = (tenants ?? []).find((t) => t.id === tenantId);
+    if (selected) {
+      form.setValue('tenantName', selected.name);
+      if (selected.propertyId) form.setValue('propertyId', selected.propertyId);
+      if (selected.rent) form.setValue('rent', selected.rent);
+      if (selected.deposit) form.setValue('depositPaid', selected.deposit);
+      if (selected.leaseEnd) form.setValue('leaseEnd', selected.leaseEnd);
+    }
+  }
+
   function openCreate() {
     setEditing(null);
     setSelectedRoomId('');
@@ -87,7 +111,7 @@ export default function CheckInsPage() {
     const matchedRoom = (allRooms ?? []).find((r) => r.number === row.roomNumber);
     setSelectedRoomId(matchedRoom?.id ?? '');
     form.reset({
-      tenantName: row.tenantName, propertyId: row.propertyId, roomNumber: row.roomNumber,
+      tenantId: '', tenantName: row.tenantName, propertyId: row.propertyId, roomNumber: row.roomNumber,
       bedNumber: row.bedNumber, checkInDate: row.checkInDate, leaseEnd: row.leaseEnd,
       rent: row.rent, depositPaid: row.depositPaid, idVerified: row.idVerified, status: row.status,
     });
@@ -149,7 +173,7 @@ export default function CheckInsPage() {
     { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
   ];
 
-  const propertyFilterOptions = (properties ?? []).map((p) => ({ value: p.id, label: p.name }));
+  const propertyFilterOptions = (properties ?? []).map((p: Property) => ({ value: p.id, label: p.name }));
 
   return (
     <div className="space-y-6">
@@ -160,38 +184,66 @@ export default function CheckInsPage() {
           { key: 'status', label: 'Status', options: statuses },
           ...(propertyFilterOptions.length > 0 ? [{ key: 'propertyId', label: 'Property', options: propertyFilterOptions }] : []),
         ]}
-        rowActions={(row) => (
-          <div className="flex items-center justify-end gap-2">
-            {row.status !== 'completed' ? (
-              <Button
-                size="sm"
-                onClick={() => openProcessModal(row)}
-                className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
-              >
-                <BadgeCheck className="h-4 w-4" /> Mark Checked In
-              </Button>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-1 rounded-md">
-                <BadgeCheck className="h-3.5 w-3.5" /> Checked In
-              </span>
-            )}
-            <RowActions items={[
-              { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
-              { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
-            ]} />
-          </div>
-        )} />
+        rowActions={(row) => {
+          const isAlreadyCheckedIn = row.status && ['completed', 'checked_in', 'active'].includes(row.status.toLowerCase());
+          return (
+            <div className="flex items-center justify-end gap-2">
+              {!isAlreadyCheckedIn ? (
+                <Button
+                  size="sm"
+                  onClick={() => openProcessModal(row)}
+                  className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                >
+                  <BadgeCheck className="h-4 w-4" /> Mark Checked In
+                </Button>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-1 rounded-md">
+                  <BadgeCheck className="h-3.5 w-3.5" /> Checked In
+                </span>
+              )}
+              <RowActions items={[
+                { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
+                { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
+              ]} />
+            </div>
+          );
+        }} />
 
       {/* New / Edit Check-In Form Dialog */}
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Check-in' : 'New Check-in'} onSubmit={submit}
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Process Check-in'} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
+          {!editing && tenants && tenants.length > 0 && (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Select Registered Tenant</Label>
+              <TenantSelect
+                tenants={(tenants ?? []).filter((t) => {
+                  const st = (t.status || '').toLowerCase();
+                  return st !== 'active' && st !== 'checked_in' && st !== 'completed' && st !== 'checked_out';
+                })}
+                selectedTenantId={form.values.tenantId}
+                onSelectTenant={(t) => {
+                  if (!t) {
+                    form.setValue('tenantId', '');
+                    return;
+                  }
+                  form.setValue('tenantId', t.id);
+                  form.setValue('tenantName', t.name);
+                  if (t.propertyId) form.setValue('propertyId', t.propertyId);
+                  if (t.rent) form.setValue('rent', t.rent);
+                  if (t.deposit) form.setValue('depositPaid', t.deposit);
+                  if (t.leaseEnd) form.setValue('leaseEnd', t.leaseEnd);
+                }}
+              />
+            </div>
+          )}
+
           <FormInput label="Tenant Name" required id="tenantName" value={form.values.tenantName} onChange={(e) => form.setValue('tenantName', e.target.value)} error={form.errors.tenantName} />
           <div className="space-y-1.5">
             <Label>Property</Label>
             <Select value={form.values.propertyId} onValueChange={(v) => form.setValue('propertyId', v)}>
               <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
-              <SelectContent>{(properties ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(properties ?? []).map((p: Property) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
             </Select>
             {form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}
           </div>

@@ -85,9 +85,9 @@ export default function PropertiesPage() {
 
     const payload = {
       ...form.values,
-      totalBuildings: editing?.totalBuildings ?? 1,
-      totalRooms: editing?.totalRooms ?? 12,
-      totalBeds: editing?.totalBeds ?? 24,
+      totalBuildings: editing?.totalBuildings ?? 0,
+      totalRooms: editing?.totalRooms ?? 0,
+      totalBeds: editing?.totalBeds ?? 0,
       occupiedBeds: editing?.occupiedBeds ?? 0,
       createdAt: editing?.createdAt ?? new Date().toISOString(),
     };
@@ -136,12 +136,17 @@ export default function PropertiesPage() {
       </div>
     )},
     { key: 'occupiedBeds', header: 'Occupancy', sortable: true, cell: (r) => {
-      const rate = occupancyRate(r.occupiedBeds, r.totalBeds);
+      const total = r.totalBeds ?? 0;
+      const occupied = r.occupiedBeds ?? 0;
+      if (total === 0) {
+        return <span className="text-xs text-muted-foreground">—</span>;
+      }
+      const rate = occupancyRate(occupied, total);
       return (
         <div className="w-32">
           <div className="flex items-center justify-between text-xs">
             <span className="font-medium">{rate}%</span>
-            <span className="text-muted-foreground">{r.occupiedBeds}/{r.totalBeds}</span>
+            <span className="text-muted-foreground">{occupied}/{total}</span>
           </div>
           <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary" style={{ width: `${rate}%` }} />
@@ -149,9 +154,13 @@ export default function PropertiesPage() {
         </div>
       );
     }},
-    { key: 'totalRooms', header: 'Rooms', sortable: true, cell: (r) => (
-      <span className="tabular-nums">{r.totalRooms}</span>
-    )},
+    { key: 'totalRooms', header: 'Rooms', sortable: true, cell: (r) => {
+      const rooms = r.totalRooms ?? 0;
+      if (rooms === 0) {
+        return <span className="text-xs text-muted-foreground">—</span>;
+      }
+      return <span className="tabular-nums">{rooms}</span>;
+    }},
     { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
   ];
 

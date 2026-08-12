@@ -113,10 +113,133 @@ public class PaymentController {
         return ResponseEntity.ok(payments);
     }
 
-    @GetMapping("/payments")
-    public ResponseEntity<?> getFlatPayments() {
+    @PostMapping("/payments")
+    @Transactional
+    @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> createPaymentRecord(@RequestBody java.util.Map<String, Object> req) {
         Organization organization = getLoggedUserOrg();
-        List<Payment> payments = paymentRepository.findByOrganizationId(organization.getId());
-        return ResponseEntity.ok(payments);
+        
+        String receiptNumber = (String) req.get("receiptNumber");
+        if (receiptNumber == null || receiptNumber.isBlank()) {
+            receiptNumber = "RCPT-" + System.currentTimeMillis();
+        }
+
+        String tenantName = (String) req.get("tenantName");
+        String propertyIdStr = (String) req.get("propertyId");
+        BigDecimal amount = new BigDecimal(req.get("amount") != null ? req.get("amount").toString() : "0");
+        String method = (String) req.get("method");
+        String status = (String) req.get("status");
+        String dateStr = (String) req.get("date");
+        String collectedBy = (String) req.get("collectedBy");
+        String paymentReference = (String) req.get("paymentReference");
+
+        // Find or associate an invoice for this payment
+        Invoice invoice = null;
+        String invoiceIdStr = (String) req.get("invoiceId");
+        if (invoiceIdStr != null && !invoiceIdStr.isBlank()) {
+            try {
+                invoice = invoiceRepository.findById(UUID.fromString(invoiceIdStr)).orElse(null);
+            } catch (Exception ignored) {}
+        }
+        if (invoice == null) {
+            List<Invoice> invs = invoiceRepository.findAll().stream()
+                    .filter(i -> i.getTenant() != null && i.getTenant().getOrganization() != null && i.getTenant().getOrganization().getId().equals(organization.getId()))
+                    .toList();
+            if (!invs.isEmpty()) {
+                invoice = invs.get(0);
+            }
+        }
+        if (invoice == null) {
+            // Pick any tenant in org to attach invoice
+            List<Tenant> tenants = tenantRepository.findByOrganization(organization);
+            if (tenants.isEmpty()) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: Please register at least one tenant before recording payments."));
+            }
+            Tenant t = tenants.get(0);
+            invoice = new Invoice(t, "INV-" + System.currentTimeMillis(), java.time.LocalDate.now().plusDays(7), java.time.LocalDate.now(), amount);
+            invoice.setStatus("PAID");
+            invoice.setAmountPaid(amount);
+            invoice = invoiceRepository.save(invoice);
+        }
+
+        Payment payment = new Payment(invoice, amount, method != null ? method.toUpperCase() : "CASH");
+        payment.setTransactionReference(paymentReference != null ? paymentReference : "REF-" + System.currentTimeMillis());
+        payment.setStatus(status != null && status.equalsIgnoreCase("success") ? "COMPLETED" : "PENDING");
+        payment.setReceiptUrl("https://stayeaze-receipts.s3.amazonaws.com/receipts/" + receiptNumber + ".pdf");
+        payment.setPaymentDate(java.time.OffsetDateTime.now());
+
+        Payment saved = paymentRepository.save(payment);
+
+        java.util.Map<String, Object> res = new java.util.HashMap<>();
+        res.put("id", saved.getId());
+        res.put("receiptNumber", receiptNumber);
+        res.put("tenantName", tenantName != null ? tenantName : (invoice.getTenant() != null ? invoice.getTenant().getFirstName() + " " + invoice.getTenant().getLastName() : "Tenant"));
+        res.put("propertyId", propertyIdStr);
+        res.put("amount", amount);
+        res.put("method", method != null ? method.toLowerCase() : "cash");
+        res.put("status", status != null ? status.toLowerCase() : "success");
+        res.put("date", dateStr != null ? dateStr : java.time.LocalDate.now().toString());
+        res.put("collectedBy", collectedBy != null ? collectedBy : "Manager");
+        res.put("paymentReference", paymentReference);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(res);
+    }
+
+    @GetMapping("/payments")
+    public ResponseEntity<?> getFlatPayments(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String method,
+            @RequestParam(required = false) String status) {
+        Organization organization = getLoggedUserOrg();
+        List<Payment> rawPayments = paymentRepository.findByOrganizationId(organization.getId());
+
+        java.util.List<java.util.Map<String, Object>> mapped = new java.util.ArrayList<>();
+        for (Payment p : rawPayments) {
+            java.util.Map<String, Object> m = new java.util.HashMap<>();
+            m.put("id", p.getId());
+            m.put("receiptNumber", "RCPT-" + (p.getId().toString().substring(0, 6).toUpperCase()));
+            m.put("invoiceId", p.getInvoice() != null ? p.getInvoice().getId().toString() : "");
+            
+            Tenant tenant = p.getInvoice() != null ? p.getInvoice().getTenant() : null;
+            m.put("tenantName", tenant != null ? tenant.getFirstName() + " " + tenant.getLastName() : "Tenant");
+            
+            String propertyId = "";
+            if (tenant != null && tenant.getPropertyId() != null) {
+                propertyId = tenant.getPropertyId().toString();
+            }
+            m.put("propertyId", propertyId);
+
+            m.put("amount", p.getAmount());
+            m.put("method", p.getPaymentMethod() != null ? p.getPaymentMethod().toLowerCase() : "cash");
+            m.put("status", "COMPLETED".equalsIgnoreCase(p.getStatus()) ? "success" : "pending");
+            m.put("date", p.getPaymentDate() != null ? p.getPaymentDate().toLocalDate().toString() : java.time.LocalDate.now().toString());
+            m.put("collectedBy", "Property Admin");
+            m.put("paymentReference", p.getTransactionReference());
+            m.put("razorpayPaymentId", p.getTransactionReference());
+
+            mapped.add(m);
+        }
+
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(mapped, page, pageSize));
+    }
+
+    @PutMapping("/payments/{id}")
+    @Transactional
+    @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> updatePaymentRecord(@PathVariable UUID id, @RequestBody java.util.Map<String, Object> req) {
+        return ResponseEntity.badRequest().body(new MessageResponse("Payment receipts and transactions are immutable and cannot be edited."));
+    }
+
+    @DeleteMapping("/payments/{id}")
+    @Transactional
+    @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> deletePaymentRecord(@PathVariable UUID id) {
+        if (!paymentRepository.existsById(id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Payment record not found"));
+        }
+        paymentRepository.deleteById(id);
+        return ResponseEntity.ok(new MessageResponse("Payment deleted successfully"));
     }
 }

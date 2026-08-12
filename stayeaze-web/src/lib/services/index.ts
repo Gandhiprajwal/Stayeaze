@@ -4,9 +4,20 @@ import type {
   Invoice, Maintenance, Payment, Property, Role, Room, Tenant, User, Visitor,
 } from '../types';
 
+import api from '../api';
+
 export const userService = createCrudService<User>('/users');
 export const roleService = createCrudService<Role>('/roles');
-export const propertyService = createCrudService<Property>('/properties');
+export const propertyService = {
+  ...createCrudService<Property>('/properties'),
+  async getMinimal() {
+    const res = await api.get('/properties/minimal');
+    const payload = res.data as any;
+    if (Array.isArray(payload)) return payload as Partial<Property>[];
+    if (payload && Array.isArray(payload.data)) return payload.data as Partial<Property>[];
+    return [] as Partial<Property>[];
+  },
+};
 export const buildingService = createCrudService<Building>('/buildings');
 export const floorService = createCrudService<Floor>('/floors');
 export const roomService = createCrudService<Room>('/rooms');

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogOut, Plus, Pencil, Trash2, BadgeCheck, DollarSign, Calendar } from 'lucide-react';
+import { LogOut, Plus, Trash2, BadgeCheck, DollarSign, Calendar } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { PageHeader } from '@/components/common/PageHeader';
@@ -18,6 +18,9 @@ import api from '@/lib/api';
 import type { CheckOut, Property, Room, Bed, Tenant } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
+import { useAuthStore } from '@/lib/stores/auth-store';
+
+import { TenantSelect } from '@/components/common/TenantSelect';
 
 const ENDPOINT = '/check-outs';
 const statuses = [{ value: 'notice_period', label: 'Notice Period' }, { value: 'pending', label: 'Pending' }, { value: 'completed', label: 'Completed' }];
@@ -26,13 +29,16 @@ const reasons = ['Relocating', 'Lease ended', 'Personal', 'Job change', 'Upgrade
 const emptyForm = {
   tenantName: '', propertyId: '', roomNumber: '', bedNumber: 'B1',
   checkOutDate: new Date().toISOString().slice(0, 10), noticeDate: new Date().toISOString().slice(0, 10),
-  depositRefund: 14000, deductions: 0, reason: 'Lease ended', status: 'notice_period' as CheckOut['status'],
+  depositRefund: 0, deductions: 0, reason: 'Lease ended', status: 'notice_period' as CheckOut['status'],
 };
 
 export default function CheckOutsPage() {
+  const currentUser = useAuthStore((s) => s.user);
+  const userRole = (currentUser?.role ?? '').toUpperCase();
+  const canChangeStatus = ['ADMIN', 'OWNER', 'PROPERTY_MANAGER', 'SUPER_ADMIN'].includes(userRole);
+
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<CheckOut | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CheckOut | null>(null);
   const [completeTarget, setCompleteTarget] = useState<CheckOut | null>(null);
   const [effectiveCheckOutDate, setEffectiveCheckOutDate] = useState<string>(new Date().toISOString().slice(0, 10));
@@ -42,10 +48,10 @@ export default function CheckOutsPage() {
   const [tenantSearch, setTenantSearch] = useState('');
 
   const { data: properties } = useQuery({
-    queryKey: ['checkouts-properties'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['checkouts-properties-minimal'],
+    queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
-  const propMap = new Map((properties ?? []).map((p) => [p.id, p.name]));
+  const propMap = new Map((properties ?? []).map((p: any) => [p.id, p.name]));
 
   // Fetch active tenants for selector dropdown
   const { data: activeTenants } = useQuery({
@@ -83,28 +89,13 @@ export default function CheckOutsPage() {
   });
 
   const createMut = useCreate<CheckOut>(ENDPOINT, 'Check-out');
-  const updateMut = useUpdate<CheckOut>(ENDPOINT, 'Check-out');
   const deleteMut = useDelete(ENDPOINT, 'Check-out');
   const form = useForm(emptyForm);
 
   function openCreate() {
-    setEditing(null);
     setSelectedRoomId('');
     setSelectedTenantId('');
     form.reset(emptyForm);
-    setDialogOpen(true);
-  }
-
-  function openEdit(row: CheckOut) {
-    setEditing(row);
-    setSelectedTenantId('');
-    const matchedRoom = (allRooms ?? []).find((r) => r.number === row.roomNumber);
-    setSelectedRoomId(matchedRoom?.id ?? '');
-    form.reset({
-      tenantName: row.tenantName, propertyId: row.propertyId, roomNumber: row.roomNumber, bedNumber: row.bedNumber,
-      checkOutDate: row.checkOutDate, noticeDate: row.noticeDate ?? '', depositRefund: row.depositRefund,
-      deductions: row.deductions ?? 0, reason: row.reason ?? 'Lease ended', status: row.status,
-    });
     setDialogOpen(true);
   }
 
@@ -120,26 +111,30 @@ export default function CheckOutsPage() {
         if (rm) setSelectedRoomId(rm.id);
       }
       if (tenant.bedNumber) form.setValue('bedNumber', tenant.bedNumber);
-      if (tenant.deposit) form.setValue('depositRefund', Number(tenant.deposit));
+      if (tenant.deposit !== undefined && tenant.deposit !== null) {
+        form.setValue('depositRefund', Number(tenant.deposit));
+      } else {
+        form.setValue('depositRefund', 0);
+      }
     }
   }
 
   function submit() {
     if (!form.validate({ tenantName: (v) => !v ? 'Required' : undefined, propertyId: (v) => !v ? 'Select a property' : undefined })) return;
-    const payload = { ...form.values, code: editing?.code ?? `CO-${String(Date.now()).slice(-4)}` };
-    if (editing) updateMut.mutate({ id: editing.id, payload }, { onSuccess: () => setDialogOpen(false) });
-    else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
+    const payload = { ...form.values, code: `CO-${String(Date.now()).slice(-4)}` };
+    createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
   }
 
   function confirmDelete() { if (deleteTarget) deleteMut.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) }); }
 
   function openCompleteModal(row: CheckOut) {
+    if (!canChangeStatus) return;
     setCompleteTarget(row);
     setEffectiveCheckOutDate(row.checkOutDate || new Date().toISOString().slice(0, 10));
   }
 
   async function handleCompleteCheckOut() {
-    if (!completeTarget) return;
+    if (!completeTarget || !canChangeStatus) return;
     try {
       setCompleting(true);
       await api.post(`/check-outs/${completeTarget.id}/mark-completed`, {
@@ -182,13 +177,17 @@ export default function CheckOutsPage() {
       header: 'Action',
       cell: (r) => (
         r.status !== 'completed' ? (
-          <Button
-            size="sm"
-            variant="outline"
-            className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60 font-medium h-8 text-xs"
-            onClick={() => openCompleteModal(r)}>
-            <BadgeCheck className="mr-1 h-3.5 w-3.5" /> Mark Checked Out
-          </Button>
+          canChangeStatus ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60 font-medium h-8 text-xs"
+              onClick={() => openCompleteModal(r)}>
+              <BadgeCheck className="mr-1 h-3.5 w-3.5" /> Mark Checked Out
+            </Button>
+          ) : (
+            <StatusBadge status={r.status} tone={statusTone(r.status)} />
+          )
         ) : (
           <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
             <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" /> Move-out Complete
@@ -198,7 +197,7 @@ export default function CheckOutsPage() {
     },
   ];
 
-  const propertyFilterOptions = (properties ?? []).map((p) => ({ value: p.id, label: p.name }));
+  const propertyFilterOptions = (properties ?? []).map((p: any) => ({ value: p.id, label: p.name }));
 
   return (
     <div className="space-y-6">
@@ -211,62 +210,39 @@ export default function CheckOutsPage() {
         ]}
         rowActions={(row) => (
           <RowActions items={[
-            ...(row.status !== 'completed' ? [{
+            ...(row.status !== 'completed' && canChangeStatus ? [{
               label: 'Mark Checked Out (Archive)', icon: LogOut, onSelect: () => openCompleteModal(row)
             }] : []),
-            { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
             { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
           ]} />
         )} />
 
-      {/* Form Dialog for New/Edit Check-out */}
-      <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Check-out' : 'New Check-out'} onSubmit={submit}
-        loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Process Check-out'} size="lg">
+      {/* Form Dialog for New Check-out */}
+      <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title="New Check-out" onSubmit={submit}
+        loading={createMut.isPending} submitLabel="Process Check-out" size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2 space-y-2 bg-muted/30 p-3 rounded-lg border">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold text-primary">Select Active Tenant (Auto-fill)</Label>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  {activeTenants?.length ?? 0} active tenants
-                </span>
-              </div>
-              <input
-                type="text"
-                placeholder="Search tenant name, room, bed or mobile..."
-                value={tenantSearch}
-                onChange={(e) => setTenantSearch(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs rounded-md border bg-background focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-              <Select value={selectedTenantId} onValueChange={onSelectTenant}>
-                <SelectTrigger><SelectValue placeholder="Choose an active tenant to check out..." /></SelectTrigger>
-                <SelectContent>
-                  {(activeTenants ?? [])
-                    .filter((t) => {
-                      if (!tenantSearch.trim()) return true;
-                      const q = tenantSearch.toLowerCase();
-                      return (
-                        (t.name && t.name.toLowerCase().includes(q)) ||
-                        (t.roomNumber && t.roomNumber.toLowerCase().includes(q)) ||
-                        (t.bedNumber && t.bedNumber.toLowerCase().includes(q)) ||
-                        (t.mobile && t.mobile.toLowerCase().includes(q))
-                      );
-                    })
-                    .slice(0, 50)
-                    .map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name} — Room {t.roomNumber || 'N/A'} ({t.bedNumber || 'N/A'})
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="sm:col-span-2 space-y-1.5">
+            <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Select Active Tenant (Auto-fill Move-out Details)</Label>
+            <TenantSelect
+              tenants={activeTenants ?? []}
+              selectedTenantId={selectedTenantId}
+              onSelectTenant={(t) => {
+                if (!t) {
+                  setSelectedTenantId('');
+                  return;
+                }
+                setSelectedTenantId(t.id);
+                onSelectTenant(t.id);
+              }}
+            />
+          </div>
 
           <FormInput label="Tenant Name" required id="tenantName" value={form.values.tenantName} onChange={(e) => form.setValue('tenantName', e.target.value)} error={form.errors.tenantName} />
           <div className="space-y-1.5">
             <Label>Property</Label>
             <Select value={form.values.propertyId} onValueChange={(v) => form.setValue('propertyId', v)}>
               <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
-              <SelectContent>{(properties ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              <SelectContent>{(properties ?? []).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
             </Select>
             {form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}
           </div>
@@ -292,9 +268,6 @@ export default function CheckOutsPage() {
                 ))}
               </SelectContent>
             </Select>
-            {editing && !selectedRoomId && (
-              <p className="text-xs text-muted-foreground">Current: Room {form.values.roomNumber || '—'}</p>
-            )}
           </div>
 
           {/* Bed Number Dropdown */}
@@ -315,14 +288,21 @@ export default function CheckOutsPage() {
                 ))}
               </SelectContent>
             </Select>
-            {editing && !selectedRoomId && form.values.bedNumber && (
-              <p className="text-xs text-muted-foreground">Current: {form.values.bedNumber}</p>
-            )}
           </div>
 
           <FormInput label="Notice Date" type="date" id="noticeDate" value={form.values.noticeDate} onChange={(e) => form.setValue('noticeDate', e.target.value)} />
           <FormInput label="Check-out Date" type="date" id="checkOutDate" value={form.values.checkOutDate} onChange={(e) => form.setValue('checkOutDate', e.target.value)} />
-          <FormInput label="Deposit Refund (₹)" type="number" id="depositRefund" value={String(form.values.depositRefund)} onChange={(e) => form.setValue('depositRefund', Number(e.target.value))} />
+          <div className="space-y-1.5">
+            <Label>Deposit Paid Refund (₹)</Label>
+            <input
+              type="number"
+              className="flex h-9 w-full rounded-md border border-input bg-muted/60 px-3 py-1 text-sm font-semibold shadow-sm cursor-not-allowed text-foreground"
+              value={String(form.values.depositRefund)}
+              readOnly
+              disabled
+            />
+            <p className="text-[11px] text-muted-foreground">Auto-mapped from tenant record (Non-editable)</p>
+          </div>
           <FormInput label="Deductions (₹)" type="number" id="deductions" value={String(form.values.deductions)} onChange={(e) => form.setValue('deductions', Number(e.target.value))} />
           <div className="space-y-1.5"><Label>Reason</Label><Select value={form.values.reason} onValueChange={(v) => form.setValue('reason', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{reasons.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as CheckOut['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>

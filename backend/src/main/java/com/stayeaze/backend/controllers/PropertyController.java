@@ -7,6 +7,8 @@ import com.stayeaze.backend.repository.*;
 import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -15,12 +17,17 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
+import com.stayeaze.backend.payload.response.MinimalPropertyDTO;
+import com.stayeaze.backend.payload.response.PropertyDTO;
+import com.stayeaze.backend.services.PropertyService;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/v1/properties")
 public class PropertyController {
+
+    @Autowired
+    private PropertyService propertyService;
 
     @Autowired
     private PropertyRepository propertyRepository;
@@ -73,7 +80,8 @@ public class PropertyController {
         String timezone = (String) request.get("timezone");
 
         if (name == null || name.trim().isEmpty() || address == null || address.trim().isEmpty()) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Property Name and Address are required!"));
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Error: Property Name and Address are required!"));
         }
 
         if (isSuperAdmin) {
@@ -87,10 +95,12 @@ public class PropertyController {
             }
 
             if (orgName == null || orgName.trim().isEmpty() || orgSubdomain == null || orgSubdomain.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: Organization Name and Subdomain are required for Super Admin!"));
+                return ResponseEntity.badRequest().body(
+                        new MessageResponse("Error: Organization Name and Subdomain are required for Super Admin!"));
             }
             if (ownerEmail == null || ownerEmail.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: Owner Email is required for Super Admin!"));
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Error: Owner Email is required for Super Admin!"));
             }
 
             // 1. Find or Create Organization
@@ -113,7 +123,7 @@ public class PropertyController {
             final String finalPhone = phoneInput;
             final String finalPass = ownerPassword;
             final Organization finalOrg = organization;
-            
+
             Optional<User> existingUser = userRepository.findByEmail(finalEmail);
             User owner;
             if (existingUser.isPresent()) {
@@ -123,7 +133,8 @@ public class PropertyController {
                 if (ownerPhone != null && !ownerPhone.trim().isEmpty()) {
                     String cleanPhone = ownerPhone.trim();
                     if (!cleanPhone.equals(owner.getMobile()) && userRepository.existsByMobile(cleanPhone)) {
-                        return ResponseEntity.badRequest().body(new MessageResponse("Error: Mobile number is already registered to another user!"));
+                        return ResponseEntity.badRequest().body(
+                                new MessageResponse("Error: Mobile number is already registered to another user!"));
                     }
                     owner.setMobile(cleanPhone);
                 }
@@ -139,7 +150,8 @@ public class PropertyController {
                 userRepository.save(owner);
             } else {
                 if (userRepository.existsByMobile(finalPhone)) {
-                    return ResponseEntity.badRequest().body(new MessageResponse("Error: Mobile number is already registered to another user!"));
+                    return ResponseEntity.badRequest()
+                            .body(new MessageResponse("Error: Mobile number is already registered to another user!"));
                 }
                 owner = new User(finalOrg, finalEmail, encoder.encode(finalPass), finalPhone);
                 Role ownerRole = roleRepository.findByName(ERole.OWNER)
@@ -186,7 +198,43 @@ public class PropertyController {
             property.setTimezone("Asia/Kolkata");
         }
 
-        Property saved = propertyRepository.save(property);
+        if (request.get("landlordPan") != null)
+            property.setLandlordPan((String) request.get("landlordPan"));
+        if (request.get("pgLicenseNo") != null)
+            property.setPgLicenseNo((String) request.get("pgLicenseNo"));
+        if (request.get("bankAccountName") != null)
+            property.setBankAccountName((String) request.get("bankAccountName"));
+        if (request.get("bankName") != null)
+            property.setBankName((String) request.get("bankName"));
+        if (request.get("bankAccountNumber") != null)
+            property.setBankAccountNumber((String) request.get("bankAccountNumber"));
+        if (request.get("bankIfsc") != null)
+            property.setBankIfsc((String) request.get("bankIfsc"));
+        if (request.get("upiVpa") != null)
+            property.setUpiVpa((String) request.get("upiVpa"));
+        if (request.get("authorizedSignatory") != null)
+            property.setAuthorizedSignatory((String) request.get("authorizedSignatory"));
+
+        Property saved = propertyService.saveProperty(property);
+
+        String targetUserEmail = ownerEmail != null ? ownerEmail.trim().toLowerCase() : null;
+        if (targetUserEmail == null) {
+            try {
+                UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+                targetUserEmail = userDetails.getUsername();
+            } catch (Exception ignored) {}
+        }
+        if (targetUserEmail != null) {
+            userRepository.findByEmail(targetUserEmail).ifPresent(u -> {
+                if (u.getPropertyIds() == null) {
+                    u.setPropertyIds(new ArrayList<>());
+                }
+                if (!u.getPropertyIds().contains(saved.getId())) {
+                    u.getPropertyIds().add(saved.getId());
+                    userRepository.save(u);
+                }
+            });
+        }
 
         Map<String, Object> map = new HashMap<>();
         map.put("id", saved.getId());
@@ -236,20 +284,94 @@ public class PropertyController {
         return new ResponseEntity<>(map, HttpStatus.CREATED);
     }
 
+    private Map<String, Object> mapPropertyToDto(Property p) {
+        Map<String, Object> dto = new HashMap<>();
+        dto.put("id", p.getId());
+        dto.put("name", p.getName());
+        dto.put("code", p.getCode());
+        dto.put("type", p.getType());
+        dto.put("description", p.getDescription());
+        dto.put("address", p.getAddress());
+        dto.put("city", p.getCity());
+        dto.put("state", p.getState());
+        dto.put("pincode", p.getPincode());
+        dto.put("manager", p.getManager());
+        dto.put("phone", p.getPhone());
+        dto.put("email", p.getEmail());
+        dto.put("landlordPan", p.getLandlordPan());
+        dto.put("pgLicenseNo", p.getPgLicenseNo());
+        dto.put("bankAccountName", p.getBankAccountName());
+        dto.put("bankName", p.getBankName());
+        dto.put("bankAccountNumber", p.getBankAccountNumber());
+        dto.put("bankIfsc", p.getBankIfsc());
+        dto.put("upiVpa", p.getUpiVpa());
+        dto.put("authorizedSignatory", p.getAuthorizedSignatory());
+        try {
+            dto.put("amenities", p.getAmenities());
+        } catch (Exception e) {
+            dto.put("amenities", new ArrayList<>());
+        }
+        dto.put("status", p.getStatus());
+        dto.put("currency", p.getCurrency());
+        dto.put("timezone", p.getTimezone());
+        dto.put("totalBuildings", p.getTotalBuildings());
+        dto.put("totalRooms", p.getTotalRooms());
+        dto.put("totalBeds", p.getTotalBeds());
+        dto.put("occupiedBeds", p.getOccupiedBeds());
+        dto.put("orgId", p.getOrganization() != null ? p.getOrganization().getId() : null);
+        dto.put("createdAt", p.getCreatedAt() != null ? p.getCreatedAt().toString() : null);
+        return dto;
+    }
+
     @GetMapping
-    public ResponseEntity<List<Property>> getAllProperties() {
+    public ResponseEntity<?> getAllProperties(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize) {
         boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
                 .getAuthorities().stream()
                 .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
 
-        List<Property> properties;
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
+
+        org.springframework.data.domain.Page<PropertyDTO> pageResult;
         if (isSuperAdmin) {
-            properties = propertyRepository.findAll();
+            pageResult = propertyService.getAllPropertiesForSuperAdminPaged(pageable);
         } else {
-            Organization organization = getLoggedUserOrg();
-            properties = propertyRepository.findByOrganization(organization);
+            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
+                    .getAuthentication().getPrincipal();
+            User user = userRepository.findById(userDetails.getId()).orElse(null);
+            if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
+                pageResult = propertyService.getPropertiesByIdsPaged(user.getPropertyIds(), pageable);
+            } else {
+                pageResult = org.springframework.data.domain.Page.empty(pageable);
+            }
         }
-        return ResponseEntity.ok(properties);
+
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.ofPage(pageResult));
+    }
+
+    @GetMapping("/minimal")
+    public ResponseEntity<?> getMinimalProperties() {
+        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
+
+        List<MinimalPropertyDTO> properties;
+        if (isSuperAdmin) {
+            properties = propertyService.getMinimalPropertiesForSuperAdmin();
+        } else {
+            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
+                    .getAuthentication().getPrincipal();
+            User user = userRepository.findById(userDetails.getId()).orElse(null);
+            if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
+                properties = propertyService.getMinimalPropertiesByIds(user.getPropertyIds());
+            } else {
+                properties = new ArrayList<>();
+            }
+        }
+
+        return ResponseEntity.ok(properties != null ? properties : new ArrayList<>());
     }
 
     @GetMapping("/{id}")
@@ -272,7 +394,7 @@ public class PropertyController {
                     .body(new MessageResponse("Error: Property not found or unauthorized."));
         }
 
-        return ResponseEntity.ok(property);
+        return ResponseEntity.ok(PropertyDTO.fromEntity(property));
     }
 
     @PutMapping("/{id}")
@@ -321,8 +443,24 @@ public class PropertyController {
         if (request.getTimezone() != null) {
             property.setTimezone(request.getTimezone());
         }
+        if (request.getLandlordPan() != null)
+            property.setLandlordPan(request.getLandlordPan());
+        if (request.getPgLicenseNo() != null)
+            property.setPgLicenseNo(request.getPgLicenseNo());
+        if (request.getBankAccountName() != null)
+            property.setBankAccountName(request.getBankAccountName());
+        if (request.getBankName() != null)
+            property.setBankName(request.getBankName());
+        if (request.getBankAccountNumber() != null)
+            property.setBankAccountNumber(request.getBankAccountNumber());
+        if (request.getBankIfsc() != null)
+            property.setBankIfsc(request.getBankIfsc());
+        if (request.getUpiVpa() != null)
+            property.setUpiVpa(request.getUpiVpa());
+        if (request.getAuthorizedSignatory() != null)
+            property.setAuthorizedSignatory(request.getAuthorizedSignatory());
 
-        Property updated = propertyRepository.save(property);
+        Property updated = propertyService.saveProperty(property);
         return ResponseEntity.ok(updated);
     }
 
@@ -349,7 +487,7 @@ public class PropertyController {
 
         // Archive rather than hard-deleting
         property.setStatus("ARCHIVED");
-        propertyRepository.save(property);
+        propertyService.saveProperty(property);
 
         return ResponseEntity.ok(new MessageResponse("Property successfully archived."));
     }

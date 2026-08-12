@@ -3,6 +3,7 @@ package com.stayeaze.backend.controllers;
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.payload.request.ComplaintFeedbackRequest;
 import com.stayeaze.backend.payload.request.ComplaintRequest;
+import com.stayeaze.backend.payload.response.ComplaintDTO;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.ComplaintRepository;
 import com.stayeaze.backend.repository.OrganizationRepository;
@@ -85,7 +86,10 @@ public class ComplaintController {
         }
 
         List<Complaint> complaints = complaintRepository.findByTenant(tenant);
-        return ResponseEntity.ok(complaints);
+        List<ComplaintDTO> dtos = complaints.stream()
+                .map(ComplaintDTO::fromEntity)
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
     @GetMapping("/complaints")
@@ -103,11 +107,15 @@ public class ComplaintController {
             if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
                 List<UUID> assignedProps = user.getPropertyIds();
                 complaints = complaints.stream()
-                        .filter(c -> c.getTenant() != null && c.getTenant().getPropertyId() != null && assignedProps.contains(c.getTenant().getPropertyId()))
+                        .filter(c -> c.getTenant() != null && c.getTenant().getPropertyId() != null
+                                && assignedProps.contains(c.getTenant().getPropertyId()))
                         .collect(java.util.stream.Collectors.toList());
             }
         }
-        return ResponseEntity.ok(complaints);
+        List<ComplaintDTO> dtos = complaints.stream()
+                .map(com.stayeaze.backend.payload.response.ComplaintDTO::fromEntity)
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
     @PutMapping("/tenants/{tenantId}/complaints/{id}/status")
@@ -126,7 +134,8 @@ public class ComplaintController {
 
         Complaint complaint = complaintRepository.findByIdAndTenant(id, tenant).orElse(null);
         if (complaint == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Complaint record not found."));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Error: Complaint record not found."));
         }
 
         complaint.setStatus(status);
@@ -155,11 +164,13 @@ public class ComplaintController {
 
         Complaint complaint = complaintRepository.findByIdAndTenant(id, tenant).orElse(null);
         if (complaint == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Complaint record not found."));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Error: Complaint record not found."));
         }
 
         if (!"RESOLVED".equals(complaint.getStatus())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Feedback can only be submitted on RESOLVED complaints."));
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Error: Feedback can only be submitted on RESOLVED complaints."));
         }
 
         complaint.setFeedbackRating(request.getFeedbackRating());
@@ -167,5 +178,83 @@ public class ComplaintController {
 
         Complaint updated = complaintRepository.save(complaint);
         return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping("/complaints")
+    public ResponseEntity<?> createComplaintAdmin(@RequestBody java.util.Map<String, Object> body) {
+        Organization organization = getLoggedUserOrg();
+        String category = body.get("category") != null ? body.get("category").toString() : "OTHER";
+        String description = body.get("description") != null ? body.get("description").toString() : "";
+        String tenantName = body.get("tenantName") != null ? body.get("tenantName").toString() : null;
+        String status = body.get("status") != null ? body.get("status").toString().toUpperCase() : "OPEN";
+        String priority = body.get("priority") != null ? body.get("priority").toString().toUpperCase() : "MEDIUM";
+        String assignedStaff = body.get("assignedTo") != null ? body.get("assignedTo").toString() : null;
+
+        Tenant tenant = null;
+        List<Tenant> tenants = tenantRepository.findByOrganization(organization);
+        if (tenantName != null && !tenantName.isBlank()) {
+            tenant = tenants.stream()
+                    .filter(t -> (t.getFirstName() + " " + t.getLastName()).equalsIgnoreCase(tenantName.trim()))
+                    .findFirst().orElse(null);
+        }
+        if (tenant == null && !tenants.isEmpty()) {
+            tenant = tenants.get(0);
+        }
+
+        if (tenant == null) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: No tenant profile found to link complaint."));
+        }
+
+        Complaint complaint = new Complaint(tenant, category, description);
+        complaint.setStatus(status);
+        complaint.setPriority(priority);
+        if (assignedStaff != null) complaint.setAssignedStaff(assignedStaff);
+        Complaint saved = complaintRepository.save(complaint);
+        return new ResponseEntity<>(ComplaintDTO.fromEntity(saved), HttpStatus.CREATED);
+    }
+
+    @PutMapping("/complaints/{id}")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> updateComplaintAdmin(@PathVariable UUID id, @RequestBody java.util.Map<String, Object> body) {
+        Complaint complaint = complaintRepository.findById(id).orElse(null);
+        if (complaint == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Complaint record not found."));
+        }
+
+        if (body.containsKey("category") && body.get("category") != null) {
+            complaint.setCategory(body.get("category").toString());
+        }
+        if (body.containsKey("description") && body.get("description") != null) {
+            complaint.setDescription(body.get("description").toString());
+        }
+        if (body.containsKey("status") && body.get("status") != null) {
+            complaint.setStatus(body.get("status").toString().toUpperCase());
+        }
+        if (body.containsKey("priority") && body.get("priority") != null) {
+            complaint.setPriority(body.get("priority").toString().toUpperCase());
+        }
+        if (body.containsKey("assignedTo") && body.get("assignedTo") != null) {
+            complaint.setAssignedStaff(body.get("assignedTo").toString());
+        }
+
+        Complaint updated = complaintRepository.save(complaint);
+        return ResponseEntity.ok(ComplaintDTO.fromEntity(updated));
+    }
+
+    @DeleteMapping("/complaints/{id}")
+    public ResponseEntity<?> deleteComplaintAdmin(@PathVariable UUID id) {
+        if (!complaintRepository.existsById(id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Complaint record not found."));
+        }
+        complaintRepository.deleteById(id);
+        return ResponseEntity.ok(new MessageResponse("Complaint deleted successfully."));
+    }
+
+    @DeleteMapping("/complaints/bulk")
+    public ResponseEntity<?> bulkDeleteComplaints(@RequestBody List<UUID> ids) {
+        if (ids != null && !ids.isEmpty()) {
+            complaintRepository.deleteAllById(ids);
+        }
+        return ResponseEntity.ok(new MessageResponse("Complaints deleted successfully."));
     }
 }

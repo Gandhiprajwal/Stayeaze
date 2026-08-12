@@ -2,6 +2,8 @@ package com.stayeaze.backend.repository;
 
 import com.stayeaze.backend.models.Bed;
 import com.stayeaze.backend.models.Room;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,4 +22,9 @@ public interface BedRepository extends JpaRepository<Bed, UUID> {
 
     @Query("SELECT b FROM Bed b WHERE b.room.floor.building.property.organization.id = :orgId")
     List<Bed> findByOrganizationId(@Param("orgId") UUID orgId);
+
+    @Query("SELECT b FROM Bed b WHERE b.room.floor.building.property.organization.id = :orgId")
+    Page<Bed> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
+
+    Page<Bed> findAll(Pageable pageable);
 }

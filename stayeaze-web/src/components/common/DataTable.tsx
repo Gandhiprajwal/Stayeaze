@@ -147,11 +147,12 @@ function getSortableValue(item: Record<string, unknown>, key: string): string | 
     const ded = Number(item.deductions ?? 0);
     return dep - ded;
   }
-  if (key === 'occupied') {
-    const occ = Number(item.occupied ?? 0);
-    const beds = Number(item.beds ?? 1);
+  if (key === 'occupied' || key === 'occupiedBeds') {
+    const occ = Number(item.occupiedBeds ?? item.occupied ?? 0);
+    const beds = Number(item.totalBeds ?? item.beds ?? 1);
     return beds > 0 ? (occ / beds) * 100 : occ;
   }
+
   if (key === 'buildingId' || key === 'building') {
     const bld = item.building as Record<string, unknown> | undefined;
     return (bld?.name as string) ?? (bld?.code as string) ?? (item.buildingId as string) ?? '';
@@ -257,20 +258,22 @@ export function DataTable<T extends { id: string }>({
   } else if (rawPayload && typeof rawPayload === 'object') {
     if (Array.isArray(rawPayload.data)) {
       rawItems = rawPayload.data;
-      if (typeof rawPayload.total === 'number') {
-        serverTotal = rawPayload.total;
+      const t = rawPayload.total ?? rawPayload.totalCount ?? rawPayload.totalElements;
+      if (typeof t === 'number') {
+        serverTotal = t;
         isServerPaginated = true;
       }
     } else if (Array.isArray(rawPayload.content)) {
       rawItems = rawPayload.content;
-      if (typeof rawPayload.totalElements === 'number') {
-        serverTotal = rawPayload.totalElements;
+      const t = rawPayload.totalElements ?? rawPayload.total ?? rawPayload.totalCount;
+      if (typeof t === 'number') {
+        serverTotal = t;
         isServerPaginated = true;
       }
     }
   }
 
-  // Memoize client-side filtering and sorting for ultra-fast performance on 1,000s of items
+  // Memoize client-side filtering and sorting for fallback non-server-paginated endpoints
   const filteredItems = useMemo(() => {
     let result = [...rawItems];
 
@@ -342,26 +345,18 @@ export function DataTable<T extends { id: string }>({
 
   const activeCols = columns.filter((c) => visibleCols.has(c.key));
 
-  const hasActiveFilters = !!(
-    (params.search && params.search.trim() !== '') ||
-    (params.filters && Object.values(params.filters).some((v) => v && v !== 'all')) ||
-    (dateRangeFilter && (dateFrom || dateTo))
-  );
-
-  const hasClientSort = !!params.sortBy;
-
-  const total = (isServerPaginated && !hasActiveFilters && !hasClientSort)
-    ? serverTotal
-    : filteredItems.length;
-
   const pageSize = params.pageSize ?? initialPageSize;
-  const page = Math.min(params.page ?? 1, Math.max(1, Math.ceil(total / pageSize)));
+  const total = isServerPaginated ? serverTotal : filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(params.page ?? 1, totalPages);
 
-  const displayRows = (isServerPaginated && !hasActiveFilters && !hasClientSort)
-    ? rawItems
+  const hasActiveFiltersOrSort = !!(params.sortBy || (params.filters && Object.keys(params.filters).length > 0) || debouncedSearch);
+
+  const displayRows = isServerPaginated
+    ? (hasActiveFiltersOrSort ? filteredItems : rawItems)
     : filteredItems.slice((page - 1) * pageSize, page * pageSize);
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
 

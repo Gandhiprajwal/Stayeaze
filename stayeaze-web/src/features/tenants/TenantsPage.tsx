@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { FormInput } from '@/components/common/FormField';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -54,10 +55,10 @@ export default function TenantsPage() {
 
   // Fetch properties for dropdown
   const { data: properties } = useQuery({
-    queryKey: ['tenants-properties'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['tenants-properties-minimal'],
+    queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
-  const propMap = new Map((properties ?? []).map((p) => [p.id, p.name]));
+  const propMap = new Map((properties ?? []).map((p: any) => [p.id, p.name]));
 
   // Fetch all rooms — filtered in-memory by selected property
   const { data: allRooms } = useQuery({
@@ -92,6 +93,17 @@ export default function TenantsPage() {
     enabled: !!selectedRoomId,
   });
 
+  // Fetch all tenants to check which beds are already taken
+  const { data: existingTenants } = useQuery({
+    queryKey: ['tenants-minimal'],
+    queryFn: () => api.get<any[]>('/tenants/minimal').then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload as any[];
+      return (payload as { data: any[] }).data ?? [];
+    }),
+    enabled: dialogOpen,
+  });
+
   const createMut = useCreate<Tenant>(ENDPOINT, 'Tenant');
   const updateMut = useUpdate<Tenant>(ENDPOINT, 'Tenant');
   const deleteMut = useDelete(ENDPOINT, 'Tenant');
@@ -103,16 +115,48 @@ export default function TenantsPage() {
     setDialogOpen(true);
   }
 
-  function openEdit(row: Tenant) {
+  async function openEdit(row: Tenant) {
     setEditing(row);
+    let fullTenant = row;
+    try {
+      const res = await api.get<Tenant>(`/tenants/${row.id}`);
+      if (res.data) fullTenant = res.data;
+    } catch (err) {
+      console.warn('Could not fetch full tenant details for editing:', err);
+    }
+
+    const idNum = fullTenant.idNumber || fullTenant.idProofNumber || (fullTenant as any).identityNumber || '';
+    const emName = fullTenant.emergencyName || fullTenant.emergencyContactName || (fullTenant as any).emergencyContactPerson || '';
+    const emContact = fullTenant.emergencyContact || fullTenant.emergencyContactMobile || (fullTenant as any).emergencyPhone || '';
+
+    const toDateInput = (val?: string | null) => {
+      if (!val) return '';
+      const s = String(val).trim();
+      if (s.includes('T')) return s.split('T')[0];
+      if (s.length >= 10 && s.includes('-')) return s.slice(0, 10);
+      return s;
+    };
+
     form.reset({
-      name: row.name, email: row.email, phone: row.phone, gender: row.gender, dob: row.dob ?? '',
-      occupation: row.occupation ?? '', idType: row.idType ?? 'aadhaar', idNumber: row.idNumber ?? '',
-      emergencyName: row.emergencyName ?? '', emergencyContact: row.emergencyContact ?? '',
-      propertyId: String(row.propertyId ?? ''), roomId: '', roomNumber: row.roomNumber ?? '', bedNumber: row.bedNumber ?? '',
-      rent: Number(row.rent ?? 0), deposit: Number(row.deposit ?? 0),
-      leaseStart: row.leaseStart ?? '', leaseEnd: row.leaseEnd ?? '',
-      status: row.status,
+      name: fullTenant.name || (fullTenant.firstName ? `${fullTenant.firstName} ${fullTenant.lastName}`.trim() : ''),
+      email: fullTenant.email ?? '',
+      phone: fullTenant.phone ?? fullTenant.mobile ?? '',
+      gender: fullTenant.gender ?? 'male',
+      dob: toDateInput(fullTenant.dob),
+      occupation: fullTenant.occupation ?? '',
+      idType: fullTenant.idType ?? (fullTenant as any).idProofType ?? 'aadhaar',
+      idNumber: idNum,
+      emergencyName: emName,
+      emergencyContact: emContact,
+      propertyId: String(fullTenant.propertyId ?? ''),
+      roomId: '',
+      roomNumber: fullTenant.roomNumber ?? '',
+      bedNumber: fullTenant.bedNumber ?? '',
+      rent: Number(fullTenant.rent ?? 0),
+      deposit: Number(fullTenant.deposit ?? 0),
+      leaseStart: toDateInput(fullTenant.leaseStart),
+      leaseEnd: toDateInput(fullTenant.leaseEnd),
+      status: fullTenant.status,
     });
     setSelectedRoomId('');
     setDialogOpen(true);
@@ -192,7 +236,7 @@ export default function TenantsPage() {
       </div>
     )},
     { key: 'propertyId', header: 'Property', sortable: true, cell: (r) =>
-      <span className="text-sm">{propMap.get(String(r.propertyId)) ?? '—'}</span>
+      <span className="text-sm">{String(propMap.get(String(r.propertyId)) ?? '—')}</span>
     },
     { key: 'roomNumber', header: 'Room / Bed', sortable: true, cell: (r) => (
       <span className="text-sm">
@@ -206,12 +250,17 @@ export default function TenantsPage() {
     { key: 'leaseEnd', header: 'Lease Ends', sortable: true, cell: (r) =>
       <span className="text-sm">{r.leaseEnd ? formatDate(r.leaseEnd) : <span className="text-muted-foreground">—</span>}</span>
     },
+    { key: 'kycStatus' as keyof Tenant, header: 'KYC', sortable: true, cell: (r) => {
+      const kyc = (r.kycStatus || 'PENDING').toUpperCase();
+      const tone = kyc === 'VERIFIED' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : kyc === 'REJECTED' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' : 'bg-amber-500/10 text-amber-600 border border-amber-500/20';
+      return <Badge className={`text-[10px] font-semibold ${tone}`}>{kyc}</Badge>;
+    }},
     { key: 'status', header: 'Status', sortable: true, cell: (r) =>
       <StatusBadge status={r.status} tone={statusTone(r.status)} />
     },
   ];
 
-  const propertyFilterOptions = (properties ?? []).map((p) => ({ value: p.id, label: p.name }));
+  const propertyFilterOptions = (properties ?? []).map((p: any) => ({ value: p.id, label: p.name }));
 
   return (
     <div className="space-y-6">
@@ -220,6 +269,11 @@ export default function TenantsPage() {
       <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search by name, email or room..." exportFilename="tenants" initialSortBy="name"
         filters={[
           { key: 'status', label: 'Status', options: statuses },
+          { key: 'kycStatus', label: 'KYC Status', options: [
+            { value: 'PENDING', label: 'Pending KYC' },
+            { value: 'VERIFIED', label: 'Verified KYC' },
+            { value: 'REJECTED', label: 'Rejected KYC' },
+          ]},
           { key: 'gender', label: 'Gender', options: genders },
           ...(propertyFilterOptions.length > 0 ? [{ key: 'propertyId', label: 'Property', options: propertyFilterOptions }] : []),
         ]}
@@ -303,7 +357,7 @@ export default function TenantsPage() {
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
                   <SelectContent>
-                    {(properties ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    {(properties ?? []).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 {form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}
@@ -341,14 +395,27 @@ export default function TenantsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {(bedsForRoom ?? []).map((b) => {
-                      const isUnavailable = (b.status === 'occupied' || b.status === 'archived' || b.status === 'maintenance' || b.status === 'blocked')
-                        && (!editing || b.number !== editing.bedNumber);
-                      const statusLabel = b.status === 'occupied' 
-                        ? 'Occupied' 
-                        : (b.status === 'archived' ? 'Archived' : (b.status === 'maintenance' ? 'Maintenance' : (b.status === 'blocked' ? 'Blocked' : b.status)));
+                      // Check if this bed is taken by an existing non-checked-out tenant
+                      const selectedRoom = (allRooms ?? []).find((r) => r.id === selectedRoomId);
+                      const roomNum = selectedRoom ? (selectedRoom.number || selectedRoom.roomNumber) : form.values.roomNumber;
+                      const takenByTenant = (existingTenants ?? []).find((t) =>
+                        t.roomNumber === roomNum &&
+                        t.bedNumber === b.number &&
+                        t.status !== 'checked_out' &&
+                        (!editing || t.id !== editing.id)
+                      );
+                      const isUnavailable = takenByTenant ||
+                        ((b.status === 'occupied' || b.status === 'archived' || b.status === 'maintenance' || b.status === 'blocked')
+                          && (!editing || b.number !== editing.bedNumber));
+                      const statusLabel = takenByTenant
+                        ? `Taken by ${takenByTenant.name || 'a tenant'}`
+                        : (b.status === 'occupied' ? 'Occupied'
+                          : (b.status === 'archived' ? 'Archived'
+                          : (b.status === 'maintenance' ? 'Maintenance'
+                          : (b.status === 'blocked' ? 'Blocked' : b.status))));
                       return (
-                        <SelectItem key={b.id} value={b.number} disabled={isUnavailable}>
-                          {b.number} {isUnavailable ? `(${statusLabel} - Unavailable)` : `(${b.status})`}
+                        <SelectItem key={b.id} value={b.number} disabled={!!isUnavailable}>
+                          {b.number} {isUnavailable ? `(${statusLabel} - Unavailable)` : `(${b.status || 'available'})`}
                         </SelectItem>
                       );
                     })}

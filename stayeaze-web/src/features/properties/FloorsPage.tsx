@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Building2, Plus, Pencil, Trash2, Layers } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { Building2, Plus, Pencil, Trash2, Layers, RotateCcw } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from '@/hooks/use-toast';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { DataTable, type Column } from '@/components/common/DataTable';
@@ -67,7 +68,7 @@ export default function FloorsPage() {
         <div><p className="font-medium">{r.name}</p><p className="text-xs text-muted-foreground">Level {r.number}</p></div>
       </div>
     )},
-    { key: 'buildingId', header: 'Building', sortable: true, cell: (r) => <span className="text-sm">{buildingMap.get(r.buildingId) ?? '—'}</span> },
+    { key: 'buildingId', header: 'Building', sortable: true, cell: (r) => <span className="text-sm">{r.buildingName || buildingMap.get(r.buildingId) || '—'}</span> },
     { key: 'rooms', header: 'Rooms', sortable: true, cell: (r) => <span className="tabular-nums">{r.rooms}</span> },
     { key: 'beds', header: 'Beds', sortable: true, cell: (r) => <span className="tabular-nums">{r.beds}</span> },
     { key: 'occupied', header: 'Occupancy', sortable: true, cell: (r) => {
@@ -83,6 +84,22 @@ export default function FloorsPage() {
 
   const buildingFilterOptions = (buildings ?? []).map((b) => ({ value: b.id, label: b.name }));
 
+  const queryClient = useQueryClient();
+
+  const handleUnarchive = async (row: Floor) => {
+    try {
+      await api.put(`/floors/${row.id}/unarchive`);
+      toast({ title: 'Floor Unarchived', description: `Floor "${row.name}" and nested rooms/beds unarchived successfully.` });
+      queryClient.invalidateQueries({ queryKey: ['/floors'] });
+      queryClient.invalidateQueries({ queryKey: ['/rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['/beds'] });
+      queryClient.invalidateQueries({ queryKey: ['/buildings'] });
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast({ title: 'Action Failed', description: e?.response?.data?.message || 'Failed to unarchive floor.', variant: 'destructive' });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Floors" description="Manage floors within buildings." icon={Layers}
@@ -92,6 +109,11 @@ export default function FloorsPage() {
         rowActions={(row) => (
           <RowActions items={[
             { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
+            ...(row.status?.toLowerCase() === 'archived' ? [{
+              label: 'Unarchive Floor',
+              icon: RotateCcw,
+              onSelect: () => handleUnarchive(row),
+            }] : []),
             { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
           ]} />
         )} />

@@ -2,6 +2,8 @@ package com.stayeaze.backend.repository;
 
 import com.stayeaze.backend.models.Invoice;
 import com.stayeaze.backend.models.Tenant;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,4 +20,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
 
     @Query("SELECT i FROM Invoice i WHERE i.tenant.organization.id = :orgId")
     List<Invoice> findByOrganizationId(@Param("orgId") UUID orgId);
+
+    @Query("SELECT i FROM Invoice i WHERE i.tenant.organization.id = :orgId")
+    Page<Invoice> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
+
+    Page<Invoice> findAll(Pageable pageable);
 }

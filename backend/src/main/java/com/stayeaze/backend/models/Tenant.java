@@ -8,7 +8,11 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
-@Table(name = "tenants")
+@Table(name = "tenants", indexes = {
+    @Index(name = "idx_tenant_org_status", columnList = "org_id, kyc_status"),
+    @Index(name = "idx_tenant_mobile", columnList = "mobile"),
+    @Index(name = "idx_tenant_property", columnList = "property_id")
+})
 public class Tenant {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -81,6 +85,9 @@ public class Tenant {
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
+    @Transient
+    private String buildingName;
+
     public Tenant() {
     }
 
@@ -110,10 +117,6 @@ public class Tenant {
 
     public void setOrganization(Organization organization) {
         this.organization = organization;
-    }
-
-    public String getName() {
-        return (firstName != null ? firstName : "") + " " + (lastName != null ? lastName : "");
     }
 
     public String getFirstName() {
@@ -303,5 +306,24 @@ public class Tenant {
 
     public void setBedNumber(String bedNumber) {
         this.bedNumber = bedNumber;
+    }
+
+    public String getName() {
+        if (firstName != null || lastName != null) {
+            return ((firstName != null ? firstName : "") + " " + (lastName != null ? lastName : "")).trim();
+        }
+        return null;
+    }
+
+    public String getIdProofNumber() {
+        return idNumber;
+    }
+
+    public String getBuildingName() {
+        return buildingName;
+    }
+
+    public void setBuildingName(String buildingName) {
+        this.buildingName = buildingName;
     }
 }
