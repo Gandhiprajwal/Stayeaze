@@ -37,6 +37,8 @@ public class PropertyRequest {
     private String bankIfsc;
     private String upiVpa;
     private String authorizedSignatory;
+    private String razorpayKeyId;
+    private String razorpayKeySecret;
 
     public PropertyRequest() {
     }
@@ -223,5 +225,21 @@ public class PropertyRequest {
 
     public void setAuthorizedSignatory(String authorizedSignatory) {
         this.authorizedSignatory = authorizedSignatory;
+    }
+
+    public String getRazorpayKeyId() {
+        return razorpayKeyId;
+    }
+
+    public void setRazorpayKeyId(String razorpayKeyId) {
+        this.razorpayKeyId = razorpayKeyId;
+    }
+
+    public String getRazorpayKeySecret() {
+        return razorpayKeySecret;
+    }
+
+    public void setRazorpayKeySecret(String razorpayKeySecret) {
+        this.razorpayKeySecret = razorpayKeySecret;
     }
 }

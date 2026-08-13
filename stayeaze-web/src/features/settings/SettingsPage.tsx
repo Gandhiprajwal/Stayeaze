@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Settings as SettingsIcon, Building2, Bell, Palette, Shield, User } from 'lucide-react';
+import { Settings as SettingsIcon, Building2, Bell, Palette, Shield, User, Sparkles, CheckCircle2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -11,9 +11,10 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useUIStore } from '@/lib/stores/ui-store';
-import { initials } from '@/lib/format';
+import { initials, formatDate, formatCurrency } from '@/lib/format';
 import { roleLabels } from '@/lib/role-utils';
 import api from '@/lib/api';
 import { toast } from 'sonner';
@@ -106,6 +107,7 @@ export default function SettingsPage() {
             <TabsTrigger value="appearance"><Palette className="mr-1.5 h-4 w-4" /> Appearance</TabsTrigger>
             <TabsTrigger value="notifications"><Bell className="mr-1.5 h-4 w-4" /> Notifications</TabsTrigger>
             <TabsTrigger value="organization"><Building2 className="mr-1.5 h-4 w-4" /> Organization</TabsTrigger>
+            <TabsTrigger value="subscription"><Sparkles className="mr-1.5 h-4 w-4 text-amber-500" /> SaaS Subscription</TabsTrigger>
             <TabsTrigger value="security"><Shield className="mr-1.5 h-4 w-4" /> Security</TabsTrigger>
           </TabsList>
           {user?.role === 'SUPER_ADMIN' && (
@@ -275,6 +277,78 @@ export default function SettingsPage() {
                 </div>
               </section>
               <div className="flex justify-end"><Button onClick={saveBillingProfile} disabled={!canEditBilling || billingLoading}>{billingLoading ? 'Saving…' : 'Save Billing Settings'}</Button></div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* SaaS Subscription Tab */}
+        <TabsContent value="subscription">
+          <Card className="max-w-3xl border shadow-sm">
+            <CardHeader className="border-b bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-amber-500" /> SaaS Subscription Status & Active Plan
+                  </CardTitle>
+                  <CardDescription>
+                    Your current platform tier, renewal schedule, features entitlement, and subscription billing receipts.
+                  </CardDescription>
+                </div>
+                <Badge className="bg-emerald-600 text-white font-bold px-3 py-1">
+                  {(billingProfile as any).subscriptionStatus || 'ACTIVE'}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              <div className="grid sm:grid-cols-2 gap-4 bg-muted/40 p-4 rounded-xl border">
+                <div>
+                  <div className="text-xs text-muted-foreground">Current Active Plan</div>
+                  <div className="text-xl font-extrabold text-primary font-heading mt-0.5">
+                    {(billingProfile as any).subscriptionPlanName || 'Starter PG Plan'}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Billing Cycle: <span className="font-semibold text-foreground">{(billingProfile as any).subscriptionBillingCycle || 'MONTHLY'}</span>
+                  </div>
+                </div>
+
+                <div className="sm:border-l sm:pl-4">
+                  <div className="text-xs text-muted-foreground">Plan Pricing</div>
+                  <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    {formatCurrency((billingProfile as any).subscriptionPlanPrice || 1499)}
+                    <span className="text-xs font-normal text-muted-foreground"> / month</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 font-mono">
+                    Valid until: {formatDate((billingProfile as any).subscriptionEndDate || new Date(Date.now() + 30*86400000).toISOString())}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-foreground">Included Plan Entitlements & Features:</h4>
+                <div className="grid sm:grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Full Building, Floor & Bed Hierarchy
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Automated Rent Invoicing & Receipts
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" /> Per-Property Razorpay Gateway Support
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" /> WhatsApp & Email Tenant Notifications
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t flex items-center justify-between">
+                <div className="text-xs text-muted-foreground">
+                  Need more beds or additional properties?
+                </div>
+                <Button onClick={() => window.open('https://stayeaze.com/pricing', '_blank')} className="bg-amber-600 hover:bg-amber-500 text-white font-semibold">
+                  <Sparkles className="mr-1.5 h-4 w-4" /> Upgrade SaaS Subscription Plan
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

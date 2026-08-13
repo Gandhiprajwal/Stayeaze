@@ -9,6 +9,8 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import api from '@/lib/api';
 
 import LoginPage from '@/features/auth/LoginPage';
+import SignUpPage from '@/features/auth/SignUpPage';
+import SubscribersPage from '@/features/super-admin/SubscribersPage';
 import DashboardPage from '@/features/dashboard/DashboardPage';
 import PropertiesPage from '@/features/properties/PropertiesPage';
 import PropertyDetailPage from '@/features/properties/PropertyDetailPage';
@@ -70,6 +72,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={hasValidSession ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+      <Route path="/signup" element={hasValidSession ? <Navigate to="/dashboard" replace /> : <SignUpPage />} />
 
       <Route
         element={
@@ -100,6 +103,7 @@ export default function App() {
         <Route path="/users" element={<RequireAuth module="users"><UsersPage /></RequireAuth>} />
         <Route path="/roles" element={<RequireAuth module="roles"><RolesPage /></RequireAuth>} />
         <Route path="/audit-logs" element={<RequireAuth module="audit-logs"><AuditLogsPage /></RequireAuth>} />
+        <Route path="/super-admin/subscribers" element={<RequireAuth allowedRoles={['SUPER_ADMIN']}><SubscribersPage /></RequireAuth>} />
         <Route path="/super-admin/system-logs" element={<RequireAuth allowedRoles={['SUPER_ADMIN']}><BackendLogsPage /></RequireAuth>} />
         <Route path="/super-admin/integrations" element={<RequireAuth allowedRoles={['SUPER_ADMIN']}><SystemIntegrationsPage /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth module="settings"><SettingsPage /></RequireAuth>} />

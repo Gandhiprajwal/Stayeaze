@@ -41,6 +41,9 @@ public class PropertyDTO implements Serializable {
     private UUID orgId;
     private String organizationName;
     private String createdAt;
+    private String razorpayKeyId;
+    private String razorpayKeySecret;
+    private Boolean hasRazorpaySecret;
 
     public PropertyDTO() {
     }

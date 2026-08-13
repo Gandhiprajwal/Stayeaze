@@ -66,6 +66,30 @@ public class OrganizationBillingProfile {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt = OffsetDateTime.now();
 
+    @Column(name = "subscription_plan_name", length = 100)
+    private String subscriptionPlanName = "Starter PG Plan";
+
+    @Column(name = "subscription_plan_price")
+    private java.math.BigDecimal subscriptionPlanPrice = new java.math.BigDecimal("1499");
+
+    @Column(name = "subscription_billing_cycle", length = 30)
+    private String subscriptionBillingCycle = "MONTHLY";
+
+    @Column(name = "subscription_start_date")
+    private OffsetDateTime subscriptionStartDate = OffsetDateTime.now();
+
+    @Column(name = "subscription_end_date")
+    private OffsetDateTime subscriptionEndDate = OffsetDateTime.now().plusDays(30);
+
+    @Column(name = "subscription_status", length = 30)
+    private String subscriptionStatus = "ACTIVE";
+
+    @Column(name = "subscription_payment_id", length = 150)
+    private String subscriptionPaymentId;
+
+    @Column(name = "subscription_order_id", length = 150)
+    private String subscriptionOrderId;
+
     public OrganizationBillingProfile() { }
     public OrganizationBillingProfile(Organization organization) {
         this.organization = organization;
@@ -137,4 +161,28 @@ public class OrganizationBillingProfile {
     public void setInvoiceTerms(String invoiceTerms) { this.invoiceTerms = invoiceTerms; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getSubscriptionPlanName() { return subscriptionPlanName; }
+    public void setSubscriptionPlanName(String subscriptionPlanName) { this.subscriptionPlanName = subscriptionPlanName; }
+
+    public java.math.BigDecimal getSubscriptionPlanPrice() { return subscriptionPlanPrice; }
+    public void setSubscriptionPlanPrice(java.math.BigDecimal subscriptionPlanPrice) { this.subscriptionPlanPrice = subscriptionPlanPrice; }
+
+    public String getSubscriptionBillingCycle() { return subscriptionBillingCycle; }
+    public void setSubscriptionBillingCycle(String subscriptionBillingCycle) { this.subscriptionBillingCycle = subscriptionBillingCycle; }
+
+    public OffsetDateTime getSubscriptionStartDate() { return subscriptionStartDate; }
+    public void setSubscriptionStartDate(OffsetDateTime subscriptionStartDate) { this.subscriptionStartDate = subscriptionStartDate; }
+
+    public OffsetDateTime getSubscriptionEndDate() { return subscriptionEndDate; }
+    public void setSubscriptionEndDate(OffsetDateTime subscriptionEndDate) { this.subscriptionEndDate = subscriptionEndDate; }
+
+    public String getSubscriptionStatus() { return subscriptionStatus; }
+    public void setSubscriptionStatus(String subscriptionStatus) { this.subscriptionStatus = subscriptionStatus; }
+
+    public String getSubscriptionPaymentId() { return subscriptionPaymentId; }
+    public void setSubscriptionPaymentId(String subscriptionPaymentId) { this.subscriptionPaymentId = subscriptionPaymentId; }
+
+    public String getSubscriptionOrderId() { return subscriptionOrderId; }
+    public void setSubscriptionOrderId(String subscriptionOrderId) { this.subscriptionOrderId = subscriptionOrderId; }
 }

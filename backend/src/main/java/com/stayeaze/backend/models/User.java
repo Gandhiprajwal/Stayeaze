@@ -32,6 +32,9 @@ public class User {
     @Column(nullable = false, unique = true, length = 20)
     private String mobile;
 
+    @Column(name = "first_name", length = 100)
+    private String firstName;
+
     @Column(length = 50)
     private String status = "ACTIVE";
 
@@ -119,6 +122,14 @@ public class User {
 
     public void setMobile(String mobile) {
         this.mobile = mobile;
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
     }
 
     public String getStatus() {

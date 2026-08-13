@@ -65,6 +65,7 @@ export const navSections: NavSection[] = [
     items: [
       { label: 'Users', to: '/users', icon: UserCog, roles: ['SUPER_ADMIN', 'ADMIN', 'OWNER'] },
       { label: 'Roles', to: '/roles', icon: ShieldCheck, roles: ['SUPER_ADMIN'] },
+      { label: 'SaaS Subscribers', to: '/super-admin/subscribers', icon: Sparkles, roles: ['SUPER_ADMIN'] },
       { label: 'Audit Logs', to: '/audit-logs', icon: ScrollText, roles: ['SUPER_ADMIN', 'ADMIN', 'OWNER'] },
       { label: 'Backend System Logs', to: '/super-admin/system-logs', icon: Terminal, roles: ['SUPER_ADMIN'] },
       { label: 'Cloud Infrastructure', to: '/super-admin/integrations', icon: ShieldCheck, roles: ['SUPER_ADMIN'] },

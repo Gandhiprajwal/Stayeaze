@@ -162,6 +162,15 @@ export default function LoginPage() {
             </Button>
           </form>
 
+          <div className="mt-4 rounded-xl border border-blue-500/20 bg-blue-50/50 dark:bg-blue-950/30 p-3.5 text-center space-y-1">
+            <div className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+              Want to manage your PG or Hostel with StayEaze?
+            </div>
+            <Link to="/signup" className="inline-flex items-center text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
+              Register Property & Start 14-Day Free Trial / Subscribe →
+            </Link>
+          </div>
+
           <div className="my-6 flex items-center gap-3">
             <Separator className="flex-1" />
             <span className="text-xs text-muted-foreground">Quick demo access</span>
