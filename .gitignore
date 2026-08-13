@@ -1,0 +1,28 @@
+# Build artifacts & target directories
+target/
+**/target/
+build/
+**/build/
+
+# Uploads & temporary media
+uploads/
+**/uploads/
+
+# Environment files
+.env
+**/.env
+*.local
+
+# Logs
+*.log
+logs/
+
+# Stress test CSV results
+stress_test_results.csv
+
+# Node & Flutter build artifacts
+node_modules/
+.dart_tool/
+.idea/
+.vscode/
+.DS_Store
