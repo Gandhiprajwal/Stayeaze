@@ -469,8 +469,8 @@ public class InvoiceController {
         }
 
         // Determine Owner/Organization Razorpay credentials from Database
-        String activeKeyId = razorpayKeyId;
-        String activeKeySecret = razorpayKeySecret;
+        String activeKeyId = null;
+        String activeKeySecret = null;
 
         Organization invoiceOrg = invoice.getTenant() != null ? invoice.getTenant().getOrganization() : null;
         if (invoiceOrg != null) {
@@ -481,6 +481,20 @@ public class InvoiceController {
                     activeKeySecret = bpOpt.get().getRazorpayKeySecret().trim();
                 }
             }
+        }
+
+        if (activeKeyId == null || activeKeyId.isBlank()) {
+            Optional<SystemConfig> sysOpt = systemConfigRepository.findTopByOrderByIdAsc();
+            if (sysOpt.isPresent() && sysOpt.get().getRazorpayKeyId() != null && !sysOpt.get().getRazorpayKeyId().isBlank()) {
+                activeKeyId = sysOpt.get().getRazorpayKeyId().trim();
+                if (sysOpt.get().getRazorpayKeySecret() != null && !sysOpt.get().getRazorpayKeySecret().isBlank()) {
+                    activeKeySecret = sysOpt.get().getRazorpayKeySecret().trim();
+                }
+            }
+        }
+
+        if (activeKeyId == null || activeKeyId.isBlank() || activeKeySecret == null || activeKeySecret.isBlank()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Online Razorpay payment is disabled for this property. The property owner/admin has not configured Razorpay API credentials. Please pay via Cash, Bank Transfer, or UPI."));
         }
 
         long amountInPaise = remainingDue.multiply(new java.math.BigDecimal(100)).longValue();
@@ -536,12 +550,18 @@ public class InvoiceController {
         String razorpaySignature = req.get("razorpaySignature");
 
         // Determine Owner/Organization Razorpay credentials from Database
-        String activeKeySecret = razorpayKeySecret;
+        String activeKeySecret = null;
         Organization invoiceOrg = invoice.getTenant() != null ? invoice.getTenant().getOrganization() : null;
         if (invoiceOrg != null) {
             Optional<OrganizationBillingProfile> bpOpt = organizationBillingProfileRepository.findByOrganization(invoiceOrg);
             if (bpOpt.isPresent() && bpOpt.get().getRazorpayKeySecret() != null && !bpOpt.get().getRazorpayKeySecret().isBlank()) {
                 activeKeySecret = bpOpt.get().getRazorpayKeySecret().trim();
+            }
+        }
+        if (activeKeySecret == null || activeKeySecret.isBlank()) {
+            Optional<SystemConfig> sysOpt = systemConfigRepository.findTopByOrderByIdAsc();
+            if (sysOpt.isPresent() && sysOpt.get().getRazorpayKeySecret() != null && !sysOpt.get().getRazorpayKeySecret().isBlank()) {
+                activeKeySecret = sysOpt.get().getRazorpayKeySecret().trim();
             }
         }
 
