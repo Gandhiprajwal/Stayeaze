@@ -499,17 +499,8 @@ public class InvoiceController {
             }
         }
 
-        // 3. SystemConfig Master credentials (fallback if explicitly set)
-        if (activeKeyId == null || activeKeyId.isBlank()) {
-            Optional<SystemConfig> sysOpt = systemConfigRepository.findTopByOrderByIdAsc();
-            if (sysOpt.isPresent() && sysOpt.get().getRazorpayKeyId() != null && !sysOpt.get().getRazorpayKeyId().isBlank()) {
-                activeKeyId = sysOpt.get().getRazorpayKeyId().trim();
-                if (sysOpt.get().getRazorpayKeySecret() != null && !sysOpt.get().getRazorpayKeySecret().isBlank()) {
-                    activeKeySecret = sysOpt.get().getRazorpayKeySecret().trim();
-                }
-            }
-        }
-
+        // Super Admin Razorpay credentials are for Super Admin SaaS Subscriptions ONLY.
+        // Tenant rent invoices MUST NOT use Super Admin credentials.
         if (activeKeyId == null || activeKeyId.isBlank() || activeKeySecret == null || activeKeySecret.isBlank()) {
             String propName = property != null ? property.getName() : "this property";
             return ResponseEntity.badRequest().body(new MessageResponse("Online Razorpay payment is disabled for " + propName + ". The property owner/admin has not configured Razorpay API credentials for this property. Please pay via Cash, Bank Transfer, or UPI."));
@@ -583,12 +574,6 @@ public class InvoiceController {
                 if (bpOpt.isPresent() && bpOpt.get().getRazorpayKeySecret() != null && !bpOpt.get().getRazorpayKeySecret().isBlank()) {
                     activeKeySecret = bpOpt.get().getRazorpayKeySecret().trim();
                 }
-            }
-        }
-        if (activeKeySecret == null || activeKeySecret.isBlank()) {
-            Optional<SystemConfig> sysOpt = systemConfigRepository.findTopByOrderByIdAsc();
-            if (sysOpt.isPresent() && sysOpt.get().getRazorpayKeySecret() != null && !sysOpt.get().getRazorpayKeySecret().isBlank()) {
-                activeKeySecret = sysOpt.get().getRazorpayKeySecret().trim();
             }
         }
 
