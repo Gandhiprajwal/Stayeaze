@@ -79,6 +79,12 @@ public class Property {
     @Column(name = "authorized_signatory", length = 150)
     private String authorizedSignatory = "StayEaze Management Authorized Signatory";
 
+    @Column(name = "razorpay_key_id", length = 255)
+    private String razorpayKeyId;
+
+    @Column(name = "razorpay_key_secret", length = 255)
+    private String razorpayKeySecret;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "property_amenities", joinColumns = @JoinColumn(name = "property_id"))
     @Column(name = "amenity")
@@ -334,6 +340,22 @@ public class Property {
 
     public void setAuthorizedSignatory(String authorizedSignatory) {
         this.authorizedSignatory = authorizedSignatory;
+    }
+
+    public String getRazorpayKeyId() {
+        return razorpayKeyId;
+    }
+
+    public void setRazorpayKeyId(String razorpayKeyId) {
+        this.razorpayKeyId = razorpayKeyId;
+    }
+
+    public String getRazorpayKeySecret() {
+        return razorpayKeySecret;
+    }
+
+    public void setRazorpayKeySecret(String razorpayKeySecret) {
+        this.razorpayKeySecret = razorpayKeySecret;
     }
 
     public Integer getTotalBuildings() {

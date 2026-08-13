@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Hotel, Pencil, Trash2, Eye } from 'lucide-react';
+import { Plus, Hotel, Pencil, Trash2, Eye, CreditCard } from 'lucide-react';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { DataTable, type Column } from '@/components/common/DataTable';
@@ -37,6 +37,7 @@ const propertyStatuses = [
 const emptyForm = {
   name: '', code: '', type: 'PG' as Property['type'], address: '', city: '', state: '', pincode: '',
   manager: '', phone: '', email: '', status: 'active' as Property['status'],
+  razorpayKeyId: '', razorpayKeySecret: '',
   orgName: '', orgSubdomain: '', ownerEmail: '', ownerPhone: '', ownerPassword: '',
 };
 
@@ -65,6 +66,8 @@ export default function PropertiesPage() {
       name: row.name, code: row.code, type: row.type, address: row.address, city: row.city,
       state: row.state, pincode: row.pincode, manager: row.manager, phone: row.phone,
       email: row.email, status: row.status,
+      razorpayKeyId: row.razorpayKeyId ?? '',
+      razorpayKeySecret: row.razorpayKeySecret ?? '',
       orgName: '', orgSubdomain: '', ownerEmail: '', ownerPhone: '', ownerPassword: '',
     });
     setDialogOpen(true);
@@ -233,6 +236,29 @@ export default function PropertiesPage() {
           <FormInput label="Manager" id="manager" value={form.values.manager} onChange={(e) => form.setValue('manager', e.target.value)} />
           <FormInput label="Phone" id="phone" value={form.values.phone} onChange={(e) => form.setValue('phone', e.target.value)} />
           <FormInput label="Email" type="email" id="email" value={form.values.email} onChange={(e) => form.setValue('email', e.target.value)} />
+          <div className="sm:col-span-2 border-t pt-3 mt-1">
+            <h4 className="font-semibold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
+              <CreditCard className="h-3.5 w-3.5 text-primary" /> Property Razorpay Gateway Credentials
+            </h4>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Enter unique Razorpay API credentials for this property. Tenant rent payments for this property will be processed using this account.
+            </p>
+          </div>
+          <FormInput
+            label="Razorpay Key ID"
+            id="razorpayKeyId"
+            value={form.values.razorpayKeyId}
+            onChange={(e) => form.setValue('razorpayKeyId', e.target.value)}
+            placeholder="rzp_live_... / rzp_test_..."
+          />
+          <FormInput
+            label="Razorpay Key Secret"
+            type="password"
+            id="razorpayKeySecret"
+            value={form.values.razorpayKeySecret}
+            onChange={(e) => form.setValue('razorpayKeySecret', e.target.value)}
+            placeholder={editing?.hasRazorpaySecret ? "•••••••• (Saved in DB - leave blank to keep)" : "Enter Razorpay Key Secret"}
+          />
           {!editing && isSuperAdmin && (
             <>
               <div className="sm:col-span-2 border-t pt-4 my-2">

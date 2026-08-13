@@ -50,6 +50,9 @@ export interface Property {
   bankIfsc?: string;
   upiVpa?: string;
   authorizedSignatory?: string;
+  razorpayKeyId?: string;
+  razorpayKeySecret?: string;
+  hasRazorpaySecret?: boolean;
   createdAt: string;
 }
 

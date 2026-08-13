@@ -214,6 +214,10 @@ public class PropertyController {
             property.setUpiVpa((String) request.get("upiVpa"));
         if (request.get("authorizedSignatory") != null)
             property.setAuthorizedSignatory((String) request.get("authorizedSignatory"));
+        if (request.get("razorpayKeyId") != null)
+            property.setRazorpayKeyId(((String) request.get("razorpayKeyId")).trim());
+        if (request.get("razorpayKeySecret") != null && !((String) request.get("razorpayKeySecret")).isBlank() && !((String) request.get("razorpayKeySecret")).contains("•"))
+            property.setRazorpayKeySecret(((String) request.get("razorpayKeySecret")).trim());
 
         Property saved = propertyService.saveProperty(property);
 
@@ -459,6 +463,10 @@ public class PropertyController {
             property.setUpiVpa(request.getUpiVpa());
         if (request.getAuthorizedSignatory() != null)
             property.setAuthorizedSignatory(request.getAuthorizedSignatory());
+        if (request.getRazorpayKeyId() != null)
+            property.setRazorpayKeyId(request.getRazorpayKeyId().trim());
+        if (request.getRazorpayKeySecret() != null && !request.getRazorpayKeySecret().isBlank() && !request.getRazorpayKeySecret().contains("•"))
+            property.setRazorpayKeySecret(request.getRazorpayKeySecret().trim());
 
         Property updated = propertyService.saveProperty(property);
         return ResponseEntity.ok(updated);

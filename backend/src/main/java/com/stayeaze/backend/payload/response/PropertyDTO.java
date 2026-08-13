@@ -68,6 +68,13 @@ public class PropertyDTO implements Serializable {
         dto.setBankIfsc(p.getBankIfsc());
         dto.setUpiVpa(p.getUpiVpa());
         dto.setAuthorizedSignatory(p.getAuthorizedSignatory());
+        dto.setRazorpayKeyId(p.getRazorpayKeyId());
+        dto.setHasRazorpaySecret(p.getRazorpayKeySecret() != null && !p.getRazorpayKeySecret().isBlank());
+        if (p.getRazorpayKeySecret() != null && !p.getRazorpayKeySecret().isBlank()) {
+            dto.setRazorpayKeySecret("••••••••");
+        } else {
+            dto.setRazorpayKeySecret("");
+        }
         try {
             if (p.getAmenities() != null) {
                 dto.setAmenities(new ArrayList<>(p.getAmenities()));
@@ -188,4 +195,13 @@ public class PropertyDTO implements Serializable {
 
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
+
+    public String getRazorpayKeyId() { return razorpayKeyId; }
+    public void setRazorpayKeyId(String razorpayKeyId) { this.razorpayKeyId = razorpayKeyId; }
+
+    public String getRazorpayKeySecret() { return razorpayKeySecret; }
+    public void setRazorpayKeySecret(String razorpayKeySecret) { this.razorpayKeySecret = razorpayKeySecret; }
+
+    public Boolean getHasRazorpaySecret() { return hasRazorpaySecret; }
+    public void setHasRazorpaySecret(Boolean hasRazorpaySecret) { this.hasRazorpaySecret = hasRazorpaySecret; }
 }
