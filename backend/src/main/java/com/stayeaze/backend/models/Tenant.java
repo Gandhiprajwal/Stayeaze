@@ -308,13 +308,6 @@ public class Tenant {
         this.bedNumber = bedNumber;
     }
 
-    public String getName() {
-        if (firstName != null || lastName != null) {
-            return ((firstName != null ? firstName : "") + " " + (lastName != null ? lastName : "")).trim();
-        }
-        return null;
-    }
-
     public String getIdProofNumber() {
         return idNumber;
     }

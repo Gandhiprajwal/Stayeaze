@@ -350,8 +350,9 @@ public class TenantController {
         Tenant updated = tenantRepository.save(tenant);
         if ("ACTIVE".equalsIgnoreCase(updated.getStatus()) || "CHECKED_IN".equalsIgnoreCase(updated.getStatus()) || "COMPLETED".equalsIgnoreCase(updated.getStatus())) {
             final String tenantFullName = (updated.getFirstName() + " " + updated.getLastName()).trim();
+            final UUID targetOrgId = organization != null ? organization.getId() : null;
             List<CheckIn> tenantCheckIns = checkInRepository.findAll().stream()
-                .filter(c -> c.getOrganization() != null && organization != null && c.getOrganization().getId().equals(organization.getId()))
+                .filter(c -> c.getOrganization() != null && targetOrgId != null && c.getOrganization().getId().equals(targetOrgId))
                 .filter(c -> (c.getTenantName() != null && c.getTenantName().equalsIgnoreCase(tenantFullName)) ||
                              (updated.getRoomNumber() != null && !updated.getRoomNumber().isBlank() && updated.getRoomNumber().equalsIgnoreCase(c.getRoomNumber()) &&
                               updated.getBedNumber() != null && !updated.getBedNumber().isBlank() && updated.getBedNumber().equalsIgnoreCase(c.getBedNumber())))

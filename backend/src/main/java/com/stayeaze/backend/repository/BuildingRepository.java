@@ -23,6 +23,9 @@ public interface BuildingRepository extends JpaRepository<Building, UUID> {
     @Query("SELECT b FROM Building b WHERE b.property.organization.id = :orgId")
     List<Building> findByOrganizationId(@Param("orgId") UUID orgId);
 
+    @Query("SELECT b FROM Building b WHERE b.property.organization = :org")
+    List<Building> findByOrganization(@Param("org") Organization org);
+
     @Query("SELECT b FROM Building b WHERE b.property.organization.id = :orgId")
     Page<Building> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
