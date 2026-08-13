@@ -4,6 +4,22 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import type { QueryParams } from '@/lib/types';
 
+function invalidateAllRelated(qc: ReturnType<typeof useQueryClient>, endpoint: string) {
+  const resource = endpoint.replace(/^\//, '');
+  qc.invalidateQueries({ queryKey: [endpoint] });
+  qc.invalidateQueries({ queryKey: ['dashboard'] });
+  qc.invalidateQueries({ queryKey: ['rep'] });
+  qc.invalidateQueries({ queryKey: [`${resource}-stats`] });
+  qc.invalidateQueries({
+    predicate: (query) => {
+      const keys = query.queryKey;
+      return Array.isArray(keys) && keys.some(
+        (k) => typeof k === 'string' && (k.includes(resource) || k.includes('stats') || k.includes('dashboard') || k.includes('rep'))
+      );
+    },
+  });
+}
+
 // Generic mutation helpers for a CRUD endpoint.
 export function useCreate<T>(endpoint: string, label = 'Record') {
   const qc = useQueryClient();
@@ -13,7 +29,7 @@ export function useCreate<T>(endpoint: string, label = 'Record') {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [endpoint] });
+      invalidateAllRelated(qc, endpoint);
       toast.success(`${label} created successfully`);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -28,7 +44,7 @@ export function useUpdate<T>(endpoint: string, label = 'Record') {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [endpoint] });
+      invalidateAllRelated(qc, endpoint);
       toast.success(`${label} updated successfully`);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -42,7 +58,7 @@ export function useDelete(endpoint: string, label = 'Record') {
       await api.delete(`${endpoint}/${id}`);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [endpoint] });
+      invalidateAllRelated(qc, endpoint);
       toast.success(`${label} deleted successfully`);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -57,7 +73,7 @@ export function useBulkDelete(endpoint: string, label = 'Records') {
       return ids;
     },
     onSuccess: (ids) => {
-      qc.invalidateQueries({ queryKey: [endpoint] });
+      invalidateAllRelated(qc, endpoint);
       toast.success(`${ids.length} ${label} deleted`);
     },
     onError: (e: Error) => toast.error(e.message),

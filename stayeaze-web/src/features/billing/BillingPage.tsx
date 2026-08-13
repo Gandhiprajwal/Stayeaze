@@ -117,6 +117,9 @@ export default function BillingPage() {
       setPaymentInvoice(null);
       setPaymentRef('');
       queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      queryClient.invalidateQueries({ queryKey: ['/payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['rep'] });
       queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
     },
     onError: (err: any) => {
