@@ -29,10 +29,16 @@ public class Room {
     @Column(name = "base_rent", nullable = false, precision = 12, scale = 2)
     private BigDecimal baseRent;
 
+    @Column(name = "wifi_ssid", length = 150)
+    private String wifiSsid;
+
+    @Column(name = "wifi_password", length = 150)
+    private String wifiPassword;
+
     @Column(length = 50)
     private String status = "AVAILABLE"; // AVAILABLE, BLOCKED, MAINTENANCE
 
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "room_amenities", joinColumns = @JoinColumn(name = "room_id"))
     @Column(name = "amenity")
     private List<String> amenities = new ArrayList<>();
@@ -68,17 +74,30 @@ public class Room {
     }
 
     public UUID getFloorId() {
-        return floor != null ? floor.getId() : null;
+        try {
+            return (floor != null && org.hibernate.Hibernate.isInitialized(floor)) ? floor.getId() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // Walk hierarchy: Room -> Floor -> Building -> Property
     public UUID getBuildingId() {
-        return floor != null && floor.getBuilding() != null ? floor.getBuilding().getId() : null;
+        try {
+            return (floor != null && org.hibernate.Hibernate.isInitialized(floor) && floor.getBuilding() != null && org.hibernate.Hibernate.isInitialized(floor.getBuilding())) 
+                    ? floor.getBuilding().getId() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public UUID getPropertyId() {
-        return floor != null && floor.getBuilding() != null && floor.getBuilding().getProperty() != null
-                ? floor.getBuilding().getProperty().getId() : null;
+        try {
+            return (floor != null && org.hibernate.Hibernate.isInitialized(floor) && floor.getBuilding() != null && org.hibernate.Hibernate.isInitialized(floor.getBuilding()) && floor.getBuilding().getProperty() != null && org.hibernate.Hibernate.isInitialized(floor.getBuilding().getProperty()))
+                    ? floor.getBuilding().getProperty().getId() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public void setFloor(Floor floor) {
@@ -142,6 +161,22 @@ public class Room {
 
     public void setBaseRent(BigDecimal baseRent) {
         this.baseRent = baseRent;
+    }
+
+    public String getWifiSsid() {
+        return wifiSsid;
+    }
+
+    public void setWifiSsid(String wifiSsid) {
+        this.wifiSsid = wifiSsid;
+    }
+
+    public String getWifiPassword() {
+        return wifiPassword;
+    }
+
+    public void setWifiPassword(String wifiPassword) {
+        this.wifiPassword = wifiPassword;
     }
 
     public String getStatus() {

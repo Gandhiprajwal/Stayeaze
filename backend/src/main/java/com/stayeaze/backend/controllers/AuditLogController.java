@@ -13,13 +13,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -32,41 +27,113 @@ public class AuditLogController {
     @Autowired
     private OrganizationRepository organizationRepository;
 
+    @Autowired
+    private com.stayeaze.backend.repository.UserRepository userRepository;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
-                .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
+        if (SecurityContextHolder.getContext().getAuthentication() == null) return null;
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof UserDetailsImpl userDetails) {
+            if (userDetails.getOrgId() != null) {
+                return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
+            }
+        }
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        if (username != null) {
+            com.stayeaze.backend.models.User user = userRepository.findByEmail(username).orElseGet(() ->
+                    userRepository.findByMobile(username).orElse(null));
+            if (user != null && user.getOrganization() != null) {
+                return user.getOrganization();
+            }
+        }
+        return organizationRepository.findAll().stream().findFirst().orElse(null);
+    }
+
+    private boolean isSuperAdminUser() {
+        if (SecurityContextHolder.getContext().getAuthentication() == null) return false;
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth.getAuthorities() != null) {
+            boolean hasSuperAdminRole = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_SUPER_ADMIN") || a.getAuthority().equalsIgnoreCase("SUPER_ADMIN"));
+            if (hasSuperAdminRole) return true;
+        }
+        if (auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
+            com.stayeaze.backend.models.User user = userRepository.findById(userDetails.getId()).orElse(null);
+            if (user != null && user.getRoles() != null) {
+                return user.getRoles().stream().anyMatch(r -> r.getName() != null && (r.getName().equalsIgnoreCase("SUPER_ADMIN") || r.getName().equalsIgnoreCase("ROLE_SUPER_ADMIN")));
+            }
+        }
+        return false;
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('OWNER') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getAuditLogs(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        boolean isSuperAdmin = isSuperAdminUser();
 
-        List<AuditLog> logs;
-        if (isSuperAdmin) {
-            logs = auditLogRepository.findAll();
-        } else {
-            Organization organization = getLoggedUserOrg();
-            logs = auditLogRepository.findByOrganization(organization);
+        int validatedPage = Math.max(0, page - 1);
+        int validatedSize = Math.max(1, Math.min(100, pageSize));
+        org.springframework.data.domain.Pageable pageable = 
+                org.springframework.data.domain.PageRequest.of(validatedPage, validatedSize, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "timestamp"));
+
+        org.springframework.data.domain.Page<AuditLog> logPage;
+        try {
+            if (isSuperAdmin) {
+                logPage = auditLogRepository.findAllByOrderByTimestampDesc(pageable);
+            } else {
+                Organization organization = getLoggedUserOrg();
+                if (organization != null) {
+                    logPage = auditLogRepository.findByOrganizationOrderByTimestampDesc(organization, pageable);
+                } else {
+                    logPage = auditLogRepository.findAllByOrderByTimestampDesc(pageable);
+                }
+            }
+        } catch (Exception e) {
+            logPage = auditLogRepository.findAll(pageable);
         }
 
-        List<Map<String, Object>> response = logs.stream().map(log -> {
+        if (logPage == null) {
+            Map<String, Object> emptyResponse = new HashMap<>();
+            emptyResponse.put("data", Collections.emptyList());
+            emptyResponse.put("currentPage", page);
+            emptyResponse.put("totalPages", 0);
+            emptyResponse.put("totalItems", 0);
+            emptyResponse.put("pageSize", validatedSize);
+            return ResponseEntity.ok(emptyResponse);
+        }
+
+        // Collect usernames from this page only to batch resolve roles without N+1 queries
+        Set<String> pageUsernames = logPage.getContent().stream()
+                .map(AuditLog::getUsername)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<String, String> userRoleMap = new HashMap<>();
+        for (String uname : pageUsernames) {
+            userRepository.findByEmail(uname).ifPresent(u -> {
+                if (u.getRoles() != null && !u.getRoles().isEmpty()) {
+                    String roleName = u.getRoles().iterator().next().getName();
+                    if (roleName != null) {
+                        String cleanRole = roleName.replace("ROLE_", "");
+                        userRoleMap.put(uname, cleanRole);
+                    }
+                }
+            });
+        }
+
+        List<Map<String, Object>> response = logPage.getContent().stream().map(log -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", log.getId());
             map.put("timestamp", log.getTimestamp());
-            map.put("user", log.getUsername());
+            map.put("user", log.getUsername() != null ? log.getUsername() : "system");
             map.put("ipAddress", log.getClientIp() != null ? log.getClientIp() : "127.0.0.1");
 
             String rawAction = log.getAction();
             String action = "UPDATE";
             String module = "system";
-            String details = rawAction;
+            String details = rawAction != null ? rawAction : "System operation";
 
             if (rawAction != null) {
                 String upper = rawAction.toUpperCase();
@@ -92,35 +159,36 @@ public class AuditLogController {
             map.put("action", action);
             map.put("module", module);
             map.put("entity", module);
-            map.put("entityId", log.getId().toString().substring(0, 8));
+            map.put("entityId", log.getId() != null ? log.getId().toString().substring(0, 8) : "");
             map.put("details", details);
-
-            String userRole = "ADMIN";
-            if (log.getUsername().contains("superadmin@stayeaze.com") || log.getUsername().contains("admin@stayeaze.com")) {
-                userRole = "SUPER_ADMIN";
-            } else if (log.getUsername().contains("owner") || log.getUsername().contains("rahul")) {
-                userRole = "ADMIN";
-            } else if (log.getUsername().contains("manager")) {
-                userRole = "PROPERTY_MANAGER";
-            } else if (log.getUsername().contains("tenant")) {
-                userRole = "TENANT";
-            }
-            map.put("userRole", userRole);
-
+            map.put("userRole", userRoleMap.getOrDefault(log.getUsername(), "ADMIN"));
             return map;
         }).collect(Collectors.toList());
 
-        return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(response, page, pageSize));
+        Map<String, Object> pageResponse = new HashMap<>();
+        pageResponse.put("data", response);
+        pageResponse.put("currentPage", page);
+        pageResponse.put("totalPages", logPage.getTotalPages());
+        pageResponse.put("totalItems", logPage.getTotalElements());
+        pageResponse.put("pageSize", validatedSize);
+        return ResponseEntity.ok(pageResponse);
     }
 
     @PostMapping
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> writeCustomAudit(@RequestParam String action, HttpServletRequest request) {
         Organization organization = getLoggedUserOrg();
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
+        if (organization == null) {
+            organization = organizationRepository.findAll().stream().findFirst().orElse(null);
+        }
         
-        String ip = request.getRemoteAddr();
-        AuditLog log = new AuditLog(organization, userDetails.getUsername(), action, ip);
+        String username = "system";
+        if (SecurityContextHolder.getContext().getAuthentication() != null) {
+            username = SecurityContextHolder.getContext().getAuthentication().getName();
+        }
+
+        String ip = request != null ? request.getRemoteAddr() : "127.0.0.1";
+        AuditLog log = new AuditLog(organization, username, action, ip);
         AuditLog saved = auditLogRepository.save(log);
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
     }

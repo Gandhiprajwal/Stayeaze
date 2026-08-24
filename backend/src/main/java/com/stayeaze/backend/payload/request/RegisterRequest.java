@@ -59,11 +59,21 @@ public class RegisterRequest {
         this.mobile = mobile;
     }
 
+    private String inviteCode;
+
     public String getPassword() {
         return password;
     }
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getInviteCode() {
+        return inviteCode;
+    }
+
+    public void setInviteCode(String inviteCode) {
+        this.inviteCode = inviteCode;
     }
 }

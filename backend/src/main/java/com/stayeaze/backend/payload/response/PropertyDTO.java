@@ -30,6 +30,7 @@ public class PropertyDTO implements Serializable {
     private String bankIfsc;
     private String upiVpa;
     private String authorizedSignatory;
+    private String gstin;
     private List<String> amenities = new ArrayList<>();
     private String status;
     private String currency;
@@ -71,6 +72,7 @@ public class PropertyDTO implements Serializable {
         dto.setBankIfsc(p.getBankIfsc());
         dto.setUpiVpa(p.getUpiVpa());
         dto.setAuthorizedSignatory(p.getAuthorizedSignatory());
+        dto.setGstin(p.getGstin());
         dto.setRazorpayKeyId(p.getRazorpayKeyId());
         dto.setHasRazorpaySecret(p.getRazorpayKeySecret() != null && !p.getRazorpayKeySecret().isBlank());
         if (p.getRazorpayKeySecret() != null && !p.getRazorpayKeySecret().isBlank()) {
@@ -98,10 +100,10 @@ public class PropertyDTO implements Serializable {
         if (p.getOrganization() != null) {
             try {
                 dto.setOrgId(p.getOrganization().getId());
+            } catch (Exception ignored) {}
+            try {
                 dto.setOrganizationName(p.getOrganization().getName());
-            } catch (Exception e) {
-                // ignore if uninitialized
-            }
+            } catch (Exception ignored) {}
         }
         return dto;
     }
@@ -207,4 +209,7 @@ public class PropertyDTO implements Serializable {
 
     public Boolean getHasRazorpaySecret() { return hasRazorpaySecret; }
     public void setHasRazorpaySecret(Boolean hasRazorpaySecret) { this.hasRazorpaySecret = hasRazorpaySecret; }
+
+    public String getGstin() { return gstin; }
+    public void setGstin(String gstin) { this.gstin = gstin; }
 }

@@ -4,8 +4,12 @@ import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 @Entity
 @Table(name = "complaints")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Complaint {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -13,10 +17,14 @@ public class Complaint {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tenant_id", nullable = false)
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
+    @JsonIgnore
     private Tenant tenant;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "room_id")
+    @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
+    @JsonIgnore
     private Room room;
 
     @Column(nullable = false, length = 50)
@@ -57,6 +65,14 @@ public class Complaint {
 
     public UUID getId() {
         return id;
+    }
+
+    public String getTicketNumber() {
+        if (id != null) {
+            String idStr = id.toString();
+            return "TKT-" + (idStr.length() >= 6 ? idStr.substring(0, 6) : idStr).toUpperCase();
+        }
+        return "TKT-000000";
     }
 
     public void setId(UUID id) {

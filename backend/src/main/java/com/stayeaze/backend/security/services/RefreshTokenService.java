@@ -2,6 +2,7 @@ package com.stayeaze.backend.security.services;
 
 import com.stayeaze.backend.exception.TokenRefreshException;
 import com.stayeaze.backend.models.RefreshToken;
+import com.stayeaze.backend.models.User;
 import com.stayeaze.backend.repository.RefreshTokenRepository;
 import com.stayeaze.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,14 +31,17 @@ public class RefreshTokenService {
 
     @Transactional
     public RefreshToken createRefreshToken(UUID userId) {
-        RefreshToken refreshToken = new RefreshToken();
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        RefreshToken refreshToken = refreshTokenRepository.findByUser(user).orElseGet(() -> {
+            RefreshToken rt = new RefreshToken();
+            rt.setUser(user);
+            return rt;
+        });
 
-        refreshToken.setUser(userRepository.findById(userId).get());
         refreshToken.setExpiryDate(OffsetDateTime.now().plusSeconds(refreshTokenDurationMs / 1000));
         refreshToken.setToken(UUID.randomUUID().toString());
 
-        refreshToken = refreshTokenRepository.save(refreshToken);
-        return refreshToken;
+        return refreshTokenRepository.save(refreshToken);
     }
 
     public RefreshToken verifyExpiration(RefreshToken token) {
@@ -47,6 +51,13 @@ public class RefreshTokenService {
         }
 
         return token;
+    }
+
+    @Transactional
+    public RefreshToken rotateRefreshToken(RefreshToken oldToken) {
+        UUID userId = oldToken.getUser().getId();
+        refreshTokenRepository.delete(oldToken);
+        return createRefreshToken(userId);
     }
 
     @Transactional

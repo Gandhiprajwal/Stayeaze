@@ -39,6 +39,8 @@ public class MinimalTenantDTO implements Serializable {
     private String emergencyName;
     private String emergencyContactMobile;
     private String emergencyContact;
+    private Boolean isAgreementAccepted;
+    private String agreementAcceptedAt;
 
     public MinimalTenantDTO() {
     }
@@ -71,6 +73,8 @@ public class MinimalTenantDTO implements Serializable {
         dto.setEmergencyName(t.getEmergencyContactName());
         dto.setEmergencyContactMobile(t.getEmergencyContactMobile());
         dto.setEmergencyContact(t.getEmergencyContactMobile());
+        dto.setIsAgreementAccepted(t.getIsAgreementAccepted());
+        dto.setAgreementAcceptedAt(t.getAgreementAcceptedAt() != null ? t.getAgreementAcceptedAt().toString() : null);
         return dto;
     }
 
@@ -148,4 +152,10 @@ public class MinimalTenantDTO implements Serializable {
 
     public String getEmergencyContact() { return emergencyContact; }
     public void setEmergencyContact(String emergencyContact) { this.emergencyContact = emergencyContact; }
+
+    public Boolean getIsAgreementAccepted() { return isAgreementAccepted; }
+    public void setIsAgreementAccepted(Boolean isAgreementAccepted) { this.isAgreementAccepted = isAgreementAccepted; }
+
+    public String getAgreementAcceptedAt() { return agreementAcceptedAt; }
+    public void setAgreementAcceptedAt(String agreementAcceptedAt) { this.agreementAcceptedAt = agreementAcceptedAt; }
 }

@@ -37,22 +37,46 @@ public class BedDTO implements Serializable {
         dto.setQrCode(b.getQrCode());
         dto.setTenantId(b.getTenantId());
         dto.setTenantName(b.getTenantName());
-        if (b.getRoom() != null) {
-            dto.setRoomId(b.getRoom().getId());
-            dto.setRoomNumber(b.getRoom().getRoomNumber());
-            if (b.getRoom().getFloor() != null) {
-                dto.setFloorId(b.getRoom().getFloor().getId());
-                dto.setFloorNumber(b.getRoom().getFloor().getFloorNumber());
-                if (b.getRoom().getFloor().getBuilding() != null) {
-                    dto.setBuildingId(b.getRoom().getFloor().getBuilding().getId());
-                    dto.setBuildingName(b.getRoom().getFloor().getBuilding().getName());
-                    if (b.getRoom().getFloor().getBuilding().getProperty() != null) {
-                        dto.setPropertyId(b.getRoom().getFloor().getBuilding().getProperty().getId());
-                        dto.setPropertyName(b.getRoom().getFloor().getBuilding().getProperty().getName());
-                    }
-                }
+        try {
+            if (b.getRoom() != null) {
+                dto.setRoomId(b.getRoom().getId());
             }
-        }
+        } catch (Exception ignored) {}
+        try {
+            if (b.getRoom() != null) {
+                dto.setRoomNumber(b.getRoom().getRoomNumber());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (b.getRoom() != null && b.getRoom().getFloor() != null) {
+                dto.setFloorId(b.getRoom().getFloor().getId());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (b.getRoom() != null && b.getRoom().getFloor() != null) {
+                dto.setFloorNumber(b.getRoom().getFloor().getFloorNumber());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (b.getRoom() != null && b.getRoom().getFloor() != null && b.getRoom().getFloor().getBuilding() != null) {
+                dto.setBuildingId(b.getRoom().getFloor().getBuilding().getId());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (b.getRoom() != null && b.getRoom().getFloor() != null && b.getRoom().getFloor().getBuilding() != null) {
+                dto.setBuildingName(b.getRoom().getFloor().getBuilding().getName());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (b.getRoom() != null && b.getRoom().getFloor() != null && b.getRoom().getFloor().getBuilding() != null && b.getRoom().getFloor().getBuilding().getProperty() != null) {
+                dto.setPropertyId(b.getRoom().getFloor().getBuilding().getProperty().getId());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (b.getRoom() != null && b.getRoom().getFloor() != null && b.getRoom().getFloor().getBuilding() != null && b.getRoom().getFloor().getBuilding().getProperty() != null) {
+                dto.setPropertyName(b.getRoom().getFloor().getBuilding().getProperty().getName());
+            }
+        } catch (Exception ignored) {}
         return dto;
     }
 

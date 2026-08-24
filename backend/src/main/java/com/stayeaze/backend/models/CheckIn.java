@@ -13,6 +13,7 @@ public class CheckIn {
     @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID id;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "org_id", nullable = false)
     private Organization organization;
@@ -52,6 +53,21 @@ public class CheckIn {
 
     @Column(name = "booking_id")
     private UUID bookingId;
+
+    @Column(name = "advance_amount", precision = 12, scale = 2)
+    private BigDecimal advanceAmount = BigDecimal.ZERO;
+
+    @Column(name = "tenant_email", length = 255)
+    private String tenantEmail;
+
+    @Column(name = "tenant_phone", length = 50)
+    private String tenantPhone;
+
+    @Column(name = "payment_method", length = 50)
+    private String paymentMethod;
+
+    @Column(name = "razorpay_payment_id", length = 100)
+    private String razorpayPaymentId;
 
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
@@ -169,6 +185,46 @@ public class CheckIn {
 
     public void setBookingId(UUID bookingId) {
         this.bookingId = bookingId;
+    }
+
+    public BigDecimal getAdvanceAmount() {
+        return advanceAmount;
+    }
+
+    public void setAdvanceAmount(BigDecimal advanceAmount) {
+        this.advanceAmount = advanceAmount;
+    }
+
+    public String getTenantEmail() {
+        return tenantEmail;
+    }
+
+    public void setTenantEmail(String tenantEmail) {
+        this.tenantEmail = tenantEmail;
+    }
+
+    public String getTenantPhone() {
+        return tenantPhone;
+    }
+
+    public void setTenantPhone(String tenantPhone) {
+        this.tenantPhone = tenantPhone;
+    }
+
+    public String getPaymentMethod() {
+        return paymentMethod;
+    }
+
+    public void setPaymentMethod(String paymentMethod) {
+        this.paymentMethod = paymentMethod;
+    }
+
+    public String getRazorpayPaymentId() {
+        return razorpayPaymentId;
+    }
+
+    public void setRazorpayPaymentId(String razorpayPaymentId) {
+        this.razorpayPaymentId = razorpayPaymentId;
     }
 
     public OffsetDateTime getCreatedAt() {

@@ -14,5 +14,7 @@ import java.util.UUID;
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     List<AuditLog> findByOrganization(Organization organization);
     Page<AuditLog> findByOrganization(Organization organization, Pageable pageable);
+    Page<AuditLog> findByOrganizationOrderByTimestampDesc(Organization organization, Pageable pageable);
     Page<AuditLog> findAll(Pageable pageable);
+    Page<AuditLog> findAllByOrderByTimestampDesc(Pageable pageable);
 }

@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -44,10 +45,29 @@ public class ComplaintController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private com.stayeaze.backend.services.EmailService emailService;
+
+    @Autowired
+    private com.stayeaze.backend.repository.PropertyRepository propertyRepository;
+
+    @Autowired
+    private com.stayeaze.backend.services.WebSocketNotificationService webSocketNotificationService;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof UserDetailsImpl) {
+            UserDetailsImpl userDetails = (UserDetailsImpl) principal;
+            return organizationRepository.findById(userDetails.getOrgId())
+                    .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
+        }
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByEmail(username).orElseGet(() ->
+                userRepository.findByMobile(username).orElse(null));
+        if (user != null && user.getOrganization() != null) {
+            return user.getOrganization();
+        }
+        return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
@@ -73,6 +93,26 @@ public class ComplaintController {
         }
 
         Complaint saved = complaintRepository.save(complaint);
+        broadcastComplaintCreated(saved);
+
+        try {
+            if (tenant.getEmail() != null && !tenant.getEmail().isBlank()) {
+                String pName = "StayEaze Residency";
+                if (tenant.getPropertyId() != null) {
+                    Property p = propertyRepository.findById(tenant.getPropertyId()).orElse(null);
+                    if (p != null) pName = p.getName();
+                }
+                emailService.sendComplaintFiledEmail(
+                        tenant.getEmail(),
+                        tenant.getName(),
+                        "TKT-" + (saved.getId().toString().substring(0, 6)).toUpperCase(),
+                        saved.getCategory(),
+                        saved.getDescription(),
+                        pName
+                );
+            }
+        } catch (Exception ignored) {}
+
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
     }
 
@@ -92,24 +132,114 @@ public class ComplaintController {
         return ResponseEntity.ok(dtos);
     }
 
-    @GetMapping("/complaints")
-    public ResponseEntity<?> getFlatComplaints() {
+    @GetMapping({"/complaints/stats", "/tenant-portal/complaints/stats"})
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> getComplaintStats(@RequestParam(required = false) UUID propertyId) {
         Organization organization = getLoggedUserOrg();
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        List<Complaint> complaints = (organization != null)
+                ? complaintRepository.findByOrganizationIdAndOptionalPropertyId(organization.getId(), propertyId)
+                : java.util.Collections.emptyList();
 
-        List<Complaint> complaints = complaintRepository.findByOrganizationId(organization.getId());
-        if (!isSuperAdmin) {
+        long openCount = 0;
+        long inProgressCount = 0;
+        long resolvedCount = 0;
+        long closedCount = 0;
+
+        for (Complaint c : complaints) {
+            String status = c.getStatus() != null ? c.getStatus().toUpperCase() : "OPEN";
+            if ("OPEN".equals(status)) {
+                openCount++;
+            } else if ("IN_PROGRESS".equals(status)) {
+                inProgressCount++;
+            } else if ("RESOLVED".equals(status)) {
+                resolvedCount++;
+            } else if ("CLOSED".equals(status)) {
+                closedCount++;
+            }
+        }
+
+        java.util.Map<String, Object> stats = new java.util.HashMap<>();
+        stats.put("totalComplaints", complaints.size());
+        stats.put("openComplaints", openCount);
+        stats.put("inProgressComplaints", inProgressCount);
+        stats.put("resolvedComplaints", resolvedCount);
+        stats.put("closedComplaints", closedCount);
+
+        return ResponseEntity.ok(stats);
+    }
+
+    private Tenant getAuthenticatedTenant() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!(principal instanceof UserDetailsImpl userDetails)) {
+            return null;
+        }
+        User user = userRepository.findById(userDetails.getId()).orElse(null);
+        if (user == null) return null;
+
+        Organization userOrg = user.getOrganization();
+        if (user.getTenantId() != null) {
+            Tenant t = tenantRepository.findByIdSuperAdmin(user.getTenantId()).orElse(null);
+            if (t != null) return t;
+        }
+
+        List<Tenant> tenants = userOrg != null
+                ? tenantRepository.findByOrganizationIdNative(userOrg.getId())
+                : tenantRepository.findAllSuperAdmin();
+
+        for (Tenant t : tenants) {
+            if ("CHECKED_OUT".equalsIgnoreCase(t.getStatus()) || "ARCHIVED".equalsIgnoreCase(t.getStatus())) {
+                continue;
+            }
+            if (t.getEmail() != null && user.getEmail() != null && t.getEmail().trim().equalsIgnoreCase(user.getEmail().trim())) {
+                return t;
+            }
+            if (t.getMobile() != null && user.getMobile() != null && t.getMobile().trim().equals(user.getMobile().trim())) {
+                return t;
+            }
+        }
+        return null;
+    }
+
+    @GetMapping("/complaints")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('STAFF') or hasRole('TENANT')")
+    public ResponseEntity<?> getFlatComplaints() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        UserDetailsImpl userDetails = (principal instanceof UserDetailsImpl) ? (UserDetailsImpl) principal : null;
+
+        boolean isTenant = SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(auth -> auth.getAuthority().equalsIgnoreCase("ROLE_TENANT") || auth.getAuthority().equalsIgnoreCase("TENANT"));
+
+        if (isTenant && userDetails != null) {
+            Tenant tenant = getAuthenticatedTenant();
+            if (tenant != null) {
+                List<Complaint> tenantComplaints = complaintRepository.findByTenant(tenant);
+                List<ComplaintDTO> dtos = tenantComplaints.stream()
+                        .map(ComplaintDTO::fromEntity)
+                        .collect(Collectors.toList());
+                return ResponseEntity.ok(dtos);
+            }
+        }
+
+        Organization organization = getLoggedUserOrg();
+        List<Complaint> complaints = complaintRepository.findByOrganizationIdNative(organization.getId());
+        if (userDetails != null) {
             User user = userRepository.findById(userDetails.getId()).orElse(null);
             if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
                 List<UUID> assignedProps = user.getPropertyIds();
-                complaints = complaints.stream()
-                        .filter(c -> c.getTenant() != null && c.getTenant().getPropertyId() != null
-                                && assignedProps.contains(c.getTenant().getPropertyId()))
+                List<Complaint> filtered = complaints.stream()
+                        .filter(c -> {
+                            try {
+                                return c.getTenant() != null && c.getTenant().getPropertyId() != null
+                                        && assignedProps.contains(c.getTenant().getPropertyId());
+                            } catch (Exception ignored) {
+                                return true;
+                            }
+                        })
                         .collect(java.util.stream.Collectors.toList());
+                if (!filtered.isEmpty()) {
+                    complaints = filtered;
+                }
             }
         }
         List<ComplaintDTO> dtos = complaints.stream()
@@ -144,10 +274,28 @@ public class ComplaintController {
         }
         if ("RESOLVED".equals(status)) {
             complaint.setResolvedAt(OffsetDateTime.now());
+
+            try {
+                if (tenant.getEmail() != null && !tenant.getEmail().isBlank()) {
+                    String pName = "StayEaze Residency";
+                    if (tenant.getPropertyId() != null) {
+                        Property p = propertyRepository.findById(tenant.getPropertyId()).orElse(null);
+                        if (p != null) pName = p.getName();
+                    }
+                    emailService.sendComplaintResolvedEmail(
+                            tenant.getEmail(),
+                            tenant.getName(),
+                            "TKT-" + (complaint.getId().toString().substring(0, 6)).toUpperCase(),
+                            complaint.getCategory(),
+                            pName
+                    );
+                }
+            } catch (Exception ignored) {}
         }
 
         Complaint updated = complaintRepository.save(complaint);
-        return ResponseEntity.ok(updated);
+        broadcastComplaintUpdated(updated);
+        return ResponseEntity.ok(ComplaintDTO.fromEntity(updated));
     }
 
     @PutMapping("/tenants/{tenantId}/complaints/{id}/feedback")
@@ -210,11 +358,12 @@ public class ComplaintController {
         complaint.setPriority(priority);
         if (assignedStaff != null) complaint.setAssignedStaff(assignedStaff);
         Complaint saved = complaintRepository.save(complaint);
+        broadcastComplaintCreated(saved);
         return new ResponseEntity<>(ComplaintDTO.fromEntity(saved), HttpStatus.CREATED);
     }
 
     @PutMapping("/complaints/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('STAFF')")
     public ResponseEntity<?> updateComplaintAdmin(@PathVariable UUID id, @RequestBody java.util.Map<String, Object> body) {
         Complaint complaint = complaintRepository.findById(id).orElse(null);
         if (complaint == null) {
@@ -238,6 +387,7 @@ public class ComplaintController {
         }
 
         Complaint updated = complaintRepository.save(complaint);
+        broadcastComplaintUpdated(updated);
         return ResponseEntity.ok(ComplaintDTO.fromEntity(updated));
     }
 
@@ -256,5 +406,46 @@ public class ComplaintController {
             complaintRepository.deleteAllById(ids);
         }
         return ResponseEntity.ok(new MessageResponse("Complaints deleted successfully."));
+    }
+
+    private void broadcastComplaintCreated(Complaint saved) {
+        try {
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("type", "COMPLAINT_CREATED");
+            payload.put("title", "🛠️ New Complaint Ticket!");
+            payload.put("message", (saved.getTicketNumber() != null ? saved.getTicketNumber() : "TKT") + ": " + (saved.getDescription() != null ? saved.getDescription() : "New complaint logged"));
+            payload.put("complaintId", saved.getId());
+            payload.put("ticketNumber", saved.getTicketNumber());
+            payload.put("status", saved.getStatus());
+            payload.put("category", saved.getCategory());
+
+            webSocketNotificationService.broadcastTopic("/topic/complaints", payload);
+            if (saved.getTenant() != null && saved.getTenant().getEmail() != null) {
+                userRepository.findByEmail(saved.getTenant().getEmail()).ifPresent(tu -> {
+                    webSocketNotificationService.broadcastTopic("/topic/notifications/" + tu.getId(), payload);
+                });
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private void broadcastComplaintUpdated(Complaint saved) {
+        try {
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("type", "COMPLAINT_UPDATED");
+            payload.put("title", "📋 Complaint Status Updated!");
+            payload.put("message", (saved.getTicketNumber() != null ? saved.getTicketNumber() : "Complaint") + " status is now " + saved.getStatus());
+            payload.put("complaintId", saved.getId());
+            payload.put("ticketNumber", saved.getTicketNumber());
+            payload.put("status", saved.getStatus());
+            payload.put("category", saved.getCategory());
+
+            webSocketNotificationService.broadcastTopic("/topic/complaints", payload);
+            webSocketNotificationService.broadcastTopic("/topic/complaints/" + saved.getId(), payload);
+            if (saved.getTenant() != null && saved.getTenant().getEmail() != null) {
+                userRepository.findByEmail(saved.getTenant().getEmail()).ifPresent(tu -> {
+                    webSocketNotificationService.broadcastTopic("/topic/notifications/" + tu.getId(), payload);
+                });
+            }
+        } catch (Exception ignored) {}
     }
 }

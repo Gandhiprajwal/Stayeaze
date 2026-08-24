@@ -38,6 +38,12 @@ public class PaymentController {
     @Autowired
     private OrganizationRepository organizationRepository;
 
+    @Autowired
+    private com.stayeaze.backend.services.InvoiceSequenceService invoiceSequenceService;
+
+    @Autowired
+    private com.stayeaze.backend.services.UserJourneyAuditService userJourneyAuditService;
+
     private Organization getLoggedUserOrg() {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
@@ -92,10 +98,25 @@ public class PaymentController {
         payment.setReceiptUrl("https://stayeaze-receipts.s3.amazonaws.com/receipts/" + receiptNumber + ".pdf");
 
         Payment saved = paymentRepository.save(payment);
+
+        userJourneyAuditService.logPayment(
+                tenant.getOrganization(),
+                null,
+                tenant.getEmail(),
+                "TENANT_RENT",
+                "RENT_PAYMENT_COLLECTED",
+                "SUCCESS",
+                receiptNumber,
+                request.getAmount(),
+                java.util.Map.of("invoiceId", invoiceId.toString(), "method", request.getPaymentMethod(), "transactionRef", request.getTransactionReference() != null ? request.getTransactionReference() : ""),
+                null
+        );
+
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
     }
 
     @GetMapping("/tenants/{tenantId}/invoices/{invoiceId}/payments")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> getInvoicePayments(@PathVariable UUID tenantId, @PathVariable UUID invoiceId) {
         Tenant tenant;
         try {
@@ -133,6 +154,18 @@ public class PaymentController {
         String collectedBy = (String) req.get("collectedBy");
         String paymentReference = (String) req.get("paymentReference");
 
+        String tenantIdStr = (String) req.get("tenantId");
+        Tenant tenant = null;
+        if (tenantIdStr != null && !tenantIdStr.isBlank()) {
+            try {
+                tenant = tenantRepository.findById(UUID.fromString(tenantIdStr)).orElse(null);
+            } catch (Exception ignored) {}
+        }
+        if (tenant != null && tenant.getOrganization() == null) {
+            tenant.setOrganization(organization);
+            tenant = tenantRepository.save(tenant);
+        }
+
         // Find or associate an invoice for this payment
         Invoice invoice = null;
         String invoiceIdStr = (String) req.get("invoiceId");
@@ -141,24 +174,44 @@ public class PaymentController {
                 invoice = invoiceRepository.findById(UUID.fromString(invoiceIdStr)).orElse(null);
             } catch (Exception ignored) {}
         }
-        if (invoice == null) {
-            List<Invoice> invs = invoiceRepository.findAll().stream()
-                    .filter(i -> i.getTenant() != null && i.getTenant().getOrganization() != null && i.getTenant().getOrganization().getId().equals(organization.getId()))
-                    .toList();
-            if (!invs.isEmpty()) {
-                invoice = invs.get(0);
+
+        if (invoice == null && tenant != null) {
+            List<Invoice> tenantInvoices = invoiceRepository.findByTenant(tenant);
+            invoice = tenantInvoices.stream()
+                    .filter(i -> i != null && !"PAID".equalsIgnoreCase(i.getStatus()))
+                    .findFirst()
+                    .orElse(null);
+            if (invoice != null) {
+                BigDecimal currentPaid = (invoice.getAmountPaid() != null ? invoice.getAmountPaid() : BigDecimal.ZERO).add(amount);
+                invoice.setAmountPaid(currentPaid);
+                if (currentPaid.compareTo(invoice.getAmountDue()) >= 0) {
+                    invoice.setStatus("PAID");
+                } else if (currentPaid.compareTo(BigDecimal.ZERO) > 0) {
+                    invoice.setStatus("PARTIALLY_PAID");
+                }
+                invoice = invoiceRepository.save(invoice);
             }
         }
+
         if (invoice == null) {
-            // Pick any tenant in org to attach invoice
-            List<Tenant> tenants = tenantRepository.findByOrganization(organization);
-            if (tenants.isEmpty()) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: Please register at least one tenant before recording payments."));
+            if (tenant == null) {
+                List<Tenant> tenants = tenantRepository.findByOrganization(organization);
+                if (tenants.isEmpty()) {
+                    return ResponseEntity.badRequest().body(new MessageResponse("Error: Please register at least one tenant before recording payments."));
+                }
+                tenant = tenants.get(0);
             }
-            Tenant t = tenants.get(0);
-            invoice = new Invoice(t, "INV-" + System.currentTimeMillis(), java.time.LocalDate.now().plusDays(7), java.time.LocalDate.now(), amount);
+
+            // Record as Advance Rent Credit Balance for the Tenant
+            tenant.setAdvanceBalance(tenant.getAdvanceBalance().add(amount));
+            tenant = tenantRepository.save(tenant);
+
+            String advInvoiceNo = "ADV-" + invoiceSequenceService.nextRentalInvoiceNumber(tenant);
+            invoice = new Invoice(tenant, advInvoiceNo, java.time.LocalDate.now().plusDays(30), java.time.LocalDate.now(), amount);
             invoice.setStatus("PAID");
             invoice.setAmountPaid(amount);
+            invoice.setPaymentMethod(method != null ? method.toUpperCase() : "CASH");
+            invoice.setPaymentReference(paymentReference != null ? paymentReference : "ADV-RCPT-" + System.currentTimeMillis());
             invoice = invoiceRepository.save(invoice);
         }
 
@@ -186,6 +239,8 @@ public class PaymentController {
     }
 
     @GetMapping("/payments")
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('ACCOUNTANT') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> getFlatPayments(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize,

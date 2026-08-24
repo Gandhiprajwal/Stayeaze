@@ -26,6 +26,18 @@ public class Organization {
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
+    @Column(name = "gst_enabled")
+    private Boolean gstEnabled = false;
+
+    @Column(name = "gstin", length = 20)
+    private String gstin;
+
+    @Column(name = "gst_trade_name", length = 150)
+    private String gstTradeName;
+
+    @Column(name = "default_gst_rate", precision = 5, scale = 2)
+    private java.math.BigDecimal defaultGstRate = new java.math.BigDecimal("18.00");
+
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt = OffsetDateTime.now();
 
@@ -75,6 +87,38 @@ public class Organization {
 
     public void setCreatedAt(OffsetDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Boolean getGstEnabled() {
+        return gstEnabled != null ? gstEnabled : false;
+    }
+
+    public void setGstEnabled(Boolean gstEnabled) {
+        this.gstEnabled = gstEnabled;
+    }
+
+    public String getGstin() {
+        return gstin;
+    }
+
+    public void setGstin(String gstin) {
+        this.gstin = gstin;
+    }
+
+    public String getGstTradeName() {
+        return gstTradeName;
+    }
+
+    public void setGstTradeName(String gstTradeName) {
+        this.gstTradeName = gstTradeName;
+    }
+
+    public java.math.BigDecimal getDefaultGstRate() {
+        return defaultGstRate != null ? defaultGstRate : new java.math.BigDecimal("18.00");
+    }
+
+    public void setDefaultGstRate(java.math.BigDecimal defaultGstRate) {
+        this.defaultGstRate = defaultGstRate;
     }
 
     public OffsetDateTime getUpdatedAt() {

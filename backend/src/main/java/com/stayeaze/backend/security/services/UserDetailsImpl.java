@@ -31,6 +31,26 @@ public class UserDetailsImpl implements UserDetails {
         this.authorities = authorities;
     }
 
+    public static UserDetailsImpl build(com.stayeaze.backend.models.User user) {
+        if (user == null) return null;
+        List<SimpleGrantedAuthority> authorities = user.getRoles() != null ? user.getRoles().stream()
+                .map(role -> {
+                    String roleName = role.getName();
+                    if (!roleName.startsWith("ROLE_")) {
+                        roleName = "ROLE_" + roleName;
+                    }
+                    return new SimpleGrantedAuthority(roleName.toUpperCase());
+                })
+                .collect(java.util.stream.Collectors.toList()) : java.util.Collections.emptyList();
+
+        return new UserDetailsImpl(
+                user.getId(),
+                user.getOrganization() != null ? user.getOrganization().getId() : null,
+                user.getEmail(),
+                user.getPassword(),
+                authorities);
+    }
+
     public UUID getId() {
         return id;
     }

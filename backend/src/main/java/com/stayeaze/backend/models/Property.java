@@ -1,6 +1,7 @@
 package com.stayeaze.backend.models;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.TenantId;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +13,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 @Entity
 @Table(name = "properties")
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+@JsonIgnoreProperties({ "hibernateLazyInitializer", "handler" })
 public class Property {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
@@ -21,6 +22,10 @@ public class Property {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "org_id", nullable = false)
     private Organization organization;
+
+    @TenantId
+    @Column(name = "org_id", insertable = false, updatable = false)
+    private UUID tenantOrgId;
 
     @Column(nullable = false, length = 150)
     private String name;
@@ -76,14 +81,26 @@ public class Property {
     @Column(name = "upi_vpa", length = 100)
     private String upiVpa = "stayeaze@icici";
 
+    @Column(name = "wifi_ssid", length = 150)
+    private String wifiSsid;
+
+    @Column(name = "wifi_password", length = 150)
+    private String wifiPassword;
+
     @Column(name = "authorized_signatory", length = 150)
     private String authorizedSignatory = "StayEaze Management Authorized Signatory";
+
+    @Column(name = "gstin", length = 20)
+    private String gstin;
 
     @Column(name = "razorpay_key_id", length = 255)
     private String razorpayKeyId;
 
     @Column(name = "razorpay_key_secret", length = 255)
     private String razorpayKeySecret;
+
+    @Column(name = "security_deposit", precision = 12, scale = 2)
+    private java.math.BigDecimal securityDeposit = new java.math.BigDecimal("0");
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "property_amenities", joinColumns = @JoinColumn(name = "property_id"))
@@ -222,6 +239,22 @@ public class Property {
         this.code = code;
     }
 
+    public String getWifiSsid() {
+        return wifiSsid;
+    }
+
+    public void setWifiSsid(String wifiSsid) {
+        this.wifiSsid = wifiSsid;
+    }
+
+    public String getWifiPassword() {
+        return wifiPassword;
+    }
+
+    public void setWifiPassword(String wifiPassword) {
+        this.wifiPassword = wifiPassword;
+    }
+
     public String getType() {
         return type != null ? type : "CO_LIVING";
     }
@@ -342,6 +375,14 @@ public class Property {
         this.authorizedSignatory = authorizedSignatory;
     }
 
+    public String getGstin() {
+        return gstin;
+    }
+
+    public void setGstin(String gstin) {
+        this.gstin = gstin;
+    }
+
     public String getRazorpayKeyId() {
         return razorpayKeyId;
     }
@@ -388,5 +429,13 @@ public class Property {
 
     public void setOccupiedBeds(Integer occupiedBeds) {
         this.occupiedBeds = occupiedBeds;
+    }
+
+    public java.math.BigDecimal getSecurityDeposit() {
+        return securityDeposit != null ? securityDeposit : java.math.BigDecimal.ZERO;
+    }
+
+    public void setSecurityDeposit(java.math.BigDecimal securityDeposit) {
+        this.securityDeposit = securityDeposit;
     }
 }

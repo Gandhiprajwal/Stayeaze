@@ -26,12 +26,21 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     @Autowired
     private UserDetailsServiceImpl userDetailsService;
 
+    @Autowired
+    private com.stayeaze.backend.security.services.TokenBlacklistService tokenBlacklistService;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, java.io.IOException {
         try {
             String jwt = parseJwt(request);
             if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
+                if (tokenBlacklistService.isBlacklisted(jwt)) {
+                    logger.warn("Blocked request with blacklisted/revoked JWT token on {} {}", request.getMethod(), request.getServletPath());
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token has been revoked/logged out");
+                    return;
+                }
+
                 String username = jwtUtils.getUserNameFromJwtToken(jwt);
 
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
@@ -57,6 +66,16 @@ public class AuthTokenFilter extends OncePerRequestFilter {
 
         if (StringUtils.hasText(headerAuth) && headerAuth.startsWith("Bearer ")) {
             return headerAuth.substring(7);
+        }
+
+        String paramToken = request.getParameter("token");
+        if (StringUtils.hasText(paramToken)) {
+            return paramToken;
+        }
+
+        String paramAccessToken = request.getParameter("access_token");
+        if (StringUtils.hasText(paramAccessToken)) {
+            return paramAccessToken;
         }
 
         return null;

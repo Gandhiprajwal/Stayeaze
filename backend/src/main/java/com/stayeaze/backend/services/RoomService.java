@@ -87,7 +87,7 @@ public class RoomService {
     @Transactional(readOnly = true)
     @Cacheable(value = "rooms_v3", key = "#organization != null ? #organization.id.toString() : 'all_super_admin'")
     public List<RoomDTO> getRoomsByOrg(Organization organization) {
-        List<Room> list = organization == null ? roomRepository.findAll()
+        List<Room> list = organization == null ? roomRepository.findAllSuperAdmin()
                 : roomRepository.findByOrganizationId(organization.getId(), org.springframework.data.domain.Pageable.unpaged()).getContent();
         return list.stream()
                 .map(r -> RoomDTO.fromEntity(populateRoomStats(r, organization)))
@@ -95,14 +95,42 @@ public class RoomService {
     }
 
     @Caching(evict = {
-        @CacheEvict(value = "rooms_v3", allEntries = true)
+        @CacheEvict(value = "floors_v2", allEntries = true),
+        @CacheEvict(value = "rooms_v3", allEntries = true),
+        @CacheEvict(value = "beds_v3", allEntries = true),
+        @CacheEvict(value = "tenants", allEntries = true),
+        @CacheEvict(value = "buildings", allEntries = true),
+        @CacheEvict(value = "propertyDtos", allEntries = true),
+        @CacheEvict(value = "minimalProperties", allEntries = true),
+        @CacheEvict(value = "properties-minimal", allEntries = true),
+        @CacheEvict(value = "tenants-minimal", allEntries = true)
     })
     public Room saveRoom(Room room) {
-        return roomRepository.save(room);
+        Room saved = roomRepository.save(room);
+        if (saved != null) {
+            int max = saved.getSharing() != null && saved.getSharing() > 0 ? saved.getSharing() : 1;
+            for (int i = 1; i <= max; i++) {
+                String bedNo = "B" + i;
+                if (!Boolean.TRUE.equals(bedRepository.existsByRoomIdAndBedNumber(saved.getId(), bedNo))) {
+                    com.stayeaze.backend.models.Bed b = new com.stayeaze.backend.models.Bed(saved, bedNo);
+                    b.setStatus("AVAILABLE");
+                    try { bedRepository.save(b); } catch (Exception ignored) {}
+                }
+            }
+        }
+        return saved;
     }
 
     @Caching(evict = {
-        @CacheEvict(value = "rooms_v3", allEntries = true)
+        @CacheEvict(value = "floors_v2", allEntries = true),
+        @CacheEvict(value = "rooms_v3", allEntries = true),
+        @CacheEvict(value = "beds_v3", allEntries = true),
+        @CacheEvict(value = "tenants", allEntries = true),
+        @CacheEvict(value = "buildings", allEntries = true),
+        @CacheEvict(value = "propertyDtos", allEntries = true),
+        @CacheEvict(value = "minimalProperties", allEntries = true),
+        @CacheEvict(value = "properties-minimal", allEntries = true),
+        @CacheEvict(value = "tenants-minimal", allEntries = true)
     })
     public void deleteRoom(UUID id) {
         roomRepository.deleteById(id);

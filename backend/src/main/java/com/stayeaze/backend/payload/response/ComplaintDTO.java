@@ -36,13 +36,27 @@ public class ComplaintDTO implements Serializable {
         if (c == null) return null;
         ComplaintDTO dto = new ComplaintDTO();
         dto.setId(c.getId());
-        dto.setTicketNumber("TKT-" + c.getId().toString().substring(0, 6).toUpperCase());
-        if (c.getTenant() != null) {
-            dto.setTenantId(c.getTenant().getId());
-            dto.setTenantName(c.getTenant().getFirstName() + " " + c.getTenant().getLastName());
-            dto.setPropertyId(c.getTenant().getPropertyId());
-            dto.setRoomNumber(c.getTenant().getRoomNumber());
+        if (c.getId() != null) {
+            String idStr = c.getId().toString();
+            dto.setTicketNumber("TKT-" + (idStr.length() >= 6 ? idStr.substring(0, 6) : idStr).toUpperCase());
+        } else {
+            dto.setTicketNumber("TKT-000000");
         }
+        try {
+            if (c.getTenant() != null) {
+                dto.setTenantId(c.getTenant().getId());
+                dto.setTenantName((c.getTenant().getFirstName() != null ? c.getTenant().getFirstName() : "") + " " +
+                                  (c.getTenant().getLastName() != null ? c.getTenant().getLastName() : ""));
+                dto.setPropertyId(c.getTenant().getPropertyId());
+                if (c.getRoom() != null && c.getRoom().getRoomNumber() != null) {
+                    dto.setRoomNumber(c.getRoom().getRoomNumber());
+                } else {
+                    dto.setRoomNumber(c.getTenant().getRoomNumber());
+                }
+            } else if (c.getRoom() != null && c.getRoom().getRoomNumber() != null) {
+                dto.setRoomNumber(c.getRoom().getRoomNumber());
+            }
+        } catch (Exception ignored) {}
         dto.setCategory(c.getCategory());
         dto.setDescription(c.getDescription());
         dto.setStatus(c.getStatus() != null ? c.getStatus().toLowerCase() : "open");

@@ -8,6 +8,7 @@ import com.stayeaze.backend.models.Property;
 import com.stayeaze.backend.models.Room;
 import com.stayeaze.backend.payload.request.RoomRequest;
 import com.stayeaze.backend.payload.response.MessageResponse;
+import com.stayeaze.backend.payload.response.RoomDTO;
 import com.stayeaze.backend.models.Tenant;
 import com.stayeaze.backend.repository.TenantRepository;
 import com.stayeaze.backend.repository.BedRepository;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -59,16 +61,20 @@ public class RoomController {
 
     private Room populateRoomStats(Room room) {
         if (room == null) return null;
-        List<Bed> beds = bedRepository.findByRoom(room);
+        List<Bed> beds = bedRepository.findByRoomId(room.getId());
 
         // If no beds exist for this room yet, auto-create beds based on sharing capacity
-        if (beds.isEmpty() && room.getSharing() != null && room.getSharing() > 0) {
+        if ((beds == null || beds.isEmpty()) && room.getSharing() != null && room.getSharing() > 0) {
             for (int i = 1; i <= room.getSharing(); i++) {
-                Bed b = new Bed(room, "B" + i);
-                bedRepository.save(b);
+                String bedNo = "B" + i;
+                if (!Boolean.TRUE.equals(bedRepository.existsByRoomIdAndBedNumber(room.getId(), bedNo))) {
+                    Bed b = new Bed(room, bedNo);
+                    try { bedRepository.save(b); } catch (Exception ignored) {}
+                }
             }
-            beds = bedRepository.findByRoom(room);
+            beds = bedRepository.findByRoomId(room.getId());
         }
+        if (beds == null) beds = java.util.Collections.emptyList();
 
         room.setBeds(beds.size());
 
@@ -181,7 +187,8 @@ public class RoomController {
 
         List<Room> rooms = roomRepository.findByFloor(floor);
         rooms.forEach(this::populateRoomStats);
-        return ResponseEntity.ok(rooms);
+        List<RoomDTO> dtos = rooms.stream().map(RoomDTO::fromEntity).collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
     @GetMapping("/rooms")
@@ -230,6 +237,10 @@ public class RoomController {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: Room number already exists on this floor!"));
         }
 
+        if (request.getWifiPassword() != null && !request.getWifiPassword().isBlank() && request.getWifiPassword().trim().length() < 8) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Wi-Fi password must be at least 8 characters long."));
+        }
+
         room.setRoomNumber(request.getRoomNumber());
         room.setSharingType(request.getSharingType());
         room.setBaseRent(request.getBaseRent());
@@ -238,6 +249,12 @@ public class RoomController {
         }
         if (request.getAmenities() != null) {
             room.setAmenities(request.getAmenities());
+        }
+        if (request.getWifiSsid() != null) {
+            room.setWifiSsid(request.getWifiSsid());
+        }
+        if (request.getWifiPassword() != null) {
+            room.setWifiPassword(request.getWifiPassword());
         }
 
         Room updated = roomService.saveRoom(room);
@@ -267,8 +284,65 @@ public class RoomController {
         return ResponseEntity.ok(new MessageResponse("Room successfully archived."));
     }
 
+    private boolean isSuperAdminUser() {
+        if (SecurityContextHolder.getContext().getAuthentication() == null) return false;
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth.getAuthorities() != null) {
+            boolean hasSuperAdminRole = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_SUPER_ADMIN") || a.getAuthority().equalsIgnoreCase("SUPER_ADMIN"));
+            if (hasSuperAdminRole) return true;
+        }
+        return false;
+    }
+
+    private boolean isBuildingAuthorizedForUser(Building building) {
+        if (building == null || building.getId() == null) return false;
+        if (isSuperAdminUser()) return true;
+        try {
+            Organization organization = getLoggedUserOrg();
+            if (organization == null) return false;
+            UUID propId = buildingRepository.findPropertyIdByBuildingId(building.getId());
+            if (propId != null) {
+                Property prop = propertyRepository.findByIdSuperAdmin(propId).orElse(null);
+                if (prop != null && prop.getOrganization() != null) {
+                    return prop.getOrganization().getId().equals(organization.getId());
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private boolean isFloorAuthorizedForUser(Floor floor) {
+        if (floor == null || floor.getId() == null) return false;
+        if (isSuperAdminUser()) return true;
+        try {
+            UUID bldgId = floorRepository.findBuildingIdByFloorId(floor.getId());
+            if (bldgId != null) {
+                Building b = buildingRepository.findById(bldgId).orElse(new Building());
+                if (b.getId() == null) b.setId(bldgId);
+                return isBuildingAuthorizedForUser(b);
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private boolean isRoomAuthorizedForUser(Room room) {
+        if (room == null || room.getId() == null) return false;
+        if (isSuperAdminUser()) return true;
+        try {
+            UUID floorId = roomRepository.findFloorIdByRoomId(room.getId());
+            if (floorId != null) {
+                Floor f = floorRepository.findById(floorId).orElse(new Floor());
+                if (f.getId() == null) f.setId(floorId);
+                return isFloorAuthorizedForUser(f);
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    @org.springframework.transaction.annotation.Transactional
     @PostMapping("/rooms")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> createFlatRoom(@RequestBody RoomRequest request) {
         UUID floorId = request.getFloorId();
         if (floorId == null) {
@@ -310,10 +384,17 @@ public class RoomController {
         return new ResponseEntity<>(populated, HttpStatus.CREATED);
     }
 
-    private void updatePropertyAndBuildingStats(Floor floor) {
+    @org.springframework.transaction.annotation.Transactional
+    protected void updatePropertyAndBuildingStats(Floor floor) {
         if (floor == null) return;
         try {
-            Building building = floor.getBuilding();
+            UUID bldgId = floorRepository.findBuildingIdByFloorId(floor.getId());
+            if (bldgId == null) {
+                try { bldgId = floor.getBuilding() != null ? floor.getBuilding().getId() : null; } catch (Exception ignored) {}
+            }
+            if (bldgId == null) return;
+
+            Building building = buildingRepository.findById(bldgId).orElse(null);
             if (building != null) {
                 List<Floor> bFloors = floorRepository.findByBuilding(building);
                 int totalBldRooms = 0;
@@ -321,11 +402,11 @@ public class RoomController {
                 int occupiedBldBeds = 0;
                 for (Floor f : bFloors) {
                     List<Room> fRooms = roomRepository.findByFloor(f);
+                    totalBldRooms += fRooms.size();
                     for (Room r : fRooms) {
-                        populateRoomStats(r);
-                        totalBldRooms++;
-                        totalBldBeds += r.getBeds();
-                        occupiedBldBeds += r.getOccupied();
+                        List<Bed> rBeds = bedRepository.findByRoomId(r.getId());
+                        totalBldBeds += rBeds.size();
+                        occupiedBldBeds += (int) rBeds.stream().filter(b -> "OCCUPIED".equalsIgnoreCase(b.getStatus())).count();
                     }
                 }
                 building.setRooms(totalBldRooms);
@@ -333,44 +414,51 @@ public class RoomController {
                 building.setOccupied(occupiedBldBeds);
                 buildingRepository.save(building);
 
-                Property property = building.getProperty();
-                if (property != null) {
-                    List<Building> pBuildings = buildingRepository.findByProperty(property);
-                    int totalPropRooms = 0;
-                    int totalPropBeds = 0;
-                    int occupiedPropBeds = 0;
-                    for (Building b : pBuildings) {
-                        totalPropRooms += b.getRooms();
-                        totalPropBeds += b.getBeds();
-                        occupiedPropBeds += b.getOccupied();
+                UUID propId = buildingRepository.findPropertyIdByBuildingId(building.getId());
+                if (propId != null) {
+                    Property property = propertyRepository.findByIdSuperAdmin(propId).orElse(null);
+                    if (property != null) {
+                        List<Building> pBuildings = buildingRepository.findByProperty(property);
+                        int totalPropRooms = 0;
+                        int totalPropBeds = 0;
+                        int occupiedPropBeds = 0;
+                        for (Building b : pBuildings) {
+                            totalPropRooms += b.getRooms();
+                            totalPropBeds += b.getBeds();
+                            occupiedPropBeds += b.getOccupied();
+                        }
+                        property.setTotalBuildings(pBuildings.size());
+                        property.setTotalRooms(totalPropRooms);
+                        property.setTotalBeds(totalPropBeds);
+                        property.setOccupiedBeds(occupiedPropBeds);
+                        propertyRepository.save(property);
                     }
-                    property.setTotalBuildings(pBuildings.size());
-                    property.setTotalRooms(totalPropRooms);
-                    property.setTotalBeds(totalPropBeds);
-                    property.setOccupiedBeds(occupiedPropBeds);
-                    propertyRepository.save(property);
                 }
             }
         } catch (Exception ignored) {}
     }
 
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     @GetMapping("/rooms/{id}")
     public ResponseEntity<?> getFlatRoomById(@PathVariable UUID id) {
-        Organization organization = getLoggedUserOrg();
         Room room = roomRepository.findById(id).orElse(null);
-        if (room == null || !room.getFloor().getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (room == null || !isRoomAuthorizedForUser(room)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Room not found."));
         }
         return ResponseEntity.ok(populateRoomStats(room));
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @PutMapping("/rooms/{id}")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> updateFlatRoom(@PathVariable UUID id, @RequestBody RoomRequest request) {
-        Organization organization = getLoggedUserOrg();
         Room room = roomRepository.findById(id).orElse(null);
-        if (room == null || !room.getFloor().getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (room == null || !isRoomAuthorizedForUser(room)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Room not found."));
+        }
+
+        if (request.getWifiPassword() != null && !request.getWifiPassword().isBlank() && request.getWifiPassword().trim().length() < 8) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Wi-Fi password must be at least 8 characters long."));
         }
 
         if (request.getRoomNumber() != null && !request.getRoomNumber().isBlank()) {
@@ -380,6 +468,8 @@ public class RoomController {
         if (request.getBaseRent() != null) room.setBaseRent(request.getBaseRent());
         if (request.getStatus() != null) room.setStatus(request.getStatus());
         if (request.getAmenities() != null) room.setAmenities(request.getAmenities());
+        if (request.getWifiSsid() != null) room.setWifiSsid(request.getWifiSsid());
+        if (request.getWifiPassword() != null) room.setWifiPassword(request.getWifiPassword());
 
         Room saved = roomService.saveRoom(room);
         Room populated = populateRoomStats(saved);
@@ -387,12 +477,12 @@ public class RoomController {
         return ResponseEntity.ok(populated);
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @DeleteMapping("/rooms/{id}")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> deleteFlatRoom(@PathVariable UUID id) {
-        Organization organization = getLoggedUserOrg();
         Room room = roomRepository.findById(id).orElse(null);
-        if (room == null || !room.getFloor().getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (room == null || !isRoomAuthorizedForUser(room)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Room not found."));
         }
         room.setStatus("ARCHIVED");

@@ -7,6 +7,7 @@ import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.models.Property;
 import com.stayeaze.backend.models.Room;
 import com.stayeaze.backend.payload.request.FloorRequest;
+import com.stayeaze.backend.payload.response.FloorDTO;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.BedRepository;
 import com.stayeaze.backend.repository.BuildingRepository;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.stayeaze.backend.models.Tenant;
 import com.stayeaze.backend.repository.TenantRepository;
@@ -126,7 +128,7 @@ public class FloorController {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: Floor number already exists in this building!"));
         }
 
-        Floor floor = new Floor(building, request.getFloorNumber());
+        Floor floor = new Floor(building, request.getFloorNumber(), request.getName());
         Floor saved = floorRepository.save(floor);
         return new ResponseEntity<>(populateFloorStats(saved), HttpStatus.CREATED);
     }
@@ -142,7 +144,8 @@ public class FloorController {
 
         List<Floor> floors = floorRepository.findByBuilding(building);
         floors.forEach(this::populateFloorStats);
-        return ResponseEntity.ok(floors);
+        List<FloorDTO> dtos = floors.stream().map(FloorDTO::fromEntity).collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
     @GetMapping("/floors")
@@ -174,15 +177,56 @@ public class FloorController {
         return ResponseEntity.ok(new MessageResponse("Floor successfully archived."));
     }
 
+    private boolean isSuperAdminUser() {
+        if (SecurityContextHolder.getContext().getAuthentication() == null) return false;
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth.getAuthorities() != null) {
+            boolean hasSuperAdminRole = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_SUPER_ADMIN") || a.getAuthority().equalsIgnoreCase("SUPER_ADMIN"));
+            if (hasSuperAdminRole) return true;
+        }
+        return false;
+    }
+
+    private boolean isBuildingAuthorizedForUser(Building building) {
+        if (building == null || building.getId() == null) return false;
+        if (isSuperAdminUser()) return true;
+        try {
+            Organization organization = getLoggedUserOrg();
+            if (organization == null) return false;
+            UUID propId = buildingRepository.findPropertyIdByBuildingId(building.getId());
+            if (propId != null) {
+                Property prop = propertyRepository.findByIdSuperAdmin(propId).orElse(null);
+                if (prop != null && prop.getOrganization() != null) {
+                    return prop.getOrganization().getId().equals(organization.getId());
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private boolean isFloorAuthorizedForUser(Floor floor) {
+        if (floor == null) return false;
+        if (isSuperAdminUser()) return true;
+        try {
+            UUID bldgId = floorRepository.findBuildingIdByFloorId(floor.getId());
+            if (bldgId != null) {
+                Building b = buildingRepository.findById(bldgId).orElse(new Building());
+                if (b.getId() == null) b.setId(bldgId);
+                return isBuildingAuthorizedForUser(b);
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     @PostMapping("/floors")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> createFlatFloor(@RequestBody FloorRequest request) {
         if (request.getBuildingId() == null) {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: buildingId is required!"));
         }
-        Organization organization = getLoggedUserOrg();
         Building building = buildingRepository.findById(request.getBuildingId()).orElse(null);
-        if (building == null || !building.getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (building == null || !isBuildingAuthorizedForUser(building)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Building not found or unauthorized"));
         }
 
@@ -200,116 +244,110 @@ public class FloorController {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: Floor number already exists in this building!"));
         }
 
-        Floor floor = new Floor(building, floorNum);
+        Floor floor = new Floor(building, floorNum, request.getName());
         Floor saved = floorService.saveFloor(floor);
         return new ResponseEntity<>(populateFloorStats(saved), HttpStatus.CREATED);
     }
 
     @GetMapping("/floors/{id}")
     public ResponseEntity<?> getFlatFloorById(@PathVariable UUID id) {
-        Organization organization = getLoggedUserOrg();
         Floor floor = floorRepository.findById(id).orElse(null);
-        if (floor == null || !floor.getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (floor == null || !isFloorAuthorizedForUser(floor)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Floor not found."));
         }
         return ResponseEntity.ok(populateFloorStats(floor));
     }
 
     @PutMapping("/floors/{id}")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> updateFlatFloor(@PathVariable UUID id, @RequestBody FloorRequest request) {
-        Organization organization = getLoggedUserOrg();
         Floor floor = floorRepository.findById(id).orElse(null);
-        if (floor == null || !floor.getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (floor == null || !isFloorAuthorizedForUser(floor)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Floor not found."));
         }
         if (request.getFloorNumber() != null) {
             floor.setFloorNumber(request.getFloorNumber());
+        }
+        if (request.getName() != null && !request.getName().isBlank()) {
+            floor.setName(request.getName().trim());
         }
         Floor saved = floorService.saveFloor(floor);
         return ResponseEntity.ok(populateFloorStats(saved));
     }
 
     @DeleteMapping("/floors/{id}")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> deleteFlatFloor(@PathVariable UUID id) {
-        Organization organization = getLoggedUserOrg();
         Floor floor = floorRepository.findById(id).orElse(null);
-        if (floor == null || !floor.getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (floor == null || !isFloorAuthorizedForUser(floor)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Floor not found."));
         }
         archiveFloorCascade(floor);
         return ResponseEntity.ok(new MessageResponse("Floor deleted successfully."));
     }
 
+    private Building getBuildingForFloor(Floor floor) {
+        if (floor == null) return null;
+        try {
+            UUID bldgId = floorRepository.findBuildingIdByFloorId(floor.getId());
+            if (bldgId != null) {
+                return buildingRepository.findById(bldgId).orElse(null);
+            }
+        } catch (Exception ignored) {}
+        try {
+            return floor.getBuilding();
+        } catch (Exception ignored) {}
+        return null;
+    }
+
     private void archiveFloorCascade(Floor floor) {
         if (floor == null) return;
         floor.setStatus("ARCHIVED");
-        floorService.saveFloor(floor);
+        try { floorService.saveFloor(floor); } catch (Exception ignored) {}
 
-        List<Room> rooms = roomRepository.findByFloor(floor);
-        for (Room r : rooms) {
-            r.setStatus("ARCHIVED");
-            roomRepository.save(r);
+        try {
+            List<Room> rooms = roomRepository.findByFloor(floor);
+            for (Room r : rooms) {
+                r.setStatus("ARCHIVED");
+                roomRepository.save(r);
 
-            List<Bed> beds = bedRepository.findByRoom(r);
-            for (Bed b : beds) {
-                b.setStatus("ARCHIVED");
-                bedRepository.save(b);
+                List<Bed> beds = bedRepository.findByRoom(r);
+                for (Bed b : beds) {
+                    b.setStatus("ARCHIVED");
+                    bedRepository.save(b);
+                }
+            }
+        } catch (Exception ignored) {}
 
-                if (r.getRoomNumber() != null && b.getBedNumber() != null) {
-                    List<Tenant> tenants = tenantRepository.findAll();
-                    for (Tenant t : tenants) {
-                        if (r.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
-                            b.getBedNumber().equalsIgnoreCase(t.getBedNumber()) &&
-                            (t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()))) {
-                            t.setStatus("INACTIVE");
-                            tenantRepository.save(t);
-                        }
+        Building building = getBuildingForFloor(floor);
+        if (building != null) {
+            try {
+                List<Floor> activeFloors = floorRepository.findByBuilding(building).stream()
+                        .filter(f -> f.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(f.getStatus()))
+                        .collect(java.util.stream.Collectors.toList());
+
+                int bldRooms = 0, bldBeds = 0, bldOcc = 0;
+                for (Floor f : activeFloors) {
+                    List<Room> fRooms = roomRepository.findByFloor(f).stream()
+                            .filter(r -> r.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(r.getStatus()))
+                            .collect(java.util.stream.Collectors.toList());
+                    bldRooms += fRooms.size();
+                    for (Room r : fRooms) {
+                        List<Bed> rBeds = bedRepository.findByRoom(r).stream()
+                                .filter(b -> b.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(b.getStatus()))
+                                .collect(java.util.stream.Collectors.toList());
+                        bldBeds += rBeds.size();
+                        bldOcc += (int) rBeds.stream().filter(b -> "OCCUPIED".equalsIgnoreCase(b.getStatus())).count();
                     }
                 }
-            }
+                building.setRooms(bldRooms);
+                building.setBeds(bldBeds);
+                building.setOccupied(bldOcc);
+                buildingRepository.save(building);
+            } catch (Exception ignored) {}
         }
 
-        if (floor.getBuilding() != null) {
-            Building building = floor.getBuilding();
-            List<Floor> activeFloors = floorRepository.findByBuilding(building).stream()
-                    .filter(f -> f.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(f.getStatus()))
-                    .collect(java.util.stream.Collectors.toList());
-
-            int bldRooms = 0, bldBeds = 0, bldOcc = 0;
-            for (Floor f : activeFloors) {
-                List<Room> fRooms = roomRepository.findByFloor(f).stream()
-                        .filter(r -> r.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(r.getStatus()))
-                        .collect(java.util.stream.Collectors.toList());
-                bldRooms += fRooms.size();
-                for (Room r : fRooms) {
-                    List<Bed> rBeds = bedRepository.findByRoom(r).stream()
-                            .filter(b -> b.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(b.getStatus()))
-                            .collect(java.util.stream.Collectors.toList());
-                    bldBeds += rBeds.size();
-                    bldOcc += (int) rBeds.stream().filter(b -> "OCCUPIED".equalsIgnoreCase(b.getStatus())).count();
-                }
-            }
-            building.setRooms(bldRooms);
-            building.setBeds(bldBeds);
-            building.setOccupied(bldOcc);
-            buildingRepository.save(building);
-
-            Property property = building.getProperty();
-            if (property != null) {
-                List<Building> pBuildings = buildingRepository.findByProperty(property);
-                int propRooms = pBuildings.stream().mapToInt(Building::getRooms).sum();
-                int propBeds = pBuildings.stream().mapToInt(Building::getBeds).sum();
-                int propOcc = pBuildings.stream().mapToInt(Building::getOccupied).sum();
-                property.setTotalRooms(propRooms);
-                property.setTotalBeds(propBeds);
-                property.setOccupiedBeds(propOcc);
-                propertyRepository.save(property);
-            }
-        }
-
-        floorService.evictCaches();
+        try { floorService.evictCaches(); } catch (Exception ignored) {}
     }
 
     @PutMapping("/floors/{id}/unarchive")

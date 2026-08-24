@@ -21,7 +21,7 @@ public class TenantDocument {
     @Column(name = "document_number", nullable = false, length = 100)
     private String documentNumber;
 
-    @Column(name = "file_url", length = 255)
+    @Column(name = "file_url", columnDefinition = "TEXT")
     private String fileUrl;
 
     @Column(name = "verification_status", length = 50)
@@ -51,8 +51,13 @@ public class TenantDocument {
         this.id = id;
     }
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     public Tenant getTenant() {
         return tenant;
+    }
+
+    public UUID getTenantId() {
+        return tenant != null ? tenant.getId() : null;
     }
 
     public void setTenant(Tenant tenant) {
@@ -99,8 +104,13 @@ public class TenantDocument {
         this.verifiedAt = verifiedAt;
     }
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
     public User getVerifiedBy() {
         return verifiedBy;
+    }
+
+    public UUID getVerifiedById() {
+        return verifiedBy != null ? verifiedBy.getId() : null;
     }
 
     public void setVerifiedBy(User verifiedBy) {

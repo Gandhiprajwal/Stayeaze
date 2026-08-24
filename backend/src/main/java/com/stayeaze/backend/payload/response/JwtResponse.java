@@ -9,6 +9,9 @@ public class JwtResponse {
     private String refreshToken;
     private UUID id;
     private String email;
+    private String name;
+    private String phone;
+    private String avatarUrl;
     private UUID orgId;
     private List<String> roles;
 
@@ -17,6 +20,18 @@ public class JwtResponse {
         this.refreshToken = refreshToken;
         this.id = id;
         this.email = email;
+        this.orgId = orgId;
+        this.roles = roles;
+    }
+
+    public JwtResponse(String accessToken, String refreshToken, UUID id, String email, String name, String phone, String avatarUrl, UUID orgId, List<String> roles) {
+        this.token = accessToken;
+        this.refreshToken = refreshToken;
+        this.id = id;
+        this.email = email;
+        this.name = name;
+        this.phone = phone;
+        this.avatarUrl = avatarUrl;
         this.orgId = orgId;
         this.roles = roles;
     }
@@ -59,6 +74,30 @@ public class JwtResponse {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
     }
 
     public UUID getOrgId() {

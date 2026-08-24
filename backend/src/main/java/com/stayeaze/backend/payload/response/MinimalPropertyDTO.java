@@ -62,6 +62,23 @@ public class MinimalPropertyDTO implements Serializable {
         );
     }
 
+    public static MinimalPropertyDTO fromProjection(com.stayeaze.backend.projection.MinimalPropertyView v) {
+        if (v == null) return null;
+        return new MinimalPropertyDTO(
+                v.getId(),
+                v.getName(),
+                v.getCode(),
+                v.getType(),
+                v.getCity(),
+                v.getStatus(),
+                v.getEmail(),
+                v.getManager(),
+                v.getOrgId(),
+                v.getTotalBeds(),
+                v.getOccupiedBeds()
+        );
+    }
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 

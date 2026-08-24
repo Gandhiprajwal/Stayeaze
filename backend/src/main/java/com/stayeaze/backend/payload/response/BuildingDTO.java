@@ -25,10 +25,16 @@ public class BuildingDTO implements Serializable {
         if (b == null) return null;
         BuildingDTO dto = new BuildingDTO();
         dto.setId(b.getId());
-        if (b.getProperty() != null) {
-            dto.setPropertyId(b.getProperty().getId());
-            dto.setPropertyName(b.getProperty().getName());
-        }
+        try {
+            if (b.getProperty() != null) {
+                dto.setPropertyId(b.getProperty().getId());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (b.getProperty() != null) {
+                dto.setPropertyName(b.getProperty().getName());
+            }
+        } catch (Exception ignored) {}
         dto.setName(b.getName());
         dto.setCode(b.getCode());
         dto.setFloors(b.getFloors());

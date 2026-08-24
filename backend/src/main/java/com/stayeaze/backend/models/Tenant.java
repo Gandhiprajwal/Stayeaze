@@ -2,6 +2,7 @@ package com.stayeaze.backend.models;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import org.hibernate.annotations.TenantId;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.math.BigDecimal;
@@ -9,9 +10,11 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "tenants", indexes = {
-    @Index(name = "idx_tenant_org_status", columnList = "org_id, kyc_status"),
-    @Index(name = "idx_tenant_mobile", columnList = "mobile"),
-    @Index(name = "idx_tenant_property", columnList = "property_id")
+        @Index(name = "idx_tenant_org_status", columnList = "org_id, kyc_status"),
+        @Index(name = "idx_tenant_mobile", columnList = "mobile"),
+        @Index(name = "idx_tenant_property", columnList = "property_id")
+}, uniqueConstraints = {
+        @UniqueConstraint(name = "uk_tenant_org_mobile", columnNames = {"org_id", "mobile"})
 })
 public class Tenant {
     @Id
@@ -22,6 +25,10 @@ public class Tenant {
     @JoinColumn(name = "org_id", nullable = false)
     private Organization organization;
 
+    @TenantId
+    @Column(name = "org_id", insertable = false, updatable = false)
+    private UUID tenantOrgId;
+
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;
 
@@ -31,7 +38,7 @@ public class Tenant {
     @Column(length = 255)
     private String email;
 
-    @Column(nullable = false, unique = true, length = 20)
+    @Column(name = "mobile", nullable = false, length = 20)
     private String mobile;
 
     @Column(length = 10)
@@ -64,6 +71,9 @@ public class Tenant {
     @Column(precision = 12, scale = 2)
     private BigDecimal deposit;
 
+    @Column(name = "advance_balance", precision = 12, scale = 2)
+    private BigDecimal advanceBalance = BigDecimal.ZERO;
+
     @Column(name = "lease_start")
     private String leaseStart;
 
@@ -84,6 +94,27 @@ public class Tenant {
 
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
+
+    @Column(name = "refund_upi", length = 100)
+    private String refundUpi;
+
+    @Column(name = "refund_account_name", length = 150)
+    private String refundAccountName;
+
+    @Column(name = "refund_account_number", length = 50)
+    private String refundAccountNumber;
+
+    @Column(name = "refund_ifsc", length = 30)
+    private String refundIfsc;
+
+    @Column(name = "refund_bank_name", length = 100)
+    private String refundBankName;
+
+    @Column(name = "is_agreement_accepted")
+    private Boolean isAgreementAccepted = false;
+
+    @Column(name = "agreement_accepted_at")
+    private OffsetDateTime agreementAcceptedAt;
 
     @Transient
     private String buildingName;
@@ -128,8 +159,10 @@ public class Tenant {
     }
 
     public String getName() {
-        if (firstName == null) return lastName != null && !"-".equals(lastName) ? lastName : "";
-        if (lastName == null || "-".equals(lastName)) return firstName;
+        if (firstName == null)
+            return lastName != null && !"-".equals(lastName) ? lastName : "";
+        if (lastName == null || "-".equals(lastName))
+            return firstName;
         return firstName + " " + lastName;
     }
 
@@ -212,6 +245,14 @@ public class Tenant {
         this.status = status != null ? status.toUpperCase() : null;
     }
 
+    public BigDecimal getAdvanceBalance() {
+        return advanceBalance != null ? advanceBalance : BigDecimal.ZERO;
+    }
+
+    public void setAdvanceBalance(BigDecimal advanceBalance) {
+        this.advanceBalance = advanceBalance != null ? advanceBalance : BigDecimal.ZERO;
+    }
+
     public OffsetDateTime getCreatedAt() {
         return createdAt;
     }
@@ -264,7 +305,15 @@ public class Tenant {
         return deposit;
     }
 
+    public BigDecimal getSecurityDeposit() {
+        return deposit;
+    }
+
     public void setDeposit(BigDecimal deposit) {
+        this.deposit = deposit;
+    }
+
+    public void setSecurityDeposit(BigDecimal deposit) {
         this.deposit = deposit;
     }
 
@@ -318,5 +367,61 @@ public class Tenant {
 
     public void setBuildingName(String buildingName) {
         this.buildingName = buildingName;
+    }
+
+    public String getRefundUpi() {
+        return refundUpi;
+    }
+
+    public void setRefundUpi(String refundUpi) {
+        this.refundUpi = refundUpi;
+    }
+
+    public String getRefundAccountName() {
+        return refundAccountName;
+    }
+
+    public void setRefundAccountName(String refundAccountName) {
+        this.refundAccountName = refundAccountName;
+    }
+
+    public String getRefundAccountNumber() {
+        return refundAccountNumber;
+    }
+
+    public void setRefundAccountNumber(String refundAccountNumber) {
+        this.refundAccountNumber = refundAccountNumber;
+    }
+
+    public String getRefundIfsc() {
+        return refundIfsc;
+    }
+
+    public void setRefundIfsc(String refundIfsc) {
+        this.refundIfsc = refundIfsc;
+    }
+
+    public String getRefundBankName() {
+        return refundBankName;
+    }
+
+    public void setRefundBankName(String refundBankName) {
+        this.refundBankName = refundBankName;
+    }
+
+    public Boolean getIsAgreementAccepted() {
+        return isAgreementAccepted != null ? isAgreementAccepted : false;
+    }
+
+    public void setIsAgreementAccepted(Boolean agreementAccepted) {
+        this.isAgreementAccepted = agreementAccepted;
+    }
+
+    public OffsetDateTime getAgreementAcceptedAt() {
+        return agreementAcceptedAt;
+    }
+
+    public void setAgreementAcceptedAt(OffsetDateTime agreementAcceptedAt) {
+        this.agreementAcceptedAt = agreementAcceptedAt;
     }
 }

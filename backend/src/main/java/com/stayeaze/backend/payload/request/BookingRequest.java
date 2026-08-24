@@ -23,6 +23,11 @@ public class BookingRequest {
     private String status;
     private String source;
     private String bookingCode;
+    private BigDecimal advanceAmount;
+    private String paymentMethod;
+    private String razorpayOrderId;
+    private String razorpayPaymentId;
+    private String razorpaySignature;
 
     public BookingRequest() {
     }
@@ -162,4 +167,19 @@ public class BookingRequest {
     public void setBookingCode(String bookingCode) {
         this.bookingCode = bookingCode;
     }
+
+    public BigDecimal getAdvanceAmount() { return advanceAmount; }
+    public void setAdvanceAmount(BigDecimal advanceAmount) { this.advanceAmount = advanceAmount; }
+
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+
+    public String getRazorpayOrderId() { return razorpayOrderId; }
+    public void setRazorpayOrderId(String razorpayOrderId) { this.razorpayOrderId = razorpayOrderId; }
+
+    public String getRazorpayPaymentId() { return razorpayPaymentId; }
+    public void setRazorpayPaymentId(String razorpayPaymentId) { this.razorpayPaymentId = razorpayPaymentId; }
+
+    public String getRazorpaySignature() { return razorpaySignature; }
+    public void setRazorpaySignature(String razorpaySignature) { this.razorpaySignature = razorpaySignature; }
 }

@@ -67,7 +67,7 @@ public class BuildingController {
 
     private Building populateBuildingStats(Building b) {
         if (b == null) return null;
-        List<Floor> bFloors = floorRepository.findByBuilding(b);
+        List<Floor> bFloors = floorRepository.findByBuildingId(b.getId());
         b.setFloors(bFloors.size());
 
         int totalRooms = 0;
@@ -81,10 +81,10 @@ public class BuildingController {
         } catch (Exception ignored) {}
 
         for (Floor f : bFloors) {
-            List<Room> fRooms = roomRepository.findByFloor(f);
+            List<Room> fRooms = roomRepository.findByFloorId(f.getId());
             totalRooms += fRooms.size();
             for (Room r : fRooms) {
-                List<Bed> rBeds = bedRepository.findByRoom(r);
+                List<Bed> rBeds = bedRepository.findByRoomId(r.getId());
                 int rBedCount = rBeds.size();
                 if (rBedCount == 0 && r.getSharing() != null && r.getSharing() > 0) {
                     rBedCount = r.getSharing();
@@ -119,30 +119,50 @@ public class BuildingController {
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
+    private boolean isSuperAdminUser() {
+        if (SecurityContextHolder.getContext().getAuthentication() == null) return false;
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth.getAuthorities() != null) {
+            boolean hasSuperAdminRole = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_SUPER_ADMIN") || a.getAuthority().equalsIgnoreCase("SUPER_ADMIN"));
+            if (hasSuperAdminRole) return true;
+        }
+        if (auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
+            User user = userRepository.findById(userDetails.getId()).orElse(null);
+            if (user != null && user.getRoles() != null) {
+                return user.getRoles().stream().anyMatch(r -> r.getName() != null && (r.getName().equalsIgnoreCase("SUPER_ADMIN") || r.getName().equalsIgnoreCase("ROLE_SUPER_ADMIN")));
+            }
+        }
+        return false;
+    }
+
     private Property getAuthorizedProperty(UUID propertyId) {
+        boolean isSuperAdmin = isSuperAdminUser();
+        if (isSuperAdmin) {
+            return propertyRepository.findByIdSuperAdmin(propertyId)
+                    .orElseThrow(() -> new IllegalArgumentException("Property not found"));
+        }
+
         Organization organization = getLoggedUserOrg();
         Property property = propertyRepository.findByIdAndOrganization(propertyId, organization)
-                .orElseThrow(() -> new IllegalArgumentException("Property not found or unauthorized"));
+                .orElseGet(() -> propertyRepository.findById(propertyId).orElse(null));
+        if (property == null) {
+            throw new IllegalArgumentException("Property not found or unauthorized");
+        }
 
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
-        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
-
-        if (!isSuperAdmin) {
-            User user = userRepository.findById(userDetails.getId()).orElse(null);
-            if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
-                if (!user.getPropertyIds().contains(propertyId)) {
-                    throw new IllegalArgumentException("Property not found or unauthorized");
-                }
+        User user = userRepository.findById(userDetails.getId()).orElse(null);
+        if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
+            if (!user.getPropertyIds().contains(propertyId)) {
+                throw new IllegalArgumentException("Property not found or unauthorized");
             }
         }
         return property;
     }
 
     @PostMapping("/properties/{propertyId}/buildings")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> createBuilding(@PathVariable UUID propertyId, @Valid @RequestBody BuildingRequest request) {
         Property property;
         try {
@@ -171,22 +191,18 @@ public class BuildingController {
 
         List<Building> buildings = buildingRepository.findByProperty(property);
         buildings.forEach(this::populateBuildingStats);
-        return ResponseEntity.ok(buildings);
+        List<BuildingDTO> dtos = buildings.stream().map(BuildingDTO::fromEntity).collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
     }
 
     @GetMapping("/buildings")
     public ResponseEntity<?> getFlatBuildings(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
-        Organization organization = getLoggedUserOrg();
+        boolean isSuperAdmin = isSuperAdminUser();
+        Organization organization = !isSuperAdmin ? getLoggedUserOrg() : null;
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                 .getAuthentication().getPrincipal();
-        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
-
-        org.springframework.data.domain.Pageable pageable =
-                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
 
         // Property-restricted users: bypass cache (filtered list is user-specific)
         User user = !isSuperAdmin ? userRepository.findById(userDetails.getId()).orElse(null) : null;
@@ -195,7 +211,8 @@ public class BuildingController {
                     .filter(b -> b.getProperty() != null && user.getPropertyIds().contains(b.getProperty().getId()))
                     .collect(Collectors.toList());
             buildings.forEach(this::populateBuildingStats);
-            return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(buildings, page, pageSize));
+            List<BuildingDTO> dtos = buildings.stream().map(BuildingDTO::fromEntity).collect(Collectors.toList());
+            return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(dtos, page, pageSize));
         }
 
         // Use cached service for standard org/superAdmin queries
@@ -227,23 +244,42 @@ public class BuildingController {
         return new ResponseEntity<>(populateBuildingStats(saved), HttpStatus.CREATED);
     }
 
+    private boolean isBuildingAuthorizedForUser(Building building) {
+        if (building == null) return false;
+        if (isSuperAdminUser()) return true;
+        try {
+            Organization organization = getLoggedUserOrg();
+            if (organization == null) return false;
+            UUID propId = buildingRepository.findPropertyIdByBuildingId(building.getId());
+            if (propId != null) {
+                Property prop = propertyRepository.findByIdSuperAdmin(propId).orElse(null);
+                if (prop != null && prop.getOrganization() != null) {
+                    return prop.getOrganization().getId().equals(organization.getId());
+                }
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     @PutMapping("/buildings/{id}")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> updateFlatBuilding(@PathVariable UUID id, @Valid @RequestBody BuildingRequest request) {
-        Organization organization = getLoggedUserOrg();
         Building building = buildingRepository.findById(id).orElse(null);
         if (building == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Building not found."));
         }
 
-        if (!building.getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (!isBuildingAuthorizedForUser(building)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Unauthorized to update this building."));
         }
 
-        if (!building.getCode().equals(request.getCode()) && 
-            buildingRepository.existsByPropertyAndCode(building.getProperty(), request.getCode())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Building code already exists in this property!"));
-        }
+        try {
+            if (!building.getCode().equals(request.getCode()) && 
+                building.getProperty() != null &&
+                buildingRepository.existsByPropertyAndCode(building.getProperty(), request.getCode())) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: Building code already exists in this property!"));
+            }
+        } catch (Exception ignored) {}
 
         building.setName(request.getName());
         building.setCode(request.getCode());
@@ -252,19 +288,18 @@ public class BuildingController {
     }
 
     @DeleteMapping("/buildings/{id}")
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> deleteFlatBuilding(@PathVariable UUID id) {
-        Organization organization = getLoggedUserOrg();
         Building building = buildingRepository.findById(id).orElse(null);
         if (building == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Building not found."));
         }
 
-        if (!building.getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (!isBuildingAuthorizedForUser(building)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Unauthorized to delete this building."));
         }
 
-        buildingService.deleteBuilding(building.getId());
+        archiveBuildingCascade(building);
         return ResponseEntity.ok(new MessageResponse("Building deleted successfully."));
     }
 
@@ -331,59 +366,53 @@ public class BuildingController {
         return ResponseEntity.ok(new MessageResponse("Building successfully archived."));
     }
 
-    private void archiveBuildingCascade(Building building) {
+    @org.springframework.transaction.annotation.Transactional
+    protected void archiveBuildingCascade(Building building) {
         if (building == null) return;
         building.setStatus("ARCHIVED");
         buildingService.saveBuilding(building);
 
-        List<Floor> floors = floorRepository.findByBuilding(building);
-        for (Floor f : floors) {
-            f.setStatus("ARCHIVED");
-            floorRepository.save(f);
+        try {
+            List<Floor> floors = floorRepository.findByBuilding(building);
+            for (Floor f : floors) {
+                f.setStatus("ARCHIVED");
+                floorRepository.save(f);
 
-            List<Room> rooms = roomRepository.findByFloor(f);
-            for (Room r : rooms) {
-                r.setStatus("ARCHIVED");
-                roomRepository.save(r);
+                List<Room> rooms = roomRepository.findByFloor(f);
+                for (Room r : rooms) {
+                    r.setStatus("ARCHIVED");
+                    roomRepository.save(r);
 
-                List<Bed> beds = bedRepository.findByRoom(r);
-                for (Bed b : beds) {
-                    b.setStatus("ARCHIVED");
-                    bedRepository.save(b);
-
-                    if (r.getRoomNumber() != null && b.getBedNumber() != null) {
-                        List<Tenant> tenants = tenantRepository.findAll();
-                        for (Tenant t : tenants) {
-                            if (r.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
-                                b.getBedNumber().equalsIgnoreCase(t.getBedNumber()) &&
-                                (t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()))) {
-                                t.setStatus("INACTIVE");
-                                tenantRepository.save(t);
-                            }
-                        }
+                    List<Bed> beds = bedRepository.findByRoom(r);
+                    for (Bed b : beds) {
+                        b.setStatus("ARCHIVED");
+                        bedRepository.save(b);
                     }
                 }
             }
-        }
+        } catch (Exception ignored) {}
 
-        Property property = building.getProperty();
-        if (property != null) {
-            List<Building> activeBuildings = buildingRepository.findByProperty(property).stream()
-                    .filter(b -> b.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(b.getStatus()))
-                    .collect(Collectors.toList());
+        try {
+            UUID propId = buildingRepository.findPropertyIdByBuildingId(building.getId());
+            if (propId != null) {
+                Property property = propertyRepository.findByIdSuperAdmin(propId).orElse(null);
+                if (property != null) {
+                    List<Building> activeBuildings = buildingRepository.findByProperty(property).stream()
+                            .filter(b -> b.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(b.getStatus()))
+                            .collect(Collectors.toList());
 
-            int propRooms = activeBuildings.stream().mapToInt(Building::getRooms).sum();
-            int propBeds = activeBuildings.stream().mapToInt(Building::getBeds).sum();
-            int propOcc = activeBuildings.stream().mapToInt(Building::getOccupied).sum();
+                    int propRooms = activeBuildings.stream().mapToInt(Building::getRooms).sum();
+                    int propBeds = activeBuildings.stream().mapToInt(Building::getBeds).sum();
+                    int propOcc = activeBuildings.stream().mapToInt(Building::getOccupied).sum();
 
-            property.setTotalBuildings(activeBuildings.size());
-            property.setTotalRooms(propRooms);
-            property.setTotalBeds(propBeds);
-            property.setOccupiedBeds(propOcc);
-            propertyRepository.save(property);
-        }
-
-        buildingService.deleteBuilding(building.getId());
+                    property.setTotalBuildings(activeBuildings.size());
+                    property.setTotalRooms(propRooms);
+                    property.setTotalBeds(propBeds);
+                    property.setOccupiedBeds(propOcc);
+                    propertyRepository.save(property);
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     @PutMapping("/buildings/{id}/unarchive")

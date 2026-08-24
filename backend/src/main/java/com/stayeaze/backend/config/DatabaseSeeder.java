@@ -84,51 +84,54 @@ public class DatabaseSeeder implements CommandLineRunner {
 
         // 1. Seed Core Roles
         seedRoleIfNotFound(ERole.SUPER_ADMIN, "[\"ALL\"]");
+        seedRoleIfNotFound(ERole.SUPPORT, "[\"SUPPORT_READ\", \"SUPPORT_WRITE\", \"TICKET_MANAGE\"]");
         seedRoleIfNotFound(ERole.OWNER, "[\"ALL\"]");
         seedRoleIfNotFound(ERole.PROPERTY_MANAGER, "[\"PROPERTY_WRITE\", \"PROPERTY_READ\"]");
-        seedRoleIfNotFound(ERole.RECEPTIONIST, "[\"TENANT_WRITE\", \"TENANT_READ\"]");
+        seedRoleIfNotFound(ERole.RECEPTIONIST, "[\"TENANT_WRITE\", \"TENANT_READ\", \"VISITOR_WRITE\"]");
         seedRoleIfNotFound(ERole.ACCOUNTANT, "[\"BILLING_WRITE\", \"BILLING_READ\"]");
         seedRoleIfNotFound(ERole.SECURITY_GUARD, "[\"SECURITY_WRITE\", \"SECURITY_READ\"]");
-        seedRoleIfNotFound(ERole.STAFF, "[\"SUPPORT_WRITE\", \"SUPPORT_READ\"]");
+        seedRoleIfNotFound(ERole.STAFF, "[\"MAINTENANCE_WRITE\", \"CLEANING_WRITE\"]");
         seedRoleIfNotFound(ERole.TENANT, "[\"COMPLAINT_WRITE\"]");
 
         // 2. Seed Super Admin User
-        Optional<Role> superAdminRoleOpt = roleRepository.findByName(ERole.SUPER_ADMIN);
-        if (superAdminRoleOpt.isPresent()) {
-            Role superAdminRole = superAdminRoleOpt.get();
+        Organization systemOrg = organizationRepository.findBySubdomain("system")
+                .orElseGet(() -> {
+                    Organization org = new Organization("StayEaze SaaS System", "system");
+                    return organizationRepository.save(org);
+                });
 
-            Organization systemOrg = organizationRepository.findBySubdomain("system")
-                    .orElseGet(() -> {
-                        Organization org = new Organization("StayEaze SaaS System", "system");
-                        return organizationRepository.save(org);
-                    });
+        Role superAdminRole = roleRepository.findByName(ERole.SUPER_ADMIN)
+                .orElseGet(() -> roleRepository.save(new Role(ERole.SUPER_ADMIN, "[\"ALL\"]")));
 
-            // Convert legacy admin@stayeaze.com if present, or create superadmin@stayeaze.com
-            User superAdmin = userRepository.findByEmail("superadmin@stayeaze.com")
-                    .orElseGet(() -> userRepository.findByEmail("admin@stayeaze.com")
-                    .orElseGet(() -> new User(
-                            systemOrg,
-                            "superadmin@stayeaze.com",
-                            encoder.encode("Friend@2010"),
-                            "0000000000"
-                    )));
+        User superAdmin = userRepository.findByEmail("superadmin@stayeaze.com")
+                .orElseGet(() -> userRepository.findByEmail("admin@stayeaze.com")
+                .orElseGet(() -> new User(
+                        systemOrg,
+                        "superadmin@stayeaze.com",
+                        encoder.encode("Friend@2010"),
+                        "0000000000"
+                )));
 
-            superAdmin.setEmail("superadmin@stayeaze.com");
-            superAdmin.setPassword(encoder.encode("Friend@2010"));
-            if (superAdmin.getRoles() == null) {
-                superAdmin.setRoles(new HashSet<>());
-            }
-            if (!superAdmin.getRoles().contains(superAdminRole)) {
-                superAdmin.getRoles().add(superAdminRole);
-            }
-            userRepository.save(superAdmin);
-
-            System.out.println("==================================================");
-            System.out.println("🟢 SEEDING: Super Admin User Configured!");
-            System.out.println("   Username / Email: superadmin@stayeaze.com");
-            System.out.println("   Password:         Friend@2010");
-            System.out.println("==================================================");
+        superAdmin.setEmail("superadmin@stayeaze.com");
+        superAdmin.setFirstName("Super Admin");
+        superAdmin.setPassword(encoder.encode("Friend@2010"));
+        superAdmin.setStatus("ACTIVE");
+        if (superAdmin.getOrganization() == null) {
+            superAdmin.setOrganization(systemOrg);
         }
+        if (superAdmin.getRoles() == null) {
+            superAdmin.setRoles(new HashSet<>());
+        } else {
+            superAdmin.getRoles().clear();
+        }
+        superAdmin.getRoles().add(superAdminRole);
+        userRepository.save(superAdmin);
+
+        System.out.println("==================================================");
+        System.out.println("🟢 SEEDING: Super Admin User Configured!");
+        System.out.println("   Username / Email: superadmin@stayeaze.com");
+        System.out.println("   Password:         Friend@2010");
+        System.out.println("==================================================");
 
     }
 

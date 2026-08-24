@@ -38,14 +38,26 @@ public class FloorDTO implements Serializable {
         dto.setRooms(f.getRooms() != null ? f.getRooms() : 0);
         dto.setBeds(f.getBeds() != null ? f.getBeds() : 0);
         dto.setOccupied(f.getOccupied() != null ? f.getOccupied() : 0);
-        if (f.getBuilding() != null) {
-            dto.setBuildingId(f.getBuilding().getId());
-            dto.setBuildingName(f.getBuilding().getName());
-            if (f.getBuilding().getProperty() != null) {
+        try {
+            if (f.getBuilding() != null) {
+                dto.setBuildingId(f.getBuilding().getId());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (f.getBuilding() != null) {
+                dto.setBuildingName(f.getBuilding().getName());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (f.getBuilding() != null && f.getBuilding().getProperty() != null) {
                 dto.setPropertyId(f.getBuilding().getProperty().getId());
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (f.getBuilding() != null && f.getBuilding().getProperty() != null) {
                 dto.setPropertyName(f.getBuilding().getProperty().getName());
             }
-        }
+        } catch (Exception ignored) {}
         return dto;
     }
 

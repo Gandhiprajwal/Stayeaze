@@ -20,6 +20,15 @@ public class Floor {
     @Column(name = "floor_number", nullable = false)
     private Integer floorNumber;
 
+    @Column(length = 100)
+    private String name;
+
+    @Column(name = "wifi_ssid", length = 150)
+    private String wifiSsid;
+
+    @Column(name = "wifi_password", length = 150)
+    private String wifiPassword;
+
     @Column(length = 50)
     private String status = "ACTIVE"; // ACTIVE, MAINTENANCE
 
@@ -38,6 +47,13 @@ public class Floor {
     public Floor(Building building, Integer floorNumber) {
         this.building = building;
         this.floorNumber = floorNumber;
+        this.name = floorNumber != null ? "Floor " + floorNumber : "Floor";
+    }
+
+    public Floor(Building building, Integer floorNumber, String name) {
+        this.building = building;
+        this.floorNumber = floorNumber;
+        this.name = (name != null && !name.trim().isEmpty()) ? name.trim() : (floorNumber != null ? "Floor " + floorNumber : "Floor");
     }
 
     public UUID getId() {
@@ -70,9 +86,32 @@ public class Floor {
         return floorNumber;
     }
 
-    // Human-readable name like "Floor 1" — used by FloorsPage name column
+    // Return the actual user-assigned floor name or fallback to "Floor {number}"
     public String getName() {
+        if (name != null && !name.trim().isEmpty()) {
+            return name;
+        }
         return floorNumber != null ? "Floor " + floorNumber : "Floor";
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getWifiSsid() {
+        return wifiSsid;
+    }
+
+    public void setWifiSsid(String wifiSsid) {
+        this.wifiSsid = wifiSsid;
+    }
+
+    public String getWifiPassword() {
+        return wifiPassword;
+    }
+
+    public void setWifiPassword(String wifiPassword) {
+        this.wifiPassword = wifiPassword;
     }
 
     public void setFloorNumber(Integer floorNumber) {

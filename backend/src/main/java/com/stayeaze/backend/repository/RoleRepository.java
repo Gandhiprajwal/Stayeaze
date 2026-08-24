@@ -13,6 +13,9 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
     Optional<Role> findByName(String name);
 
     default Optional<Role> findByName(ERole name) {
-        return findByName(name.name());
+        if (name == null) return Optional.empty();
+        Optional<Role> r = findByName(name.name());
+        if (r.isPresent()) return r;
+        return findByName("ROLE_" + name.name());
     }
 }

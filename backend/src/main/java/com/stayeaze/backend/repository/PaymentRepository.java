@@ -22,5 +22,8 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     @Query("SELECT p FROM Payment p WHERE p.invoice.tenant.organization.id = :orgId")
     Page<Payment> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
+    @Query(value = "SELECT p.* FROM payments p JOIN invoices i ON p.invoice_id = i.id JOIN tenants t ON i.tenant_id = t.id WHERE t.org_id = CAST(:orgId AS uuid)", nativeQuery = true)
+    List<Payment> findByOrganizationIdNative(@Param("orgId") UUID orgId);
+
     Page<Payment> findAll(Pageable pageable);
 }

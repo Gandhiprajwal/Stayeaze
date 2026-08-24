@@ -37,10 +37,20 @@ public class PropertyRequest {
     private String bankIfsc;
     private String upiVpa;
     private String authorizedSignatory;
+    private String gstin;
     private String razorpayKeyId;
     private String razorpayKeySecret;
+    private java.math.BigDecimal securityDeposit;
 
     public PropertyRequest() {
+    }
+
+    public java.math.BigDecimal getSecurityDeposit() {
+        return securityDeposit;
+    }
+
+    public void setSecurityDeposit(java.math.BigDecimal securityDeposit) {
+        this.securityDeposit = securityDeposit;
     }
 
     public String getName() {
@@ -241,5 +251,13 @@ public class PropertyRequest {
 
     public void setRazorpayKeySecret(String razorpayKeySecret) {
         this.razorpayKeySecret = razorpayKeySecret;
+    }
+
+    public String getGstin() {
+        return gstin;
+    }
+
+    public void setGstin(String gstin) {
+        this.gstin = gstin;
     }
 }

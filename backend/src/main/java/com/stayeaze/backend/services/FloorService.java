@@ -71,7 +71,7 @@ public class FloorService {
     @Transactional(readOnly = true)
     @Cacheable(value = "floors_v2", key = "#organization != null ? #organization.id.toString() : 'all_super_admin'")
     public List<FloorDTO> getFloorsByOrg(Organization organization) {
-        List<Floor> list = organization == null ? floorRepository.findAll()
+        List<Floor> list = organization == null ? floorRepository.findAllSuperAdmin()
                 : floorRepository.findByOrganizationId(organization.getId());
         return list.stream()
                 .map(f -> FloorDTO.fromEntity(populateFloorStats(f, organization)))
@@ -85,7 +85,9 @@ public class FloorService {
         @CacheEvict(value = "tenants", allEntries = true),
         @CacheEvict(value = "buildings", allEntries = true),
         @CacheEvict(value = "propertyDtos", allEntries = true),
-        @CacheEvict(value = "minimalProperties", allEntries = true)
+        @CacheEvict(value = "minimalProperties", allEntries = true),
+        @CacheEvict(value = "properties-minimal", allEntries = true),
+        @CacheEvict(value = "tenants-minimal", allEntries = true)
     })
     public void evictCaches() {
     }
@@ -97,7 +99,9 @@ public class FloorService {
         @CacheEvict(value = "tenants", allEntries = true),
         @CacheEvict(value = "buildings", allEntries = true),
         @CacheEvict(value = "propertyDtos", allEntries = true),
-        @CacheEvict(value = "minimalProperties", allEntries = true)
+        @CacheEvict(value = "minimalProperties", allEntries = true),
+        @CacheEvict(value = "properties-minimal", allEntries = true),
+        @CacheEvict(value = "tenants-minimal", allEntries = true)
     })
     public Floor saveFloor(Floor floor) {
         return floorRepository.save(floor);
@@ -110,7 +114,9 @@ public class FloorService {
         @CacheEvict(value = "tenants", allEntries = true),
         @CacheEvict(value = "buildings", allEntries = true),
         @CacheEvict(value = "propertyDtos", allEntries = true),
-        @CacheEvict(value = "minimalProperties", allEntries = true)
+        @CacheEvict(value = "minimalProperties", allEntries = true),
+        @CacheEvict(value = "properties-minimal", allEntries = true),
+        @CacheEvict(value = "tenants-minimal", allEntries = true)
     })
     public void deleteFloor(UUID id) {
         floorRepository.deleteById(id);

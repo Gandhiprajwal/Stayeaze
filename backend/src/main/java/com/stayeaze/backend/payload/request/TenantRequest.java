@@ -1,5 +1,7 @@
 package com.stayeaze.backend.payload.request;
 
+import com.stayeaze.backend.security.validation.ValidEmail;
+import com.stayeaze.backend.security.validation.ValidMobile;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -10,9 +12,13 @@ public class TenantRequest {
     private String lastName;
     private String name;
 
+    @ValidEmail
     private String email;
 
+    @ValidMobile
     private String mobile;
+
+    @ValidMobile
     private String phone; // alias from frontend
 
     private String gender;
@@ -20,7 +26,10 @@ public class TenantRequest {
     private String emergencyContactName;
     private String emergencyName; // alias from frontend
 
+    @ValidMobile
     private String emergencyContactMobile;
+
+    @ValidMobile
     private String emergencyContact; // alias from frontend
 
     private String dob;
@@ -35,6 +44,10 @@ public class TenantRequest {
     private String roomNumber;
     private String bedNumber;
     private String status;
+    private String paymentMethod;
+    private String razorpayPaymentId;
+    private String razorpayOrderId;
+    private String razorpaySignature;
 
     public TenantRequest() {
     }
@@ -211,4 +224,37 @@ public class TenantRequest {
     public void setStatus(String status) {
         this.status = status;
     }
+
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+
+    public String getRazorpayPaymentId() { return razorpayPaymentId; }
+    public void setRazorpayPaymentId(String razorpayPaymentId) { this.razorpayPaymentId = razorpayPaymentId; }
+
+    public String getRazorpayOrderId() { return razorpayOrderId; }
+    public void setRazorpayOrderId(String razorpayOrderId) { this.razorpayOrderId = razorpayOrderId; }
+
+    public String getRazorpaySignature() { return razorpaySignature; }
+    public void setRazorpaySignature(String razorpaySignature) { this.razorpaySignature = razorpaySignature; }
+
+    private String refundAccountName;
+    private String refundAccountNumber;
+    private String refundIfsc;
+    private String refundBankName;
+    private String refundUpi;
+
+    public String getRefundAccountName() { return refundAccountName; }
+    public void setRefundAccountName(String refundAccountName) { this.refundAccountName = refundAccountName; }
+
+    public String getRefundAccountNumber() { return refundAccountNumber; }
+    public void setRefundAccountNumber(String refundAccountNumber) { this.refundAccountNumber = refundAccountNumber; }
+
+    public String getRefundIfsc() { return refundIfsc; }
+    public void setRefundIfsc(String refundIfsc) { this.refundIfsc = refundIfsc; }
+
+    public String getRefundBankName() { return refundBankName; }
+    public void setRefundBankName(String refundBankName) { this.refundBankName = refundBankName; }
+
+    public String getRefundUpi() { return refundUpi; }
+    public void setRefundUpi(String refundUpi) { this.refundUpi = refundUpi; }
 }

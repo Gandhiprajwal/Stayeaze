@@ -39,6 +39,24 @@ public class Booking {
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
+    @Column(name = "advance_amount", precision = 12, scale = 2)
+    private BigDecimal advanceAmount = BigDecimal.ZERO;
+
+    @Column(name = "advance_payment_status", length = 50)
+    private String advancePaymentStatus = "PENDING";
+
+    @Column(name = "payment_method", length = 50)
+    private String paymentMethod;
+
+    @Column(name = "razorpay_order_id", length = 100)
+    private String razorpayOrderId;
+
+    @Column(name = "razorpay_payment_id", length = 100)
+    private String razorpayPaymentId;
+
+    @Column(name = "razorpay_signature", length = 255)
+    private String razorpaySignature;
+
     @Transient
     private String bookingCode;
 
@@ -220,4 +238,22 @@ public class Booking {
     public void setSource(String source) {
         this.source = source;
     }
+
+    public BigDecimal getAdvanceAmount() { return advanceAmount; }
+    public void setAdvanceAmount(BigDecimal advanceAmount) { this.advanceAmount = advanceAmount; }
+
+    public String getAdvancePaymentStatus() { return advancePaymentStatus; }
+    public void setAdvancePaymentStatus(String advancePaymentStatus) { this.advancePaymentStatus = advancePaymentStatus; }
+
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+
+    public String getRazorpayOrderId() { return razorpayOrderId; }
+    public void setRazorpayOrderId(String razorpayOrderId) { this.razorpayOrderId = razorpayOrderId; }
+
+    public String getRazorpayPaymentId() { return razorpayPaymentId; }
+    public void setRazorpayPaymentId(String razorpayPaymentId) { this.razorpayPaymentId = razorpayPaymentId; }
+
+    public String getRazorpaySignature() { return razorpaySignature; }
+    public void setRazorpaySignature(String razorpaySignature) { this.razorpaySignature = razorpaySignature; }
 }

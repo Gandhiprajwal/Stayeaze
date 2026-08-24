@@ -16,6 +16,9 @@ import java.util.UUID;
 @Repository
 public interface FloorRepository extends JpaRepository<Floor, UUID> {
     List<Floor> findByBuilding(Building building);
+
+    @Query("SELECT f FROM Floor f WHERE f.building.id = :buildingId")
+    List<Floor> findByBuildingId(@Param("buildingId") UUID buildingId);
     Optional<Floor> findByIdAndBuilding(UUID id, Building building);
     Boolean existsByBuildingAndFloorNumber(Building building, Integer floorNumber);
 
@@ -24,6 +27,12 @@ public interface FloorRepository extends JpaRepository<Floor, UUID> {
 
     @Query("SELECT f FROM Floor f WHERE f.building.property.organization.id = :orgId")
     Page<Floor> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
+
+    @Query(value = "SELECT building_id FROM floors WHERE id = :floorId", nativeQuery = true)
+    UUID findBuildingIdByFloorId(@Param("floorId") UUID floorId);
+
+    @Query(value = "SELECT * FROM floors f ORDER BY f.floor_number ASC", nativeQuery = true)
+    List<Floor> findAllSuperAdmin();
 
     Page<Floor> findAll(Pageable pageable);
 }

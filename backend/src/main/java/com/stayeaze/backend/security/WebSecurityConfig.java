@@ -22,6 +22,8 @@ import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
 import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.filter.ShallowEtagHeaderFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 
 @Configuration
 @EnableWebSecurity
@@ -57,13 +59,17 @@ public class WebSecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    @org.springframework.beans.factory.annotation.Value("${cors.allowed-origins:http://localhost:5173,http://localhost:3000,http://localhost:8080}")
+    private String allowedOrigins;
+
     @Bean
     public org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource() {
         org.springframework.web.cors.CorsConfiguration configuration = new org.springframework.web.cors.CorsConfiguration();
-        configuration.setAllowedOriginPatterns(java.util.List.of("*"));
+        java.util.List<String> origins = java.util.Arrays.asList(allowedOrigins.split(","));
+        configuration.setAllowedOriginPatterns(origins);
         configuration.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type", "Cache-Control"));
-        configuration.setExposedHeaders(java.util.List.of("Authorization"));
+        configuration.setAllowedHeaders(java.util.List.of("Authorization", "Content-Type", "Cache-Control", "X-Requested-With", "Accept", "Origin"));
+        configuration.setExposedHeaders(java.util.List.of("Authorization", "Content-Disposition", "Set-Cookie"));
         configuration.setAllowCredentials(true);
         org.springframework.web.cors.UrlBasedCorsConfigurationSource source = new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
@@ -74,8 +80,10 @@ public class WebSecurityConfig {
     public RoleHierarchy roleHierarchy() {
         RoleHierarchyImpl hierarchy = new RoleHierarchyImpl();
         hierarchy.setHierarchy(
+            "ROLE_SUPER_ADMIN > ROLE_SUPPORT\n" +
             "ROLE_SUPER_ADMIN > ROLE_OWNER\n" +
-            "ROLE_OWNER > ROLE_PROPERTY_MANAGER\n" +
+            "ROLE_OWNER > ROLE_ADMIN\n" +
+            "ROLE_ADMIN > ROLE_PROPERTY_MANAGER\n" +
             "ROLE_PROPERTY_MANAGER > ROLE_RECEPTIONIST\n" +
             "ROLE_RECEPTIONIST > ROLE_ACCOUNTANT\n" +
             "ROLE_ACCOUNTANT > ROLE_SECURITY_GUARD\n" +
@@ -85,21 +93,51 @@ public class WebSecurityConfig {
         return hierarchy;
     }
 
+    @Autowired
+    private SubscriptionLockoutFilter subscriptionLockoutFilter;
+
+    @Autowired
+    private ApiMetricsFilter apiMetricsFilter;
+
+    @Autowired
+    private SecurityRateLimitFilter securityRateLimitFilter;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
-                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.deny())
+                        .xssProtection(xss -> xss.headerValue(org.springframework.security.web.header.writers.XXssProtectionHeaderWriter.HeaderValue.ENABLED_MODE_BLOCK))
+                        .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;"))
+                )
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
-                        auth.requestMatchers("/api/v1/auth/**", "/uploads/**", "/error").permitAll()
+                        auth.requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/api/v1/saas/plans", "/api/v1/branding/**", "/api/v1/webhooks/**", "/ws-stayeaze/**", "/uploads/**", "/error").permitAll()
                                 .anyRequest().authenticated()
                 );
 
         http.authenticationProvider(authenticationProvider());
+        http.addFilterBefore(securityRateLimitFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(apiMetricsFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterAfter(subscriptionLockoutFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public FilterRegistrationBean<ShallowEtagHeaderFilter> shallowEtagHeaderFilter() {
+        ShallowEtagHeaderFilter etagFilter = new ShallowEtagHeaderFilter() {
+            @Override
+            protected boolean shouldNotFilter(jakarta.servlet.http.HttpServletRequest request) {
+                String path = request.getRequestURI();
+                return path != null && (path.endsWith("/stream") || path.contains("/stream") || path.contains("/ws-"));
+            }
+        };
+        FilterRegistrationBean<ShallowEtagHeaderFilter> filterRegistrationBean = new FilterRegistrationBean<>(etagFilter);
+        filterRegistrationBean.addUrlPatterns("/api/v1/*");
+        return filterRegistrationBean;
     }
 }

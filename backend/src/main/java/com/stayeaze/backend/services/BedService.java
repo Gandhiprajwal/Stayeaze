@@ -22,6 +22,9 @@ public class BedService {
     private BedRepository bedRepository;
 
     @Autowired
+    private com.stayeaze.backend.repository.RoomRepository roomRepository;
+
+    @Autowired
     private com.stayeaze.backend.repository.TenantRepository tenantRepository;
 
     @Autowired
@@ -113,10 +116,31 @@ public class BedService {
         return bed;
     }
 
-    @Transactional(readOnly = true)
-    @Cacheable(value = "beds_v3", key = "#organization != null ? #organization.id.toString() : 'all_super_admin'")
+    @Transactional
     public List<BedDTO> getBedsByOrg(Organization organization) {
-        List<Bed> list = organization == null ? bedRepository.findAll()
+        try {
+            List<com.stayeaze.backend.models.Room> rooms = organization == null
+                    ? roomRepository.findAll()
+                    : roomRepository.findByOrganizationId(organization.getId());
+            if (rooms != null) {
+                for (com.stayeaze.backend.models.Room r : rooms) {
+                    List<Bed> existing = bedRepository.findByRoomId(r.getId());
+                    if (existing == null || existing.isEmpty()) {
+                        int max = r.getSharing() != null && r.getSharing() > 0 ? r.getSharing() : 1;
+                        for (int i = 1; i <= max; i++) {
+                            String bedNo = "B" + i;
+                            if (!Boolean.TRUE.equals(bedRepository.existsByRoomAndBedNumber(r, bedNo))) {
+                                Bed b = new Bed(r, bedNo);
+                                b.setStatus("AVAILABLE");
+                                try { bedRepository.save(b); } catch (Exception ignored) {}
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        List<Bed> list = organization == null ? bedRepository.findAllSuperAdmin()
                 : bedRepository.findByOrganizationId(organization.getId(), org.springframework.data.domain.Pageable.unpaged()).getContent();
         return list.stream()
                 .map(b -> BedDTO.fromEntity(populateBedDetails(b, organization)))

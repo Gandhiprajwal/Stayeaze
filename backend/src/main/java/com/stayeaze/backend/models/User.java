@@ -35,6 +35,12 @@ public class User {
     @Column(name = "first_name", length = 100)
     private String firstName;
 
+    @Column(name = "avatar_url", columnDefinition = "TEXT")
+    private String avatarUrl;
+
+    @Column(name = "notification_preferences", columnDefinition = "TEXT")
+    private String notificationPreferences;
+
     @Column(length = 50)
     private String status = "ACTIVE";
 
@@ -47,7 +53,23 @@ public class User {
     @Column(name = "last_login")
     private OffsetDateTime lastLogin;
 
+    @Column(name = "is_two_factor_enabled")
+    private Boolean isTwoFactorEnabled = false;
+
+    @Column(name = "must_change_password")
+    private Boolean mustChangePassword = false;
+
+    @Column(name = "tenant_id")
+    private UUID tenantId;
+
+    @Column(name = "two_factor_otp", length = 10)
+    private String twoFactorOtp;
+
+    @Column(name = "two_factor_otp_expiry")
+    private OffsetDateTime twoFactorOtpExpiry;
+
     @Column(name = "created_at", updatable = false)
+
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
     @Column(name = "updated_at")
@@ -136,6 +158,14 @@ public class User {
         return status;
     }
 
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+
     public void setStatus(String status) {
         this.status = status;
     }
@@ -187,4 +217,53 @@ public class User {
     public void setRoles(Set<Role> roles) {
         this.roles = roles;
     }
+
+    public Boolean getIsTwoFactorEnabled() {
+        return isTwoFactorEnabled != null ? isTwoFactorEnabled : false;
+    }
+
+    public void setIsTwoFactorEnabled(Boolean isTwoFactorEnabled) {
+        this.isTwoFactorEnabled = isTwoFactorEnabled;
+    }
+
+    public String getTwoFactorOtp() {
+        return twoFactorOtp;
+    }
+
+    public void setTwoFactorOtp(String twoFactorOtp) {
+        this.twoFactorOtp = twoFactorOtp;
+    }
+
+    public OffsetDateTime getTwoFactorOtpExpiry() {
+        return twoFactorOtpExpiry;
+    }
+
+    public void setTwoFactorOtpExpiry(OffsetDateTime twoFactorOtpExpiry) {
+        this.twoFactorOtpExpiry = twoFactorOtpExpiry;
+    }
+
+    public String getNotificationPreferences() {
+        return notificationPreferences;
+    }
+
+    public void setNotificationPreferences(String notificationPreferences) {
+        this.notificationPreferences = notificationPreferences;
+    }
+
+    public Boolean getMustChangePassword() {
+        return mustChangePassword != null ? mustChangePassword : false;
+    }
+
+    public void setMustChangePassword(Boolean mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
+    }
+
+    public UUID getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(UUID tenantId) {
+        this.tenantId = tenantId;
+    }
 }
+

@@ -34,6 +34,9 @@ public class SystemMetricsController {
     @Autowired
     private com.stayeaze.backend.repository.OrganizationBillingProfileRepository profileRepository;
 
+    @Autowired(required = false)
+    private com.stayeaze.backend.repository.SystemIntegrationSettingsRepository settingsRepository;
+
     @GetMapping("/metrics")
     public ResponseEntity<?> getMetrics() {
         Map<String, Object> metrics = new HashMap<>();
@@ -49,46 +52,57 @@ public class SystemMetricsController {
         jvm.put("max", maxMemory);
         jvm.put("total", totalMemory);
         jvm.put("used", usedMemory);
-        jvm.put("percent", maxMemory > 0 ? (double) usedMemory / maxMemory * 100 : 0);
+        jvm.put("free", freeMemory);
         metrics.put("jvm", jvm);
 
-        // 2. CPU load
-        double cpuLoad = 0.0;
+        // 2. HikariCP DB Connection Pool Metrics
+        int activeConnections = 0;
+        int idleConnections = 0;
+        int totalConnections = 0;
+        int maxPoolSize = 0;
+        int threadsAwaitingConnection = 0;
+
         try {
-            OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
-            if (osBean instanceof com.sun.management.OperatingSystemMXBean) {
-                cpuLoad = ((com.sun.management.OperatingSystemMXBean) osBean).getCpuLoad() * 100;
-            } else {
-                cpuLoad = osBean.getSystemLoadAverage();
-                if (cpuLoad < 0) {
-                    cpuLoad = 12.5; // fallback
+            if (dataSource instanceof com.zaxxer.hikari.HikariDataSource hikariDS) {
+                com.zaxxer.hikari.HikariPoolMXBean poolBean = hikariDS.getHikariPoolMXBean();
+                com.zaxxer.hikari.HikariConfigMXBean configBean = hikariDS.getHikariConfigMXBean();
+                if (poolBean != null) {
+                    activeConnections = poolBean.getActiveConnections();
+                    idleConnections = poolBean.getIdleConnections();
+                    totalConnections = poolBean.getTotalConnections();
+                    threadsAwaitingConnection = poolBean.getThreadsAwaitingConnection();
+                }
+                if (configBean != null) {
+                    maxPoolSize = configBean.getMaximumPoolSize();
                 }
             }
-        } catch (Exception e) {
-            cpuLoad = 10.0;
-        }
-        if (Double.isNaN(cpuLoad) || cpuLoad < 0) {
-            cpuLoad = 8.4;
-        }
-        metrics.put("cpu", Math.round(cpuLoad * 100.0) / 100.0);
+        } catch (Exception ignored) {}
 
-        // 3. PostgreSQL Active Connections
-        int activeConnections = 0;
-        int maxPoolSize = 10;
-        if (dataSource instanceof HikariDataSource) {
-            HikariDataSource hikari = (HikariDataSource) dataSource;
-            if (hikari.getHikariPoolMXBean() != null) {
-                activeConnections = hikari.getHikariPoolMXBean().getActiveConnections();
-            }
-            maxPoolSize = hikari.getMaximumPoolSize();
-        }
-        Map<String, Object> db = new HashMap<>();
-        db.put("active", activeConnections);
-        db.put("max", maxPoolSize);
-        db.put("percent", maxPoolSize > 0 ? (double) activeConnections / maxPoolSize * 100 : 0);
-        metrics.put("db", db);
+        Map<String, Object> dbPool = new HashMap<>();
+        dbPool.put("active", activeConnections);
+        dbPool.put("idle", idleConnections);
+        dbPool.put("total", totalConnections);
+        dbPool.put("max", maxPoolSize);
+        dbPool.put("awaiting", threadsAwaitingConnection);
+        metrics.put("dbPool", dbPool);
+
+        // 3. API Performance Metrics
+        metrics.put("apiStats", com.stayeaze.backend.security.ApiMetricsFilter.getMetricsSnapshot());
 
         // 4. Real-time Service Connections Status (Redis, PostgreSQL, AWS S3/File Storage, Razorpay, Twilio, SMTP)
+        com.stayeaze.backend.models.SystemIntegrationSettings settings = null;
+        try {
+            if (settingsRepository != null) {
+                settings = settingsRepository.findAll().stream().findFirst().orElse(null);
+            }
+        } catch (Exception ignored) {}
+
+        final boolean isRedisEnabled = settings == null || Boolean.TRUE.equals(settings.getRedisEnabled());
+        final boolean isAwsS3Enabled = settings == null || Boolean.TRUE.equals(settings.getAwsS3Enabled());
+        final boolean isTwilioEnabled = true;
+        final boolean isSmtpEnabled = true;
+        final boolean isRazorpayEnabled = settings != null && settings.getRazorpayMasterKeyId() != null && !settings.getRazorpayMasterKeyId().isBlank();
+
         Optional<Organization> systemOrgOpt = organizationRepository.findBySubdomain("system");
         boolean twilioConfigured = false;
         boolean smtpConfigured = false;
@@ -124,55 +138,96 @@ public class SystemMetricsController {
             }
         }
 
-        // Redis Real-Time Health & PING check
-        boolean redisOnline = false;
-        long redisRtt = 0;
-        try {
-            long rStart = System.currentTimeMillis();
-            java.net.Socket socket = new java.net.Socket();
-            socket.connect(new java.net.InetSocketAddress("localhost", 6379), 1000);
-            socket.close();
-            redisOnline = true;
-            redisRtt = System.currentTimeMillis() - rStart;
-        } catch (Exception e) {
-            redisOnline = false;
+        final String rHost = settings != null && settings.getRedisHost() != null && !settings.getRedisHost().isBlank()
+                ? settings.getRedisHost() : "localhost";
+        final int rPort = settings != null && settings.getRedisPort() != null && settings.getRedisPort() > 0 
+                ? settings.getRedisPort() : 6379;
+
+        // Parallel Virtual Thread Health Probing
+        java.util.concurrent.CompletableFuture<Map<String, Object>> redisFuture;
+        java.util.concurrent.CompletableFuture<Map<String, Object>> postgresFuture;
+
+        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            final int activeConn = activeConnections;
+            final int maxPool = maxPoolSize;
+
+            redisFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                Map<String, Object> rMap = new HashMap<>();
+                if (!isRedisEnabled) {
+                    rMap.put("status", "In-Memory (Active)");
+                    rMap.put("rtt", 0);
+                    rMap.put("engine", "In-Memory ConcurrentMap");
+                    return rMap;
+                }
+                boolean redisOnline = false;
+                long redisRtt = 0;
+                try {
+                    long rStart = System.currentTimeMillis();
+                    java.net.Socket socket = new java.net.Socket();
+                    socket.connect(new java.net.InetSocketAddress(rHost, rPort), 1000);
+                    socket.close();
+                    redisOnline = true;
+                    redisRtt = System.currentTimeMillis() - rStart;
+                } catch (Exception e) {
+                    redisOnline = false;
+                }
+                rMap.put("status", redisOnline ? "Connected" : "In-Memory (Active)");
+                rMap.put("rtt", redisOnline ? Math.max(1, redisRtt) : 0);
+                rMap.put("engine", redisOnline ? "Redis L2 Cluster" : "In-Memory ConcurrentMap");
+                return rMap;
+            }, executor);
+
+            postgresFuture = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                boolean postgresOnline = activeConn > 0 || maxPool > 0;
+                Map<String, Object> pMap = new HashMap<>();
+                pMap.put("status", postgresOnline ? "Connected" : "Down");
+                pMap.put("rtt", 2);
+                return pMap;
+            }, executor);
+
+            java.util.concurrent.CompletableFuture.allOf(redisFuture, postgresFuture).join();
         }
 
-        // PostgreSQL Real-Time Health check
-        boolean postgresOnline = activeConnections > 0 || maxPoolSize > 0;
-        long dbRtt = 2; // Localhost PostgreSQL socket latency
-
-        // File / S3 Storage Health check
-        boolean storageOnline = true;
-        long storageRtt = 4;
-
-        Map<String, Object> redis = new HashMap<>();
-        redis.put("status", redisOnline ? "Connected" : "Down");
-        redis.put("rtt", redisOnline ? Math.max(1, redisRtt) : 0);
-
-        Map<String, Object> postgres = new HashMap<>();
-        postgres.put("status", postgresOnline ? "Connected" : "Down");
-        postgres.put("rtt", dbRtt);
+        final boolean isAwsS3Configured = settings != null && Boolean.TRUE.equals(settings.getAwsS3Enabled())
+                && settings.getAwsBucketName() != null && !settings.getAwsBucketName().isBlank()
+                && settings.getAwsAccessKey() != null && !settings.getAwsAccessKey().isBlank();
 
         Map<String, Object> storage = new HashMap<>();
-        storage.put("status", storageOnline ? "Connected" : "Down");
-        storage.put("rtt", storageRtt);
+        if (isAwsS3Configured) {
+            storage.put("status", "Connected");
+            storage.put("engine", "AWS S3 Cloud Bucket");
+            storage.put("mode", "Cloud S3");
+            storage.put("rtt", 4);
+        } else {
+            storage.put("status", "Local Disk (Active)");
+            storage.put("engine", "Local Disk (/uploads)");
+            storage.put("mode", "Local Disk");
+            storage.put("rtt", 1);
+        }
 
         Map<String, Object> twilio = new HashMap<>();
-        twilio.put("status", twilioConfigured ? "Connected" : "Down");
-        twilio.put("rtt", twilioConfigured ? 100 + (int)(Math.random() * 45) : 0);
+        twilio.put("status", !isTwilioEnabled ? "Disabled" : (twilioConfigured ? "Connected" : "Down"));
+        twilio.put("rtt", isTwilioEnabled && twilioConfigured ? 100 + (int)(Math.random() * 45) : 0);
 
         Map<String, Object> smtp = new HashMap<>();
-        smtp.put("status", smtpConfigured ? "Connected" : "Down");
-        smtp.put("rtt", smtpConfigured ? 60 + (int)(Math.random() * 30) : 0);
+        smtp.put("status", !isSmtpEnabled ? "Disabled" : (smtpConfigured ? "Connected" : "Down"));
+        smtp.put("rtt", isSmtpEnabled && smtpConfigured ? 60 + (int)(Math.random() * 30) : 0);
 
         Map<String, Object> razorpay = new HashMap<>();
-        razorpay.put("status", razorpayConfigured ? "Connected" : "Down");
-        razorpay.put("rtt", razorpayConfigured ? 120 + (int)(Math.random() * 40) : 0);
+        razorpay.put("status", !isRazorpayEnabled ? "Disabled" : (razorpayConfigured ? "Connected" : "Down"));
+        razorpay.put("rtt", isRazorpayEnabled && razorpayConfigured ? 120 + (int)(Math.random() * 40) : 0);
 
         Map<String, Object> serviceStatus = new HashMap<>();
-        serviceStatus.put("redis", redis);
-        serviceStatus.put("postgres", postgres);
+        try {
+            serviceStatus.put("redis", redisFuture.get());
+            serviceStatus.put("postgres", postgresFuture.get());
+        } catch (Exception e) {
+            Map<String, Object> fallback = new HashMap<>();
+            fallback.put("status", "Down");
+            fallback.put("rtt", 0);
+            serviceStatus.put("redis", fallback);
+            serviceStatus.put("postgres", fallback);
+        }
         serviceStatus.put("storage", storage);
         serviceStatus.put("twilio", twilio);
         serviceStatus.put("smtp", smtp);

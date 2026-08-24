@@ -50,6 +50,39 @@ public class CheckOut {
     @Column(length = 50)
     private String code;
 
+    @Column(name = "refund_status", length = 50)
+    private String refundStatus = "NOT_ELIGIBLE"; // NOT_ELIGIBLE, PENDING_APPROVAL, REFUNDED, REJECTED
+
+    @Column(name = "refund_approved_by", length = 150)
+    private String refundApprovedBy;
+
+    @Column(name = "refund_approved_at")
+    private OffsetDateTime refundApprovedAt;
+
+    @Column(name = "refund_payment_mode", length = 50)
+    private String refundPaymentMode;
+
+    @Column(name = "refund_transaction_ref", length = 100)
+    private String refundTransactionRef;
+
+    @Column(name = "refund_notes", columnDefinition = "text")
+    private String refundNotes;
+
+    @Column(name = "net_refund_amount", precision = 12, scale = 2)
+    private BigDecimal netRefundAmount;
+
+    @Column(name = "beneficiary_upi", length = 100)
+    private String beneficiaryUpi;
+
+    @Column(name = "beneficiary_bank", length = 100)
+    private String beneficiaryBank;
+
+    @Column(name = "beneficiary_account", length = 50)
+    private String beneficiaryAccount;
+
+    @Column(name = "beneficiary_ifsc", length = 30)
+    private String beneficiaryIfsc;
+
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
@@ -166,5 +199,96 @@ public class CheckOut {
 
     public void setCreatedAt(OffsetDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getRefundStatus() {
+        return refundStatus != null ? refundStatus : "NOT_ELIGIBLE";
+    }
+
+    public void setRefundStatus(String refundStatus) {
+        this.refundStatus = refundStatus;
+    }
+
+    public String getRefundApprovedBy() {
+        return refundApprovedBy;
+    }
+
+    public void setRefundApprovedBy(String refundApprovedBy) {
+        this.refundApprovedBy = refundApprovedBy;
+    }
+
+    public OffsetDateTime getRefundApprovedAt() {
+        return refundApprovedAt;
+    }
+
+    public void setRefundApprovedAt(OffsetDateTime refundApprovedAt) {
+        this.refundApprovedAt = refundApprovedAt;
+    }
+
+    public String getRefundPaymentMode() {
+        return refundPaymentMode;
+    }
+
+    public void setRefundPaymentMode(String refundPaymentMode) {
+        this.refundPaymentMode = refundPaymentMode;
+    }
+
+    public String getRefundTransactionRef() {
+        return refundTransactionRef;
+    }
+
+    public void setRefundTransactionRef(String refundTransactionRef) {
+        this.refundTransactionRef = refundTransactionRef;
+    }
+
+    public String getRefundNotes() {
+        return refundNotes;
+    }
+
+    public void setRefundNotes(String refundNotes) {
+        this.refundNotes = refundNotes;
+    }
+
+    public BigDecimal getNetRefundAmount() {
+        if (netRefundAmount != null) return netRefundAmount;
+        BigDecimal dep = depositRefund != null ? depositRefund : BigDecimal.ZERO;
+        BigDecimal ded = deductions != null ? deductions : BigDecimal.ZERO;
+        return dep.subtract(ded).max(BigDecimal.ZERO);
+    }
+
+    public void setNetRefundAmount(BigDecimal netRefundAmount) {
+        this.netRefundAmount = netRefundAmount;
+    }
+
+    public String getBeneficiaryUpi() {
+        return beneficiaryUpi;
+    }
+
+    public void setBeneficiaryUpi(String beneficiaryUpi) {
+        this.beneficiaryUpi = beneficiaryUpi;
+    }
+
+    public String getBeneficiaryBank() {
+        return beneficiaryBank;
+    }
+
+    public void setBeneficiaryBank(String beneficiaryBank) {
+        this.beneficiaryBank = beneficiaryBank;
+    }
+
+    public String getBeneficiaryAccount() {
+        return beneficiaryAccount;
+    }
+
+    public void setBeneficiaryAccount(String beneficiaryAccount) {
+        this.beneficiaryAccount = beneficiaryAccount;
+    }
+
+    public String getBeneficiaryIfsc() {
+        return beneficiaryIfsc;
+    }
+
+    public void setBeneficiaryIfsc(String beneficiaryIfsc) {
+        this.beneficiaryIfsc = beneficiaryIfsc;
     }
 }

@@ -24,5 +24,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("SELECT b FROM Booking b WHERE b.tenant.organization.id = :orgId")
     Page<Booking> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
+    @Query(value = "SELECT b.* FROM bookings b JOIN tenants t ON b.tenant_id = t.id WHERE t.org_id = CAST(:orgId AS uuid) ORDER BY b.created_at DESC", nativeQuery = true)
+    List<Booking> findByOrganizationIdNative(@Param("orgId") UUID orgId);
+
     Page<Booking> findAll(Pageable pageable);
 }

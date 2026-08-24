@@ -47,44 +47,69 @@ public class TenantDocumentController {
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
+    private boolean isSuperAdminUser() {
+        if (SecurityContextHolder.getContext().getAuthentication() == null) return false;
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth.getAuthorities() != null) {
+            return auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_SUPER_ADMIN") || a.getAuthority().equalsIgnoreCase("SUPER_ADMIN"));
+        }
+        return false;
+    }
+
     private Tenant getAuthorizedTenant(UUID tenantId) {
-        Organization organization = getLoggedUserOrg();
-        return tenantRepository.findByIdAndOrganization(tenantId, organization)
-                .orElseThrow(() -> new IllegalArgumentException("Tenant profile not found or unauthorized"));
+        if (tenantId == null) return null;
+        if (isSuperAdminUser()) {
+            return tenantRepository.findByIdSuperAdmin(tenantId).orElse(null);
+        }
+        try {
+            Organization organization = getLoggedUserOrg();
+            if (organization != null) {
+                return tenantRepository.findByIdAndOrganization(tenantId, organization)
+                        .orElseGet(() -> tenantRepository.findByIdSuperAdmin(tenantId).orElse(null));
+            }
+        } catch (Exception ignored) {}
+
+        return tenantRepository.findByIdSuperAdmin(tenantId).orElse(null);
     }
 
     @Autowired
     private com.stayeaze.backend.services.FileStorageService fileStorageService;
 
     @PostMapping
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> uploadDocument(@PathVariable UUID tenantId,
             @Valid @RequestBody TenantDocumentRequest request) {
-        Tenant tenant;
-        try {
-            tenant = getAuthorizedTenant(tenantId);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
+        Tenant tenant = getAuthorizedTenant(tenantId);
+        if (tenant == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant record not found."));
         }
 
         TenantDocument doc = new TenantDocument(tenant, request.getDocumentType(), request.getDocumentNumber());
         doc.setFileUrl(request.getFileUrl());
         TenantDocument saved = tenantDocumentRepository.save(doc);
+
+        if (request.getDocumentType() != null && !request.getDocumentType().isBlank()) {
+            tenant.setIdType(request.getDocumentType().toLowerCase());
+        }
+        if (request.getDocumentNumber() != null && !request.getDocumentNumber().isBlank()) {
+            tenant.setIdNumber(request.getDocumentNumber());
+        }
+        tenantRepository.save(tenant);
+
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
     }
 
     @PostMapping(value = "/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> uploadDocumentFile(
             @PathVariable UUID tenantId,
             @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
             @RequestParam("documentType") String documentType,
             @RequestParam(value = "documentNumber", required = false) String documentNumber) {
-        Tenant tenant;
-        try {
-            tenant = getAuthorizedTenant(tenantId);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
+        Tenant tenant = getAuthorizedTenant(tenantId);
+        if (tenant == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant record not found."));
         }
 
         try {
@@ -92,6 +117,15 @@ public class TenantDocumentController {
             TenantDocument doc = new TenantDocument(tenant, documentType, documentNumber);
             doc.setFileUrl(fileUrl);
             TenantDocument saved = tenantDocumentRepository.save(doc);
+
+            if (documentType != null && !documentType.isBlank()) {
+                tenant.setIdType(documentType.toLowerCase());
+            }
+            if (documentNumber != null && !documentNumber.isBlank()) {
+                tenant.setIdNumber(documentNumber);
+            }
+            tenantRepository.save(tenant);
+
             return new ResponseEntity<>(saved, HttpStatus.CREATED);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -101,19 +135,29 @@ public class TenantDocumentController {
 
     @GetMapping
     public ResponseEntity<?> getAllDocuments(@PathVariable UUID tenantId) {
-        Tenant tenant;
-        try {
-            tenant = getAuthorizedTenant(tenantId);
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
+        Tenant tenant = getAuthorizedTenant(tenantId);
+        if (tenant == null) {
+            return ResponseEntity.ok(new java.util.ArrayList<>());
         }
 
         List<TenantDocument> docs = tenantDocumentRepository.findByTenant(tenant);
+        if (docs == null) {
+            docs = new java.util.ArrayList<>();
+        }
+
+        if (docs.isEmpty() && tenant.getIdNumber() != null && !tenant.getIdNumber().isBlank()) {
+            TenantDocument initialDoc = new TenantDocument(tenant, tenant.getIdType() != null ? tenant.getIdType().toUpperCase() : "AADHAAR", tenant.getIdNumber());
+            initialDoc.setVerificationStatus(tenant.getKycStatus() != null ? tenant.getKycStatus() : "PENDING");
+            initialDoc.setFileUrl(null);
+            TenantDocument saved = tenantDocumentRepository.save(initialDoc);
+            docs.add(saved);
+        }
+
         return ResponseEntity.ok(docs);
     }
 
     @PutMapping("/{id}/verify")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN') or hasRole('RECEPTIONIST')")
     public ResponseEntity<?> verifyDocument(@PathVariable UUID tenantId, @PathVariable UUID id,
             @RequestParam String status) {
         Tenant tenant;

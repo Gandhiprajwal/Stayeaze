@@ -29,5 +29,14 @@ public interface BuildingRepository extends JpaRepository<Building, UUID> {
     @Query("SELECT b FROM Building b WHERE b.property.organization.id = :orgId")
     Page<Building> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
+    @Query(value = "SELECT property_id FROM buildings WHERE id = :buildingId", nativeQuery = true)
+    UUID findPropertyIdByBuildingId(@Param("buildingId") UUID buildingId);
+
+    @Query(value = "SELECT * FROM buildings b ORDER BY b.name ASC", nativeQuery = true)
+    List<Building> findAllSuperAdmin();
+
+    @Query(value = "SELECT b.* FROM buildings b JOIN properties p ON b.property_id = p.id WHERE p.org_id = CAST(:orgId AS uuid)", nativeQuery = true)
+    List<Building> findByOrganizationIdNative(@Param("orgId") UUID orgId);
+
     Page<Building> findAll(Pageable pageable);
 }

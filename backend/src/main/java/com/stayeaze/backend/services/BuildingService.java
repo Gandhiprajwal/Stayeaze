@@ -21,6 +21,67 @@ public class BuildingService {
     @Autowired
     private BuildingRepository buildingRepository;
 
+    @Autowired
+    private com.stayeaze.backend.repository.FloorRepository floorRepository;
+
+    @Autowired
+    private com.stayeaze.backend.repository.RoomRepository roomRepository;
+
+    @Autowired
+    private com.stayeaze.backend.repository.BedRepository bedRepository;
+
+    @Autowired
+    private com.stayeaze.backend.repository.TenantRepository tenantRepository;
+
+    private Building populateBuildingStats(Building b, Organization organization) {
+        if (b == null) return null;
+        List<com.stayeaze.backend.models.Floor> floors = floorRepository.findByBuildingId(b.getId());
+        b.setFloors(floors.size());
+
+        int totalRooms = 0;
+        int totalBeds = 0;
+        int occupiedBeds = 0;
+
+        List<com.stayeaze.backend.models.Tenant> activeTenants = null;
+        try {
+            activeTenants = organization != null ? tenantRepository.findByOrganization(organization) : tenantRepository.findAll();
+        } catch (Exception ignored) {}
+
+        for (com.stayeaze.backend.models.Floor f : floors) {
+            List<com.stayeaze.backend.models.Room> rooms = roomRepository.findByFloorId(f.getId());
+            totalRooms += rooms.size();
+
+            for (com.stayeaze.backend.models.Room r : rooms) {
+                List<com.stayeaze.backend.models.Bed> beds = bedRepository.findByRoomId(r.getId());
+                int rBedCount = beds.size();
+                if (rBedCount == 0 && r.getSharing() != null && r.getSharing() > 0) {
+                    rBedCount = r.getSharing();
+                }
+                totalBeds += rBedCount;
+
+                for (com.stayeaze.backend.models.Bed bed : beds) {
+                    boolean isOcc = "OCCUPIED".equalsIgnoreCase(bed.getStatus());
+                    if (!isOcc && activeTenants != null) {
+                        for (com.stayeaze.backend.models.Tenant t : activeTenants) {
+                            boolean statusOk = t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus());
+                            if (statusOk && r.getRoomNumber() != null && r.getRoomNumber().equalsIgnoreCase(t.getRoomNumber())
+                                    && bed.getBedNumber() != null && bed.getBedNumber().equalsIgnoreCase(t.getBedNumber())) {
+                                isOcc = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (isOcc) occupiedBeds++;
+                }
+            }
+        }
+
+        b.setRooms(totalRooms);
+        b.setBeds(totalBeds);
+        b.setOccupied(occupiedBeds);
+        return b;
+    }
+
     /**
      * Returns all BuildingDTOs for the given org, cached by orgId.
      * Pagination is applied at the controller/PageResponse level after retrieval.
@@ -33,15 +94,17 @@ public class BuildingService {
             return getAllBuildings();
         }
         return buildingRepository.findByOrganizationId(organization.getId()).stream()
-                .map(BuildingDTO::fromEntity)
+                .map(b -> BuildingDTO.fromEntity(populateBuildingStats(b, organization)))
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     @Cacheable(value = "buildings", key = "'all_super_admin'")
     public List<BuildingDTO> getAllBuildings() {
-        return buildingRepository.findAll().stream()
-                .map(BuildingDTO::fromEntity)
+        List<Building> buildings = buildingRepository.findAllSuperAdmin();
+        if (buildings == null) return java.util.Collections.emptyList();
+        return buildings.stream()
+                .map(b -> BuildingDTO.fromEntity(populateBuildingStats(b, null)))
                 .collect(Collectors.toList());
     }
 
@@ -58,4 +121,9 @@ public class BuildingService {
     public void deleteBuilding(UUID id) {
         buildingRepository.deleteById(id);
     }
+
+    @Caching(evict = {
+        @CacheEvict(value = "buildings", allEntries = true)
+    })
+    public void evictCaches() {}
 }

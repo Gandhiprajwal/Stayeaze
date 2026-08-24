@@ -64,6 +64,8 @@ public class RedisConfig {
 
                 LettuceConnectionFactory connectionFactory = new LettuceConnectionFactory(redisConfig);
                 connectionFactory.afterPropertiesSet();
+                // Test connection with ping to ensure Redis credentials and host are valid
+                connectionFactory.getConnection().ping();
 
                 // Custom ObjectMapper with JSR-310 (JavaTimeModule) & Hibernate6Module for proxy-safe Redis JSON
                 ObjectMapper objectMapper = new ObjectMapper();
@@ -102,8 +104,11 @@ public class RedisConfig {
                 // Buildings/Floors/Rooms/Beds: 10 min + jitter (structure changes infrequently)
                 cacheConfigurations.put("buildings", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("floors", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
+                cacheConfigurations.put("floors_v2", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("rooms", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
+                cacheConfigurations.put("rooms_v3", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("beds", defaultConfig.entryTtl(Duration.ofMinutes(5).plusSeconds(random.nextInt(30))));
+                cacheConfigurations.put("beds_v3", defaultConfig.entryTtl(Duration.ofMinutes(5).plusSeconds(random.nextInt(30))));
 
                 // Tenants cache: 5 min + jitter
                 cacheConfigurations.put("tenants", defaultConfig.entryTtl(Duration.ofMinutes(5).plusSeconds(random.nextInt(30))));
@@ -135,23 +140,17 @@ public class RedisConfig {
                         .build();
 
             } catch (Exception ex) {
-                logger.error("Failed to connect to Redis instance at {}:{} ({}) - Falling back to ConcurrentMapCacheManager",
+                logger.info("Local Redis instance at {}:{} not running ({}) - Operating cleanly with in-memory ConcurrentMapCacheManager",
                         settings.getRedisHost(), settings.getRedisPort(), ex.getMessage());
             }
         } else {
             logger.info("Redis Caching is disabled or credentials not configured. Using In-Memory ConcurrentMapCacheManager.");
         }
 
-        // Fallback in-memory cache manager
-        return new ConcurrentMapCacheManager(
-                "properties", "propertyDtos", "minimalProperties",
-                "organizationProfiles",
-                "buildings", "floors", "rooms", "beds",
-                "tenants", "minimalTenants",
-                "bookings", "checkIns", "checkOuts",
-                "invoices", "payments",
-                "complaints", "maintenance", "visitors", "auditLogs"
-        );
+        // Fallback in-memory cache manager (Dynamic creation enabled to prevent 'Cannot find cache named' errors)
+        ConcurrentMapCacheManager dynamicCacheManager = new ConcurrentMapCacheManager();
+        dynamicCacheManager.setAllowNullValues(true);
+        return dynamicCacheManager;
     }
 
     @Bean

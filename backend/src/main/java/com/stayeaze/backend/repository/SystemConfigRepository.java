@@ -11,4 +11,7 @@ import java.util.UUID;
 @Repository
 public interface SystemConfigRepository extends JpaRepository<SystemConfig, UUID> {
     Optional<SystemConfig> findByOrganization(Organization organization);
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT * FROM system_configs LIMIT 1", nativeQuery = true)
+    Optional<SystemConfig> findFirstNative();
 }

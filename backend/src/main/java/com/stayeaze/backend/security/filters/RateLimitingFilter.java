@@ -80,6 +80,10 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
         int apiLimit = settings != null && settings.getMaxRequestsPerSec() != null && settings.getMaxRequestsPerSec() > 0 ? settings.getMaxRequestsPerSec() : 1000;
         int authLimit = settings != null && settings.getAuthBruteForceLimitPerMin() != null && settings.getAuthBruteForceLimitPerMin() > 0 ? settings.getAuthBruteForceLimitPerMin() : 120;
+        if (path != null && (path.endsWith("/stream") || "text/event-stream".equals(request.getHeader("Accept")))) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         if (enabled) {
             if (path.contains("/api/v1/auth/signin") || path.contains("/api/v1/auth/signup") || path.contains("/api/v1/auth/login")) {

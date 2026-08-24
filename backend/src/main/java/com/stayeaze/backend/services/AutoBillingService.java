@@ -27,11 +27,11 @@ public class AutoBillingService {
     @Autowired
     private OrganizationBillingProfileRepository organizationBillingProfileRepository;
 
-    private String nextInvoiceNumber(OrganizationBillingProfile profile) {
-        LocalDate today = LocalDate.now();
-        int financialYearStart = today.getMonthValue() >= 4 ? today.getYear() : today.getYear() - 1;
-        String financialYear = financialYearStart + "-" + String.valueOf(financialYearStart + 1).substring(2);
-        return profile.getInvoicePrefix() + "/" + financialYear + "/" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    @Autowired
+    private InvoiceSequenceService invoiceSequenceService;
+
+    private String nextInvoiceNumber(Tenant tenant) {
+        return invoiceSequenceService.nextRentalInvoiceNumber(tenant);
     }
 
     private OrganizationBillingProfile getBillingProfile(Organization organization) {
@@ -47,106 +47,126 @@ public class AutoBillingService {
      * auto-generates the next monthly rent invoice and skips checked-out tenants.
      */
     @Scheduled(cron = "0 0 1 * * ?")
-    @Transactional
     public Map<String, Object> autoGenerateMonthlyInvoices() {
-        logger.info("Starting nightly automated monthly rent invoice generation...");
+        logger.info("Starting nightly automated monthly rent invoice generation via parallel Virtual Threads...");
         List<Tenant> allTenants = tenantRepository.findAll();
         LocalDate today = LocalDate.now();
-        int generatedCount = 0;
-        int skippedCheckedOut = 0;
-        List<String> generatedDetails = new ArrayList<>();
+        java.util.concurrent.atomic.AtomicInteger generatedCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger skippedCheckedOut = new java.util.concurrent.atomic.AtomicInteger(0);
+        List<String> generatedDetails = Collections.synchronizedList(new ArrayList<>());
 
-        for (Tenant tenant : allTenants) {
-            // Rule 1: Exclude checked-out, archived, or inactive tenants
-            if (tenant.getStatus() != null && 
-               (tenant.getStatus().equalsIgnoreCase("CHECKED_OUT") || 
-                tenant.getStatus().equalsIgnoreCase("ARCHIVED") || 
-                tenant.getStatus().equalsIgnoreCase("BLACKLISTED") ||
-                tenant.getStatus().equalsIgnoreCase("INACTIVE"))) {
-                skippedCheckedOut++;
-                continue;
-            }
-
-            // Only process ACTIVE tenants
-            if (tenant.getStatus() != null && !tenant.getStatus().equalsIgnoreCase("ACTIVE")) {
-                continue;
-            }
-
-            // Determine Check-in / Start Date
-            LocalDate checkInDate = null;
-            if (tenant.getLeaseStart() != null && !tenant.getLeaseStart().trim().isEmpty()) {
-                try {
-                    checkInDate = LocalDate.parse(tenant.getLeaseStart().trim().substring(0, 10));
-                } catch (Exception ignored) {}
-            }
-            if (checkInDate == null && tenant.getCreatedAt() != null) {
-                checkInDate = tenant.getCreatedAt().toLocalDate();
-            }
-            if (checkInDate == null) {
-                checkInDate = today;
-            }
-
-            // Find existing invoices for this tenant
-            List<Invoice> existingInvoices = invoiceRepository.findByTenant(tenant);
-            existingInvoices.sort((a, b) -> b.getDueDate().compareTo(a.getDueDate()));
-
-            LocalDate cycleStart;
-            LocalDate cycleEnd;
-
-            if (existingInvoices.isEmpty()) {
-                cycleStart = checkInDate;
-                cycleEnd = checkInDate.plusMonths(1);
-            } else {
-                Invoice latest = existingInvoices.get(0);
-                cycleStart = latest.getDueDate();
-                cycleEnd = latest.getDueDate().plusMonths(1);
-            }
-
-            // Trigger 1 Day Before Cycle End
-            LocalDate triggerDate = cycleEnd.minusDays(1);
-
-            if (today.isAfter(triggerDate) || today.isEqual(triggerDate)) {
-                boolean alreadyExists = existingInvoices.stream()
-                        .anyMatch(inv -> inv.getDueDate().equals(cycleEnd) || (inv.getIssueDate() != null && inv.getIssueDate().equals(today)));
-
-                if (!alreadyExists) {
-                    Organization org = tenant.getOrganization();
-                    OrganizationBillingProfile profile = getBillingProfile(org);
-                    String invoiceNum = profile != null ? nextInvoiceNumber(profile) : "INV/" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-
-                    int dueDays = (profile != null && profile.getPaymentDueDays() != null) ? profile.getPaymentDueDays() : 7;
-                    LocalDate issueDate = today; // Generation / Issue Date is TODAY
-                    LocalDate dueDate = issueDate.plusDays(dueDays); // Due Date based on Organization paymentDueDays setting
-
-                    BigDecimal rentAmount = tenant.getRent();
-                    if (rentAmount == null || rentAmount.compareTo(BigDecimal.ZERO) <= 0) {
-                        rentAmount = new BigDecimal("8000.00");
+        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            List<java.util.concurrent.CompletableFuture<Void>> futures = allTenants.stream().map(tenant -> 
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    try {
+                        processTenantAutoBilling(tenant, today, generatedCount, skippedCheckedOut, generatedDetails);
+                    } catch (Exception e) {
+                        logger.error("Error processing auto-billing for tenant ID {}: {}", tenant.getId(), e.getMessage());
                     }
+                }, executor)
+            ).toList();
 
-                    Invoice newInvoice = new Invoice(tenant, invoiceNum, dueDate, issueDate, rentAmount);
-                    if (profile != null) {
-                        newInvoice.setIssuerSnapshot(new InvoiceIssuerSnapshot(profile));
-                    }
-
-                    List<InvoiceItem> items = new ArrayList<>();
-                    items.add(new InvoiceItem(newInvoice, "Monthly Rent (" + cycleStart + " to " + cycleEnd + ")", rentAmount));
-                    newInvoice.setItems(items);
-
-                    invoiceRepository.save(newInvoice);
-                    generatedCount++;
-                    generatedDetails.add(tenant.getFirstName() + " " + tenant.getLastName() + " (" + invoiceNum + " - ₹" + rentAmount + ")");
-                    logger.info("Auto-generated invoice {} for tenant {} (Issued: {}, Due: {})", invoiceNum, tenant.getFirstName() + " " + tenant.getLastName(), issueDate, dueDate);
-                }
-            }
+            java.util.concurrent.CompletableFuture.allOf(futures.toArray(new java.util.concurrent.CompletableFuture[0])).join();
         }
 
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
-        result.put("generatedCount", generatedCount);
-        result.put("skippedCheckedOutCount", skippedCheckedOut);
-        result.put("details", generatedDetails);
+        result.put("generatedCount", generatedCount.get());
+        result.put("skippedCheckedOutCount", skippedCheckedOut.get());
+        result.put("details", new ArrayList<>(generatedDetails));
         result.put("timestamp", LocalDate.now().toString());
         return result;
+    }
+
+    @Transactional
+    public void processTenantAutoBilling(
+            Tenant tenant,
+            LocalDate today,
+            java.util.concurrent.atomic.AtomicInteger generatedCount,
+            java.util.concurrent.atomic.AtomicInteger skippedCheckedOut,
+            List<String> generatedDetails
+    ) {
+        // Rule 1: Exclude checked-out, archived, or inactive tenants
+        if (tenant.getStatus() != null && 
+           (tenant.getStatus().equalsIgnoreCase("CHECKED_OUT") || 
+            tenant.getStatus().equalsIgnoreCase("ARCHIVED") || 
+            tenant.getStatus().equalsIgnoreCase("BLACKLISTED") ||
+            tenant.getStatus().equalsIgnoreCase("INACTIVE"))) {
+            skippedCheckedOut.incrementAndGet();
+            return;
+        }
+
+        // Only process ACTIVE tenants
+        if (tenant.getStatus() != null && !tenant.getStatus().equalsIgnoreCase("ACTIVE")) {
+            return;
+        }
+
+        // Determine Check-in / Start Date
+        LocalDate checkInDate = null;
+        if (tenant.getLeaseStart() != null && !tenant.getLeaseStart().trim().isEmpty()) {
+            try {
+                checkInDate = LocalDate.parse(tenant.getLeaseStart().trim().substring(0, 10));
+            } catch (Exception ignored) {}
+        }
+        if (checkInDate == null && tenant.getCreatedAt() != null) {
+            checkInDate = tenant.getCreatedAt().toLocalDate();
+        }
+        if (checkInDate == null) {
+            checkInDate = today;
+        }
+
+        // Find existing invoices for this tenant
+        List<Invoice> existingInvoices = invoiceRepository.findByTenant(tenant);
+        existingInvoices.sort((a, b) -> b.getDueDate().compareTo(a.getDueDate()));
+
+        LocalDate cycleStart;
+        LocalDate cycleEnd;
+
+        if (existingInvoices.isEmpty()) {
+            cycleStart = checkInDate;
+            cycleEnd = checkInDate.plusMonths(1);
+        } else {
+            Invoice latest = existingInvoices.get(0);
+            cycleStart = latest.getDueDate();
+            cycleEnd = latest.getDueDate().plusMonths(1);
+        }
+
+        // Trigger 1 Day Before Cycle End
+        LocalDate triggerDate = cycleEnd.minusDays(1);
+
+        if (today.isAfter(triggerDate) || today.isEqual(triggerDate)) {
+            boolean alreadyExists = existingInvoices.stream()
+                    .anyMatch(inv -> inv.getDueDate().equals(cycleEnd) || (inv.getIssueDate() != null && inv.getIssueDate().equals(today)));
+
+            if (!alreadyExists) {
+                Organization org = tenant.getOrganization();
+                OrganizationBillingProfile profile = getBillingProfile(org);
+                String invoiceNum = nextInvoiceNumber(tenant);
+
+                int dueDays = (profile != null && profile.getPaymentDueDays() != null) ? profile.getPaymentDueDays() : 7;
+                LocalDate issueDate = today; // Generation / Issue Date is TODAY
+                LocalDate dueDate = issueDate.plusDays(dueDays); // Due Date based on Organization paymentDueDays setting
+
+                BigDecimal rentAmount = tenant.getRent();
+                if (rentAmount == null || rentAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                    rentAmount = new BigDecimal("8000.00");
+                }
+
+                Invoice newInvoice = new Invoice(tenant, invoiceNum, dueDate, issueDate, rentAmount);
+                if (profile != null) {
+                    newInvoice.setIssuerSnapshot(new InvoiceIssuerSnapshot(profile));
+                }
+
+                List<InvoiceItem> items = new ArrayList<>();
+                items.add(new InvoiceItem(newInvoice, "Monthly Rent (" + cycleStart + " to " + cycleEnd + ")", rentAmount));
+                newInvoice.setItems(items);
+
+                invoiceRepository.save(newInvoice);
+                generatedCount.incrementAndGet();
+                generatedDetails.add(tenant.getFirstName() + " " + tenant.getLastName() + " (" + invoiceNum + " - ₹" + rentAmount + ")");
+                logger.info("Auto-generated invoice {} for tenant {} (Issued: {}, Due: {})", invoiceNum, tenant.getFirstName() + " " + tenant.getLastName(), issueDate, dueDate);
+            }
+        }
     }
 
     /**
@@ -193,7 +213,7 @@ public class AutoBillingService {
 
         Organization org = tenant.getOrganization();
         OrganizationBillingProfile profile = getBillingProfile(org);
-        String invoiceNum = profile != null ? nextInvoiceNumber(profile) : "INV/" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String invoiceNum = nextInvoiceNumber(tenant);
 
         int dueDays = (profile != null && profile.getPaymentDueDays() != null) ? profile.getPaymentDueDays() : 7;
         LocalDate issueDate = today; // Generation / Issue Date is TODAY
