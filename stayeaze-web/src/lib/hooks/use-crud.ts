@@ -36,18 +36,43 @@ export function useCreate<T>(endpoint: string, label = 'Record') {
   });
 }
 
-export function useUpdate<T>(endpoint: string, label = 'Record') {
+export function useUpdate<T extends { id?: string }>(endpoint: string, label = 'Record') {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, payload }: { id: string; payload: Partial<T> }) => {
       const { data } = await api.put<T>(`${endpoint}/${id}`, payload);
       return data;
     },
+    onMutate: async ({ id, payload }) => {
+      await qc.cancelQueries({ queryKey: [endpoint] });
+      const previousData = qc.getQueryData([endpoint]);
+      qc.setQueriesData({ queryKey: [endpoint] }, (old: any) => {
+        if (!old) return old;
+        if (Array.isArray(old)) {
+          return old.map((item: any) => (item.id === id ? { ...item, ...payload } : item));
+        }
+        if (old.data && Array.isArray(old.data)) {
+          return {
+            ...old,
+            data: old.data.map((item: any) => (item.id === id ? { ...item, ...payload } : item)),
+          };
+        }
+        return old;
+      });
+      return { previousData };
+    },
+    onError: (e: Error, _vars, context: any) => {
+      if (context?.previousData) {
+        qc.setQueryData([endpoint], context.previousData);
+      }
+      toast.error(e.message);
+    },
     onSuccess: () => {
-      invalidateAllRelated(qc, endpoint);
       toast.success(`${label} updated successfully`);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onSettled: () => {
+      invalidateAllRelated(qc, endpoint);
+    },
   });
 }
 
@@ -84,13 +109,34 @@ export function useBulkDelete(endpoint: string, label = 'Records') {
 export function useForm<T extends Record<string, unknown>>(initial: T) {
   const [values, setValues] = useState<T>(initial);
   const [errors, setErrors] = useState<Partial<Record<keyof T, string>>>({});
+  const [touched, setTouched] = useState<Partial<Record<keyof T, boolean>>>({});
 
   const setValue = <K extends keyof T>(key: K, value: T[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
+  const setFieldTouched = <K extends keyof T>(key: K, isTouched = true) =>
+    setTouched((t) => ({ ...t, [key]: isTouched }));
+
   const reset = (next?: T) => {
     setValues(next ?? initial);
     setErrors({});
+    setTouched({});
+  };
+
+  const validateField = <K extends keyof T>(key: K, rule?: (v: unknown) => string | undefined) => {
+    if (!rule) return undefined;
+    const msg = rule(values[key]);
+    setErrors((prev) => ({ ...prev, [key]: msg }));
+    setTouched((prev) => ({ ...prev, [key]: true }));
+    return msg;
+  };
+
+  const handleBlur = <K extends keyof T>(key: K, rule?: (v: unknown) => string | undefined) => {
+    setTouched((prev) => ({ ...prev, [key]: true }));
+    if (rule) {
+      const msg = rule(values[key]);
+      setErrors((prev) => ({ ...prev, [key]: msg }));
+    }
   };
 
   const validate = (rules: Partial<Record<keyof T, (v: unknown) => string | undefined>>) => {
@@ -104,10 +150,18 @@ export function useForm<T extends Record<string, unknown>>(initial: T) {
       }
     }
     setErrors(next);
+    // Mark all rules as touched when overall validate is called
+    const allTouched: Partial<Record<keyof T, boolean>> = {};
+    for (const key in rules) { allTouched[key] = true; }
+    setTouched(allTouched);
+
+    if (!valid) {
+      toast.error('Please fill in all required fields marked with *');
+    }
     return valid;
   };
 
-  return { values, errors, setValue, reset, validate, setErrors };
+  return { values, errors, touched, setValue, setFieldTouched, handleBlur, validateField, reset, validate, setErrors };
 }
 
 // List fetcher bound to an endpoint — used by pages that need raw data

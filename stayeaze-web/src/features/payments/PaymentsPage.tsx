@@ -20,6 +20,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import api from '@/lib/api';
+import { useAuthStore } from '@/lib/stores/auth-store';
 import type { Payment, Property, User, Tenant, InvoiceIssuerSnapshot } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm, useBulkDelete } from '@/lib/hooks/use-crud';
@@ -55,11 +56,13 @@ export default function PaymentsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Payment | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<Payment | null>(null);
 
+  const currentUser = useAuthStore((s) => s.user);
+
   const { data: properties } = useQuery({
     queryKey: ['payments-properties-minimal'],
     queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
-  const propMap = new Map((properties ?? []).map((p: any) => [p.id, p]));
+  const propMap = new Map<string, any>((properties ?? []).map((p: any) => [p.id, p]));
   
   const { data: tenants } = useQuery({
     queryKey: ['payments-tenants'],
@@ -69,6 +72,11 @@ export default function PaymentsPage() {
   const { data: users } = useQuery({
     queryKey: ['payments-users'],
     queryFn: () => api.get<{ data: User[] }>('/users', { params: { pageSize: 100 } }).then((r) => r.data.data),
+  });
+
+  const staffUsers = (users ?? []).filter((u: any) => {
+    const role = (u.role || '').toUpperCase();
+    return role !== 'TENANT' && role !== 'ROLE_TENANT';
   });
 
   const { data: payments } = useQuery({
@@ -103,7 +111,14 @@ export default function PaymentsPage() {
     }
   }
 
-  function openCreate() { form.reset(emptyForm); setDialogOpen(true); }
+  function openCreate() {
+    form.reset({
+      ...emptyForm,
+      collectedBy: currentUser?.name || 'Staff Admin',
+      date: new Date().toISOString().slice(0, 10),
+    });
+    setDialogOpen(true);
+  }
 
   function submit() {
     if (!form.validate({ tenantName: (v) => !v ? 'Required' : undefined, amount: (v) => Number(v) <= 0 ? 'Amount must be positive' : undefined })) return;
@@ -365,9 +380,14 @@ export default function PaymentsPage() {
           <FormInput label="Payment Date" type="date" id="date" value={form.values.date} onChange={(e) => form.setValue('date', e.target.value)} />
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Collected By (Staff / Owner Name)</Label>
-            <Select value={form.values.collectedBy} onValueChange={(v) => form.setValue('collectedBy', v)}>
+            <Select value={form.values.collectedBy || currentUser?.name || ''} onValueChange={(v) => form.setValue('collectedBy', v)}>
               <SelectTrigger><SelectValue placeholder="Select staff member..." /></SelectTrigger>
-              <SelectContent>{(users ?? []).map((u) => <SelectItem key={u.id} value={u.name}>{u.name} ({u.role})</SelectItem>)}</SelectContent>
+              <SelectContent>
+                {staffUsers.map((u) => <SelectItem key={u.id} value={u.name}>{u.name} ({u.role})</SelectItem>)}
+                {currentUser?.name && !staffUsers.some((u) => u.name === currentUser.name) && (
+                  <SelectItem value={currentUser.name}>{currentUser.name} ({currentUser.role || 'Staff'})</SelectItem>
+                )}
+              </SelectContent>
             </Select>
           </div>
         </div>
@@ -376,8 +396,10 @@ export default function PaymentsPage() {
       {/* Official Printable Rent Receipt Dialog */}
       <Dialog open={!!viewingReceipt} onOpenChange={(o) => !o && setViewingReceipt(null)}>
         <DialogContent className="sm:max-w-[650px] p-0 overflow-hidden rounded-2xl border-slate-200 dark:border-slate-800 shadow-2xl">
-          {viewingReceipt && (
-            <div id="printable-official-payment-receipt" className="printable-receipt-card bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-6 sm:p-8 space-y-6">
+          {viewingReceipt && (() => {
+            const currentProperty = (viewingReceipt ? propMap.get(viewingReceipt.propertyId) : (properties && properties.length > 0 ? properties[0] : null)) as any;
+            return (
+              <div id="printable-official-payment-receipt" className="printable-receipt-card bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-6 sm:p-8 space-y-6">
               
               {/* Receipt Top Header */}
               <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-5">
@@ -490,7 +512,8 @@ export default function PaymentsPage() {
               </div>
 
             </div>
-          )}
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

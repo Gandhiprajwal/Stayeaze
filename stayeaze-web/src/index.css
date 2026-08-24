@@ -78,6 +78,12 @@
 }
 
 @layer base {
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
   * {
     @apply border-border;
   }
@@ -104,6 +110,38 @@
   .border-sidebar { border-color: hsl(var(--sidebar)); }
 }
 
+/* Visible Custom Scrollbar styling for all scrollable containers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.6);
+}
+
 /* Clean Print Stylesheet */
 @media print {
   body {
@@ -114,8 +152,37 @@
   }
 
   .print\:hidden,
-  .no-print,
-  button {
+  .no-print {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  #reception-qr-print-poster,
+  #reception-qr-print-poster * {
+    visibility: visible !important;
+  }
+
+  #reception-qr-print-poster {
+    position: fixed !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 100% !important;
+    max-width: 440px !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1) !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    padding: 32px !important;
+    border-radius: 20px !important;
+    margin: 0 auto !important;
+  }
+
+  #reception-qr-print-poster button.no-print,
+  #reception-qr-print-poster .no-print {
     display: none !important;
   }
 

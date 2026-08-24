@@ -10,6 +10,7 @@ import { RowActions } from '@/components/common/RowActions';
 import { FormDialog } from '@/components/common/FormDialog';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { FormInput } from '@/components/common/FormField';
+import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -45,7 +46,12 @@ export default function BuildingsPage() {
   const deleteMut = useDelete(ENDPOINT, 'Building');
   const form = useForm(emptyForm);
 
-  function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
+  function openCreate() {
+    setEditing(null);
+    const defaultPropId = properties && properties.length > 0 ? properties[0].id : '';
+    form.reset({ ...emptyForm, propertyId: defaultPropId });
+    setDialogOpen(true);
+  }
   function openEdit(row: Building) {
     setEditing(row);
     form.reset({ name: row.name, code: row.code, propertyId: row.propertyId, status: row.status });
@@ -73,7 +79,7 @@ export default function BuildingsPage() {
         <div><p className="font-medium">{r.name}</p><p className="text-xs text-muted-foreground">{r.code}</p></div>
       </div>
     )},
-    { key: 'propertyId', header: 'Property', sortable: true, cell: (r) => <span className="text-sm">{propMap.get(r.propertyId) ?? '—'}</span> },
+    { key: 'propertyId', header: 'Property', sortable: true, cell: (r) => <span className="text-sm">{r.propertyName || propMap.get(r.propertyId) || '—'}</span> },
     { key: 'floors', header: 'Floors', sortable: true, cell: (r) => <span className="tabular-nums">{r.floors}</span> },
     { key: 'rooms', header: 'Rooms', sortable: true, cell: (r) => <span className="tabular-nums">{r.rooms}</span> },
     { key: 'occupied', header: 'Occupancy', sortable: true, cell: (r) => {
@@ -132,11 +138,19 @@ export default function BuildingsPage() {
           <FormInput label="Building Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} />
           <FormInput label="Code" id="code" value={form.values.code} onChange={(e) => form.setValue('code', e.target.value.toUpperCase())} />
           <div className="space-y-1.5 sm:col-span-2">
-            <Label>Property</Label>
-            <Select value={form.values.propertyId} onValueChange={(v) => form.setValue('propertyId', v)}>
-              <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
-              <SelectContent>{(properties ?? []).map((p: Property) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-            </Select>
+            <Label required>Property</Label>
+            <SearchableSelect
+              options={(properties ?? []).map((p: Property) => ({
+                value: p.id,
+                label: p.name,
+                sublabel: p.city || p.code || 'Property',
+                badge: p.type || 'PG',
+              }))}
+              value={form.values.propertyId}
+              onChange={(v) => form.setValue('propertyId', v)}
+              placeholder="Search & select property..."
+              searchPlaceholder="Search properties by name, city..."
+            />
             {form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}
           </div>
           <div className="space-y-1.5">

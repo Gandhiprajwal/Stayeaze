@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, Hotel, Building2, Users, BedDouble, Wallet, MapPin,
   Phone, Mail, Pencil, Calendar, TrendingUp, Layers, DoorOpen,
-  ChevronDown, ChevronRight, BedSingle, CreditCard,
+  ChevronDown, ChevronRight, BedSingle, CreditCard, ShieldCheck,
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/common/PageHeader';
@@ -27,6 +27,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { formatCurrency, formatDate, initials, occupancyRate } from '@/lib/format';
 import { useUpdate, useForm } from '@/lib/hooks/use-crud';
+import { useAuthStore } from '@/lib/stores/auth-store';
 
 const propertyTypes = [
   { value: 'PG', label: 'Paying Guest' },
@@ -40,6 +41,8 @@ const propertyStatuses = [
 ];
 
 export default function PropertyDetailPage() {
+  const { user } = useAuthStore();
+  const isSuperAdmin = (user?.role as string) === 'SUPER_ADMIN' || (user?.role as string) === 'ROLE_SUPER_ADMIN';
   const { id } = useParams();
   const navigate = useNavigate();
   const [expandedBuilding, setExpandedBuilding] = useState<string | null>(null);
@@ -90,9 +93,13 @@ export default function PropertyDetailPage() {
     }),
     enabled: !!id,
   });
-  const { data: tenants } = useQuery({
+  const { data: allTenants, isLoading: tenantsLoading } = useQuery({
     queryKey: ['property-tenants', id],
-    queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 6, sortBy: 'createdAt', sortOrder: 'desc' } }).then((r) => r.data.data),
+    queryFn: () => api.get<any>('/tenants', { params: { pageSize: 200 } }).then((r) => {
+      const d = r.data;
+      const list = Array.isArray(d) ? d : d?.data || d?.content || [];
+      return list.filter((t: any) => t.propertyId === id);
+    }),
     enabled: !!id,
   });
 
@@ -107,10 +114,66 @@ export default function PropertyDetailPage() {
   }
 
   const occRate = occupancyRate(property.occupiedBeds, property.totalBeds);
-  const monthlyRent = tenants?.reduce((s, t) => s + t.rent, 0) ?? 0;
+  const activeTenants = allTenants?.filter((t: any) => t.status && !['CHECKED_OUT', 'ARCHIVED', 'INACTIVE'].includes(t.status.toUpperCase())) || [];
+  const tenantRentSum = activeTenants.reduce((s: number, t: any) => s + Number(t.rent || 0), 0);
+  
+  // Calculate potential or occupied rent from rooms if no active tenant records
+  const propertyRooms = (rooms ?? []).filter((r: any) => r.propertyId === id || buildings?.some((b: any) => b.id === r.buildingId));
+  const occupiedRoomsRent = propertyRooms.filter((r: any) => Number(r.occupied || 0) > 0).reduce((s: number, r: any) => s + Number(r.rent || r.baseRent || 0), 0);
+  const totalPotentialRent = propertyRooms.reduce((s: number, r: any) => s + Number(r.rent || r.baseRent || 0), 0);
+  const effectiveMonthlyRent = tenantRentSum > 0 ? tenantRentSum : (occupiedRoomsRent > 0 ? occupiedRoomsRent : totalPotentialRent);
 
-  const buildingFloors = (buildingId: string) => (floors ?? []).filter((f: any) => f.buildingId === buildingId);
-  const floorRooms = (floorId: string) => (rooms ?? []).filter((r: any) => r.floorId === floorId);
+  const buildingFloors = (buildingId: string) => {
+    // 1. Explicit floors in DB
+    const explicit = (floors ?? []).filter((f: any) => f.buildingId === buildingId);
+    if (explicit.length > 0) return explicit;
+
+    // 2. Derive floors automatically from rooms belonging to this building
+    const bRooms = (rooms ?? []).filter((r: any) =>
+      r.buildingId === buildingId ||
+      (r.buildingName && buildings?.find((b: any) => b.id === buildingId)?.name &&
+        r.buildingName.toLowerCase() === buildings?.find((b: any) => b.id === buildingId)?.name.toLowerCase())
+    );
+
+    if (bRooms.length === 0) return [];
+
+    const floorMap = new Map<string, any>();
+    bRooms.forEach((r: any) => {
+      const fNum = r.floorNumber ?? (r.roomNumber ? parseInt(String(r.roomNumber)[0]) || 1 : 1);
+      const fKey = `f-${buildingId}-${fNum}`;
+      if (!floorMap.has(fKey)) {
+        floorMap.set(fKey, {
+          id: fKey,
+          buildingId,
+          name: `Floor ${fNum}`,
+          floorNumber: fNum,
+          occupied: 0,
+          beds: 0,
+          isDerived: true,
+        });
+      }
+      const flr = floorMap.get(fKey);
+      flr.occupied += Number(r.occupied || 0);
+      flr.beds += Number(r.beds || 0);
+    });
+
+    return Array.from(floorMap.values()).sort((a, b) => (a.floorNumber ?? 0) - (b.floorNumber ?? 0));
+  };
+
+  const floorRooms = (floorId: string, buildingId?: string) => {
+    if (String(floorId).startsWith(`f-${buildingId}-`)) {
+      const fNum = parseInt(floorId.split('-').pop() || '1');
+      return (rooms ?? []).filter((r: any) => {
+        const matchesBuilding = r.buildingId === buildingId ||
+          (r.buildingName && buildings?.find((b: any) => b.id === buildingId)?.name &&
+            r.buildingName.toLowerCase() === buildings?.find((b: any) => b.id === buildingId)?.name.toLowerCase());
+        const rFloor = r.floorNumber ?? (r.roomNumber ? parseInt(String(r.roomNumber)[0]) || 1 : 1);
+        return matchesBuilding && rFloor === fNum;
+      });
+    }
+    return (rooms ?? []).filter((r: any) => r.floorId === floorId);
+  };
+
   const roomBeds = (roomId: string) => (beds ?? []).filter((b: any) => b.roomId === roomId);
 
   function toggleBuilding(bid: string) {
@@ -164,7 +227,13 @@ export default function PropertyDetailPage() {
         <StatCard label="Total Buildings" value={property.totalBuildings} icon={Building2} accent="primary" />
         <StatCard label="Total Beds" value={property.totalBeds} icon={BedDouble} accent="info" hint={`${property.totalRooms} rooms`} />
         <StatCard label="Occupancy" value={`${occRate}%`} icon={TrendingUp} accent="success" hint={`${property.occupiedBeds}/${property.totalBeds} beds`} />
-        <StatCard label="Est. Monthly Rent" value={formatCurrency(monthlyRent * 4)} icon={Wallet} accent="warning" hint="From active tenants" />
+        <StatCard
+          label="Est. Monthly Rent"
+          value={formatCurrency(effectiveMonthlyRent)}
+          icon={Wallet}
+          accent="warning"
+          hint={tenantRentSum > 0 ? "From active residents" : (effectiveMonthlyRent > 0 ? "Projected room rent" : "No rent configured")}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -230,7 +299,7 @@ export default function PropertyDetailPage() {
                         </div>
                         <div>
                           <p className="text-sm font-medium">{building.name}</p>
-                          <p className="text-xs text-muted-foreground">{bFloors.length} floors · {building.rooms} rooms · {building.beds} beds</p>
+                          <p className="text-xs text-muted-foreground">{bFloors.length} floor{bFloors.length === 1 ? '' : 's'} · {building.rooms} rooms · {building.beds} beds</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -249,7 +318,7 @@ export default function PropertyDetailPage() {
                           <p className="py-3 text-center text-xs text-muted-foreground">No floors configured</p>
                         ) : (
                           bFloors.map((floor: any) => {
-                            const fRooms = floorRooms(floor.id);
+                            const fRooms = floorRooms(floor.id, building.id);
                             const fIsOpen = expandedFloor === floor.id;
                             return (
                               <div key={floor.id} className="rounded-md border bg-card">
@@ -261,7 +330,7 @@ export default function PropertyDetailPage() {
                                     <div className="flex h-7 w-7 items-center justify-center rounded-md bg-info/10 text-info"><Layers className="h-4 w-4" /></div>
                                     <div>
                                       <p className="text-sm font-medium">{floor.name}</p>
-                                      <p className="text-xs text-muted-foreground">{fRooms.length} rooms · {floor.occupied}/{floor.beds} beds</p>
+                                      <p className="text-xs text-muted-foreground">{fRooms.length} room{fRooms.length === 1 ? '' : 's'} · {floor.occupied}/{floor.beds} beds</p>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
@@ -286,7 +355,7 @@ export default function PropertyDetailPage() {
                                                   <div className="flex h-7 w-7 items-center justify-center rounded-md bg-warning/10 text-warning"><DoorOpen className="h-4 w-4" /></div>
                                                   <div>
                                                     <p className="text-sm font-medium">Room {room.number}</p>
-                                                    <p className="text-xs text-muted-foreground capitalize">{room.type} · {formatCurrency(room.rent)}/mo</p>
+                                                    <p className="text-xs text-muted-foreground capitalize">{room.type} · {formatCurrency(room.rent || room.baseRent || 0)}/mo</p>
                                                   </div>
                                                 </div>
                                                 <StatusBadge status={room.status} tone={statusTone(room.status)} />
@@ -335,24 +404,47 @@ export default function PropertyDetailPage() {
 
       {/* Recent tenants */}
       <Card>
-        <CardHeader>
-          <CardTitle>Recent Tenants</CardTitle>
-          <CardDescription>Latest checked-in residents</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Recent Residents</CardTitle>
+            <CardDescription>Active &amp; recent tenants allocated to {property.name}</CardDescription>
+          </div>
+          {allTenants && allTenants.length > 0 && (
+            <Badge variant="secondary" className="font-semibold">
+              {allTenants.length} Total Resident{allTenants.length === 1 ? '' : 's'}
+            </Badge>
+          )}
         </CardHeader>
         <CardContent className="space-y-3">
-          {tenants?.map((t) => (
-            <div key={t.id} className="flex items-center gap-3">
-              <Avatar className="h-9 w-9">
-                <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">{initials(t.name)}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{t.name}</p>
-                <p className="text-xs text-muted-foreground">Room {t.roomNumber} · {t.occupation}</p>
-              </div>
-              <span className="text-sm font-medium">{formatCurrency(t.rent)}/mo</span>
-              <StatusBadge status={t.status} tone={statusTone(t.status)} />
+          {tenantsLoading ? (
+            <Skeleton className="h-20" />
+          ) : !allTenants || allTenants.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground space-y-2">
+              <Users className="h-8 w-8 mx-auto opacity-40" />
+              <p className="text-sm font-medium">No tenants currently allocated to this property</p>
+              <p className="text-xs">Allocate a room/bed to a resident via the Tenants or Check-in page to see them here.</p>
             </div>
-          )) ?? <Skeleton className="h-20" />}
+          ) : (
+            allTenants.slice(0, 8).map((t: any) => (
+              <div key={t.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">{initials(t.name || `${t.firstName || ''} ${t.lastName || ''}`)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{t.name || `${t.firstName || ''} ${t.lastName || ''}`.trim() || 'Resident'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Room {t.roomNumber || '—'} {t.bedNumber ? `· Bed ${t.bedNumber}` : ''} {t.occupation ? `· ${t.occupation}` : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(t.rent || 0)}/mo</span>
+                  <StatusBadge status={t.status || 'ACTIVE'} tone={statusTone(t.status || 'ACTIVE')} />
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -390,29 +482,43 @@ export default function PropertyDetailPage() {
           <FormInput label="Manager" id="manager" value={form.values.manager} onChange={(e) => form.setValue('manager', e.target.value)} />
           <FormInput label="Phone" id="phone" value={form.values.phone} onChange={(e) => form.setValue('phone', e.target.value)} />
           <FormInput label="Email" type="email" id="email" value={form.values.email} onChange={(e) => form.setValue('email', e.target.value)} />
-          <div className="sm:col-span-2 border-t pt-3 mt-1">
-            <h4 className="font-semibold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
-              <CreditCard className="h-3.5 w-3.5 text-primary" /> Property Razorpay Gateway Credentials
-            </h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Enter unique Razorpay API credentials for this property. Tenant rent payments for this property will be processed using this account.
-            </p>
-          </div>
-          <FormInput
-            label="Razorpay Key ID"
-            id="razorpayKeyId"
-            value={form.values.razorpayKeyId}
-            onChange={(e) => form.setValue('razorpayKeyId', e.target.value)}
-            placeholder="rzp_live_... / rzp_test_..."
-          />
-          <FormInput
-            label="Razorpay Key Secret"
-            type="password"
-            id="razorpayKeySecret"
-            value={form.values.razorpayKeySecret}
-            onChange={(e) => form.setValue('razorpayKeySecret', e.target.value)}
-            placeholder={property?.hasRazorpaySecret ? "•••••••• (Saved in DB - leave blank to keep)" : "Enter Razorpay Key Secret"}
-          />
+          {!isSuperAdmin ? (
+            <>
+              <div className="sm:col-span-2 border-t pt-3 mt-1">
+                <h4 className="font-semibold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
+                  <CreditCard className="h-3.5 w-3.5 text-primary" /> Property Razorpay Gateway Credentials
+                </h4>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Enter unique Razorpay API credentials for this property. Tenant rent payments for this property will be processed using this account.
+                </p>
+              </div>
+              <FormInput
+                label="Razorpay Key ID"
+                id="razorpayKeyId"
+                value={form.values.razorpayKeyId}
+                onChange={(e) => form.setValue('razorpayKeyId', e.target.value)}
+                placeholder="rzp_live_... / rzp_test_..."
+              />
+              <FormInput
+                label="Razorpay Key Secret"
+                type="password"
+                id="razorpayKeySecret"
+                value={form.values.razorpayKeySecret}
+                onChange={(e) => form.setValue('razorpayKeySecret', e.target.value)}
+                placeholder={property?.hasRazorpaySecret ? "•••••••• (Saved in DB - leave blank to keep)" : "Enter Razorpay Key Secret"}
+              />
+            </>
+          ) : (
+            <div className="sm:col-span-2 border-t pt-3 mt-1">
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-amber-600 dark:text-amber-400 text-xs flex items-start gap-2.5">
+                <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold block text-amber-700 dark:text-amber-300">Security & Gateway Management Policy</span>
+                  Razorpay API Key & Secret credentials cannot be updated by Super Admin. For security & compliance, credentials must be uploaded directly by the Property Owner or Property Manager from their dashboard settings.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </FormDialog>
     </div>

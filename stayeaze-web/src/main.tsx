@@ -10,9 +10,9 @@ import './index.css';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: true, // Auto-sync in background when returning to page/tab
-      staleTime: 1000 * 5,       // Data served instantly from cache, background refetched after 5s
-      gcTime: 1000 * 60 * 15,    // Keep cache in memory for 15 minutes
+      refetchOnWindowFocus: false, // Prevents redundant background requests on window focus
+      staleTime: 1000 * 60 * 5,    // Serve from cache without refetching for 5 minutes
+      gcTime: 1000 * 60 * 30,       // Retain unused cache entries in memory for 30 minutes
       retry: 1,
     },
   },

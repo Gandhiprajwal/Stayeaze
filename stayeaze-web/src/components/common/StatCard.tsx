@@ -25,7 +25,7 @@ export function StatCard({ label, value, icon: Icon, trend, hint, accent = 'prim
       <CardContent className="flex items-start justify-between gap-3 p-5">
         <div className="min-w-0 space-y-1">
           <p className="truncate text-sm font-medium text-muted-foreground">{label}</p>
-          <p className="font-heading text-2xl font-bold tracking-tight">{value}</p>
+          <p className="font-heading text-xl sm:text-2xl font-bold tracking-tight truncate" title={String(value)}>{value}</p>
           {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
           {trend && (
             <div className="flex items-center gap-1 text-xs font-medium">

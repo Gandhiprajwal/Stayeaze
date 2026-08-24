@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { MessageSquareWarning, Plus, Trash2, CheckCircle, Search, UserCheck, Check, X, Phone, Mail, Eye, User as UserIcon, Home, Building2, Loader2 } from 'lucide-react';
+import { MessageSquareWarning, Plus, Trash2, CheckCircle, Search, UserCheck, Check, X, Phone, Mail, Eye, User as UserIcon, Home, Building2, Loader2, MessageSquare } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+
+import { ComplaintChatDialog } from './ComplaintChatDialog';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
@@ -22,7 +24,9 @@ import { formatDate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm, useBulkDelete } from '@/lib/hooks/use-crud';
 import { cn } from '@/lib/utils';
 import { TenantSelect } from '@/components/common/TenantSelect';
+import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useWebSocket } from '@/lib/websocket/WebSocketProvider';
 
 const ENDPOINT = '/complaints';
 const categories = [
@@ -89,7 +93,9 @@ function formatRoomBadge(rawRoom?: any): string {
 
 export default function ComplaintsPage() {
   const currentUser = useAuthStore((s) => s.user);
+  const user = currentUser;
   const userRole = (currentUser?.role ?? '').toUpperCase();
+  const isTenant = userRole === 'TENANT';
   const canChangeStatus = ['ADMIN', 'OWNER', 'PROPERTY_MANAGER'].includes(userRole);
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -98,6 +104,7 @@ export default function ComplaintsPage() {
   const [assignedVal, setAssignedVal] = useState<string>('');
   const [deleteTarget, setDeleteTarget] = useState<Complaint | null>(null);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+  const [chatComplaint, setChatComplaint] = useState<Complaint | null>(null);
   const [tenantSearch, setTenantSearch] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState<string | number | null>(null);
 
@@ -130,13 +137,26 @@ export default function ComplaintsPage() {
     queryFn: () => api.get<{ data: User[] }>('/users', { params: { pageSize: 100 } }).then((r) => r.data.data),
   });
 
-  const { data: complaints } = useQuery({
-    queryKey: ['complaints-stats'],
-    queryFn: () => api.get<{ data: Complaint[] }>(ENDPOINT, { params: { pageSize: 100 } }).then((r) => r.data.data),
+  const staffUsers = (users ?? []).filter((u: any) => {
+    const role = (u.role || '').toUpperCase();
+    return role !== 'TENANT' && role !== 'ROLE_TENANT';
   });
-  const open = complaints?.filter((c) => c.status === 'open').length ?? 0;
-  const inProgress = complaints?.filter((c) => c.status === 'in_progress').length ?? 0;
-  const resolved = complaints?.filter((c) => c.status === 'resolved' || c.status === 'closed').length ?? 0;
+
+  const { data: complaints } = useQuery<Complaint[]>({
+    queryKey: ['complaints-stats'],
+    queryFn: () =>
+      api.get<any>(ENDPOINT, { params: { pageSize: 100 } }).then((r) => {
+        const raw = r.data;
+        if (Array.isArray(raw)) return raw;
+        if (Array.isArray(raw?.data)) return raw.data;
+        if (Array.isArray(raw?.content)) return raw.content;
+        return [];
+      }),
+  });
+  const safeComplaints: Complaint[] = Array.isArray(complaints) ? complaints : [];
+  const open = safeComplaints.filter((c) => c.status === 'open').length;
+  const inProgress = safeComplaints.filter((c) => c.status === 'in_progress').length;
+  const resolved = safeComplaints.filter((c) => c.status === 'resolved' || c.status === 'closed').length;
 
   const createMut = useCreate<Complaint>(ENDPOINT, 'Complaint');
   const updateMut = useUpdate<Complaint>(ENDPOINT, 'Complaint');
@@ -147,6 +167,15 @@ export default function ComplaintsPage() {
   function openCreate() {
     form.reset(emptyForm);
     setSelectedTenantId(null);
+    if (isTenant && user) {
+      form.setValue('tenantName', user.name || user.email || 'Tenant');
+      const t = (tenants ?? []).find((tenant: any) => tenant.email?.toLowerCase() === user.email?.toLowerCase());
+      if (t) {
+        setSelectedTenantId(t.id);
+        if (t.propertyId) form.setValue('propertyId', t.propertyId);
+        if (t.roomNumber) form.setValue('roomNumber', t.roomNumber);
+      }
+    }
     setDialogOpen(true);
   }
 
@@ -158,11 +187,18 @@ export default function ComplaintsPage() {
   }
 
   function submitCreate() {
-    if (!form.validate({
-      tenantName: (v) => !v ? 'Required' : undefined,
-      description: (v) => !v ? 'Description is required' : undefined,
-      propertyId: (v) => !v ? 'Select a property' : undefined
-    })) return;
+    if (isTenant) {
+      if (!form.validate({ description: (v) => (!v ? 'Description is required' : undefined) })) return;
+    } else {
+      if (
+        !form.validate({
+          tenantName: (v) => (!v ? 'Required' : undefined),
+          description: (v) => (!v ? 'Description is required' : undefined),
+          propertyId: (v) => (!v ? 'Select a property' : undefined),
+        })
+      )
+        return;
+    }
 
     const payload = {
       ...form.values,
@@ -196,9 +232,27 @@ export default function ComplaintsPage() {
 
   function confirmDelete() { if (deleteTarget) deleteMut.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) }); }
 
+  const { hasUnreadChat, markChatAsRead } = useWebSocket();
+
   const columns: Column<Complaint>[] = [
-    { key: 'ticketNumber', header: 'Ticket', sortable: true, cell: (r) => <span className="font-mono text-xs font-medium">{r.ticketNumber}</span> },
+    {
+      key: 'ticketNumber',
+      header: 'Ticket',
+      sortable: true,
+      cell: (r) => (
+        <span className="font-mono text-xs font-medium flex items-center gap-1.5">
+          {hasUnreadChat(r.id) && (
+            <span className="relative flex h-2 w-2 shrink-0" title="New unread message">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            </span>
+          )}
+          {r.ticketNumber}
+        </span>
+      ),
+    },
     { key: 'tenantName', header: 'Tenant', sortable: true, cell: (r) => <span className="font-medium">{r.tenantName}</span> },
+    { key: 'roomNumber', header: 'Room', sortable: true, cell: (r) => <span className="font-semibold text-xs px-2 py-0.5 bg-primary/10 text-primary rounded font-mono">{r.roomNumber ? `Room ${r.roomNumber}` : '—'}</span> },
     { key: 'propertyId', header: 'Property', sortable: true, cell: (r) => <span className="text-sm">{String(propMap.get(r.propertyId) ?? '—')}</span> },
     { key: 'category', header: 'Category', sortable: true, cell: (r) => <span className="text-sm capitalize">{r.category}</span> },
     { key: 'priority', header: 'Priority', sortable: true, cell: (r) => {
@@ -234,11 +288,21 @@ export default function ComplaintsPage() {
         bulkActions={[{ label: 'Delete Selected', icon: Trash2, variant: 'destructive', onAction: (ids) => bulkDeleteMut.mutate(ids) }]}
         rowActions={(row) => (
           <RowActions items={[
+            {
+              label: hasUnreadChat(row.id) ? '🔴 Live Ticket Chat' : 'Live Ticket Chat',
+              icon: MessageSquare,
+              onSelect: () => {
+                markChatAsRead(row.id);
+                setChatComplaint(row);
+              },
+            },
             { label: 'View Details', icon: Eye, onSelect: () => setSelectedComplaint(row) },
             ...(canChangeStatus ? [{ label: 'Update Status', icon: CheckCircle, onSelect: () => openStatusDialog(row) }] : []),
             { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
           ]} />
         )} />
+
+      <ComplaintChatDialog open={!!chatComplaint} onOpenChange={(o) => !o && setChatComplaint(null)} complaint={chatComplaint} />
 
       {/* Complaint Details Modal */}
       <Dialog open={!!selectedComplaint} onOpenChange={(open) => !open && setSelectedComplaint(null)}>
@@ -397,36 +461,97 @@ export default function ComplaintsPage() {
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title="Log Complaint" onSubmit={submitCreate}
         loading={createMut.isPending} submitLabel="Create">
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-              <UserCheck className="h-4 w-4" /> Select Registered Tenant
-            </Label>
-            <TenantSelect
-              tenants={tenants ?? []}
-              selectedTenantId={String(selectedTenantId ?? '')}
-              onSelectTenant={(t) => {
-                if (t) {
-                  setSelectedTenantId(t.id);
-                  form.setValue('tenantName', t.name || '');
-                  if (t.propertyId) form.setValue('propertyId', t.propertyId);
-                  if (t.roomNumber) form.setValue('roomNumber', t.roomNumber);
-                } else {
-                  setSelectedTenantId(null);
-                  form.setValue('tenantName', '');
-                  form.setValue('roomNumber', '');
-                }
-              }}
-              placeholder="Search tenant by Name, Phone (+91), Room #, or Email..."
-            />
-          </div>
-          <FormInput label="Tenant Name" required id="tenantName" value={form.values.tenantName} onChange={(e) => form.setValue('tenantName', e.target.value)} error={form.errors.tenantName} />
-          <div className="space-y-1.5"><Label>Property</Label><Select value={form.values.propertyId ? String(form.values.propertyId) : ''} onValueChange={(v) => form.setValue('propertyId', v)}><SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger><SelectContent>{(properties ?? []).map((p: any) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent></Select>{form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}</div>
-          <FormInput label="Room Number" id="roomNumber" value={form.values.roomNumber} onChange={(e) => form.setValue('roomNumber', e.target.value)} />
+          {!isTenant ? (
+            <>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                  <UserCheck className="h-4 w-4" /> Select Registered Tenant
+                </Label>
+                <TenantSelect
+                  tenants={tenants ?? []}
+                  selectedTenantId={String(selectedTenantId ?? '')}
+                  onSelectTenant={(t) => {
+                    if (t) {
+                      setSelectedTenantId(t.id);
+                      form.setValue('tenantName', t.name || '');
+                      if (t.propertyId) form.setValue('propertyId', t.propertyId);
+                      if (t.roomNumber) form.setValue('roomNumber', t.roomNumber);
+                    } else {
+                      setSelectedTenantId(null);
+                      form.setValue('tenantName', '');
+                      form.setValue('roomNumber', '');
+                    }
+                  }}
+                  placeholder="Search tenant by Name, Phone (+91), Room #, or Email..."
+                />
+              </div>
+              <FormInput label="Tenant Name" required id="tenantName" value={form.values.tenantName} onChange={(e) => form.setValue('tenantName', e.target.value)} error={form.errors.tenantName} />
+              <div className="space-y-1.5">
+                <Label required>Property</Label>
+                <SearchableSelect
+                  options={(properties ?? []).map((p: any) => ({
+                    value: String(p.id),
+                    label: p.name,
+                    sublabel: p.city || p.code || 'Property',
+                    badge: p.type || 'PG',
+                  }))}
+                  value={form.values.propertyId ? String(form.values.propertyId) : ''}
+                  onChange={(v) => form.setValue('propertyId', v)}
+                  placeholder="Search & select property..."
+                  searchPlaceholder="Search properties..."
+                />
+                {form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}
+              </div>
+              <FormInput label="Room Number" id="roomNumber" value={form.values.roomNumber} onChange={(e) => form.setValue('roomNumber', e.target.value)} />
+            </>
+          ) : (
+            <div className="space-y-1.5 sm:col-span-2">
+              <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Logging complaint as</p>
+                  <p className="font-bold text-sm text-foreground">{user?.name || user?.email}</p>
+                </div>
+                {form.values.roomNumber ? (
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-primary/10 text-primary rounded-full font-mono border border-primary/20">
+                    📍 Room {form.values.roomNumber}
+                  </span>
+                ) : (
+                  <span className="text-xs font-medium text-muted-foreground italic">
+                    Assigned Room
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1.5"><Label>Category</Label><Select value={form.values.category} onValueChange={(v) => form.setValue('category', v as Complaint['category'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{categories.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1.5"><Label>Priority</Label><Select value={form.values.priority} onValueChange={(v) => form.setValue('priority', v as Complaint['priority'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{priorities.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Complaint['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
+
+          {!isTenant && (
+            <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Complaint['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
+          )}
+
           <FormTextarea label="Description" required className="sm:col-span-2" id="description" value={form.values.description} onChange={(e) => form.setValue('description', e.target.value)} error={form.errors.description} rows={3} />
-          <div className="space-y-1.5 sm:col-span-2"><Label>Assign To</Label><Select value={form.values.assignedTo || 'unassigned'} onValueChange={(v) => form.setValue('assignedTo', v === 'unassigned' ? '' : v)}><SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger><SelectContent><SelectItem value="unassigned">Unassigned</SelectItem>{(users ?? []).map((u) => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}</SelectContent></Select></div>
+
+          {!isTenant && (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Assign To Staff</Label>
+              <SearchableSelect
+                options={[
+                  { value: '', label: 'Unassigned', sublabel: 'No staff assigned' },
+                  ...staffUsers.map((u) => ({
+                    value: u.name,
+                    label: u.name,
+                    sublabel: u.role || u.email || 'Staff',
+                  })),
+                ]}
+                value={form.values.assignedTo || ''}
+                onChange={(v) => form.setValue('assignedTo', v)}
+                placeholder="Search & assign staff..."
+                searchPlaceholder="Search staff by name, role..."
+              />
+            </div>
+          )}
         </div>
       </FormDialog>
       <ConfirmDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)} title="Delete Complaint" variant="destructive"

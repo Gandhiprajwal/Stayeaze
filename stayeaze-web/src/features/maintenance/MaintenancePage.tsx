@@ -10,6 +10,7 @@ import { RowActions } from '@/components/common/RowActions';
 import { FormDialog } from '@/components/common/FormDialog';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { FormInput, FormTextarea } from '@/components/common/FormField';
+import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -79,7 +80,7 @@ export default function MaintenancePage() {
   const columns: Column<Maintenance>[] = [
     { key: 'ticketNumber', header: 'Ticket', sortable: true, cell: (r) => <span className="font-mono text-xs font-medium">{r.ticketNumber}</span> },
     { key: 'asset', header: 'Asset', sortable: true, cell: (r) => <span className="font-medium">{r.asset}</span> },
-    { key: 'propertyId', header: 'Property', sortable: true, cell: (r) => <span className="text-sm">{propMap.get(r.propertyId) ?? '—'}</span> },
+    { key: 'propertyId', header: 'Property', sortable: true, cell: (r) => <span className="text-sm">{String(propMap.get(r.propertyId) || '—')}</span> },
     { key: 'type', header: 'Type', sortable: true, cell: (r) => <span className="text-sm capitalize">{r.type}</span> },
     { key: 'priority', header: 'Priority', sortable: true, cell: (r) => <StatusBadge status={r.priority} tone={r.priority === 'critical' ? 'destructive' : r.priority === 'high' ? 'warning' : r.priority === 'medium' ? 'info' : 'neutral'} /> },
     { key: 'cost', header: 'Cost', sortable: true, cell: (r) => <span className="font-medium tabular-nums">{formatCurrency(r.cost)}</span> },
@@ -116,7 +117,22 @@ export default function MaintenancePage() {
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormInput label="Asset" required id="asset" value={form.values.asset} onChange={(e) => form.setValue('asset', e.target.value)} error={form.errors.asset} />
-          <div className="space-y-1.5"><Label>Property</Label><Select value={form.values.propertyId} onValueChange={(v) => form.setValue('propertyId', v)}><SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger><SelectContent>{(properties ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select>{form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}</div>
+          <div className="space-y-1.5">
+            <Label required>Property</Label>
+            <SearchableSelect
+              options={(properties ?? []).map((p) => ({
+                value: p.id,
+                label: p.name,
+                sublabel: p.city || p.code || 'Property',
+                badge: p.type || 'PG',
+              }))}
+              value={form.values.propertyId}
+              onChange={(v) => form.setValue('propertyId', v)}
+              placeholder="Search & select property..."
+              searchPlaceholder="Search properties..."
+            />
+            {form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}
+          </div>
           <div className="space-y-1.5"><Label>Type</Label><Select value={form.values.type} onValueChange={(v) => form.setValue('type', v as Maintenance['type'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{types.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1.5"><Label>Priority</Label><Select value={form.values.priority} onValueChange={(v) => form.setValue('priority', v as Maintenance['priority'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{priorities.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent></Select></div>
           <FormInput label="Estimated Cost (₹)" type="number" id="cost" value={String(form.values.cost)} onChange={(e) => form.setValue('cost', Number(e.target.value))} />

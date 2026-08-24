@@ -21,13 +21,13 @@ import type { Property, Tenant, Invoice, Payment, Complaint } from '@/lib/types'
 export default function ReportsPage() {
   const [timeRange, setTimeRange] = useState<'all' | '30days' | '90days'>('all');
 
-  const { data: properties } = useQuery({ queryKey: ['rep', 'properties-minimal'], queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []) });
-  const { data: buildings } = useQuery({ queryKey: ['rep', 'buildings'], queryFn: () => api.get<{ data: any[] }>('/buildings').then((r) => r.data?.data || (Array.isArray(r.data) ? r.data : [])) });
-  const { data: floors } = useQuery({ queryKey: ['rep', 'floors'], queryFn: () => api.get<{ data: any[] }>('/floors').then((r) => r.data?.data || (Array.isArray(r.data) ? r.data : [])) });
-  const { data: tenants } = useQuery({ queryKey: ['rep', 'tenants'], queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 200 } }).then((r) => r.data.data) });
-  const { data: invoices } = useQuery({ queryKey: ['rep', 'invoices'], queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: { pageSize: 200 } }).then((r) => r.data.data) });
-  const { data: payments } = useQuery({ queryKey: ['rep', 'payments'], queryFn: () => api.get<{ data: Payment[] }>('/payments', { params: { pageSize: 200 } }).then((r) => r.data.data) });
-  const { data: complaints } = useQuery({ queryKey: ['rep', 'complaints'], queryFn: () => api.get<{ data: Complaint[] }>('/complaints', { params: { pageSize: 200 } }).then((r) => r.data.data) });
+  const { data: properties } = useQuery({ queryKey: ['rep', 'properties-minimal'], queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []), staleTime: 300000 });
+  const { data: buildings } = useQuery({ queryKey: ['rep', 'buildings'], queryFn: () => api.get<{ data: any[] }>('/buildings').then((r) => r.data?.data || (Array.isArray(r.data) ? r.data : [])), staleTime: 300000 });
+  const { data: floors } = useQuery({ queryKey: ['rep', 'floors'], queryFn: () => api.get<{ data: any[] }>('/floors').then((r) => r.data?.data || (Array.isArray(r.data) ? r.data : [])), staleTime: 300000 });
+  const { data: tenants } = useQuery({ queryKey: ['rep', 'tenants'], queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 200 } }).then((r) => r.data.data), staleTime: 300000 });
+  const { data: invoices } = useQuery({ queryKey: ['rep', 'invoices'], queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: { pageSize: 200 } }).then((r) => r.data.data), staleTime: 300000 });
+  const { data: payments } = useQuery({ queryKey: ['rep', 'payments'], queryFn: () => api.get<{ data: Payment[] }>('/payments', { params: { pageSize: 200 } }).then((r) => r.data.data), staleTime: 300000 });
+  const { data: complaints } = useQuery({ queryKey: ['rep', 'complaints'], queryFn: () => api.get<{ data: Complaint[] }>('/complaints', { params: { pageSize: 200 } }).then((r) => r.data.data), staleTime: 300000 });
 
   // Filter Active Tenants
   const activeTenantsList = (tenants ?? []).filter((t) => {
@@ -59,9 +59,9 @@ export default function ReportsPage() {
   const overallOccupancy = totalBeds > 0 ? Math.min(100, Math.max(0, Math.round((effectiveOccupiedBeds / totalBeds) * 1000) / 10)) : 0;
 
   // Revenue & Collections Calculations
-  const totalInvoicePaid = invoices?.filter((i) => (i.status || '').toLowerCase() === 'paid').reduce((s, i) => s + (i.paidAmount || 0), 0) ?? 0;
-  const totalDirectPayments = payments?.reduce((s, p) => s + (p.amount || 0), 0) ?? 0;
-  const totalRevenue = totalInvoicePaid + totalDirectPayments;
+  const totalInvoicePaid = invoices?.filter((i) => (i.status || '').toLowerCase() === 'paid' || (i.status || '').toLowerCase() === 'partial').reduce((s, i) => s + (i.paidAmount || (i as any).amountPaid || i.amount || 0), 0) ?? 0;
+  const totalDirectPayments = payments?.filter((p) => (p.status || '').toLowerCase() === 'success' || (p.status || '').toLowerCase() === 'completed').reduce((s, p) => s + (p.amount || 0), 0) ?? 0;
+  const totalRevenue = Math.max(totalInvoicePaid, totalDirectPayments);
 
   const avgRent = activeTenantsCount > 0 ? Math.round(activeTenantsList.reduce((s, t) => s + (t.rent || 0), 0) / activeTenantsCount) : 0;
 
@@ -167,7 +167,7 @@ export default function ReportsPage() {
     + (invoices?.filter((i) => i.status === 'paid' && i.paymentMethod === 'UPI').reduce((s, i) => s + (i.paidAmount || 0), 0) ?? 0);
 
   const razorpayVal = (payments?.filter((p) => (p.method === 'razorpay' || p.method === 'card' || (p as any).paymentMethod === 'RAZORPAY')).reduce((s, p) => s + (p.amount || 0), 0) ?? 0)
-    + (invoices?.filter((i) => i.status === 'paid' && (i.paymentMethod === 'RAZORPAY' || i.paymentMethod === 'CARD')).reduce((s, i) => s + (i.paidAmount || 0), 0) ?? 0);
+    + (invoices?.filter((i) => i.status === 'paid' && (i.paymentMethod === 'RAZORPAY' || (i.paymentMethod as any) === 'CARD')).reduce((s, i) => s + (i.paidAmount || 0), 0) ?? 0);
 
   const bankVal = (payments?.filter((p) => (p.method === 'bank_transfer' || (p as any).paymentMethod === 'BANK_TRANSFER')).reduce((s, p) => s + (p.amount || 0), 0) ?? 0)
     + (invoices?.filter((i) => i.status === 'paid' && i.paymentMethod === 'BANK_TRANSFER').reduce((s, i) => s + (i.paidAmount || 0), 0) ?? 0);

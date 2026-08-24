@@ -52,6 +52,56 @@ To ensure strict logical isolation between different PG organizations/tenants, w
 
 Here is the DDL blueprint for the active entities.
 
+### Group S: SaaS Subscriptions & Tax Billing Profiles
+
+```sql
+-- 1. SaaS Subscription Plans (Starter, Growth, Enterprise Tiers)
+CREATE TABLE subscription_plans (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    plan_code VARCHAR(50) UNIQUE NOT NULL CHECK (plan_code IN ('STARTER', 'GROWTH', 'ENTERPRISE')),
+    name VARCHAR(100) NOT NULL,
+    price_monthly NUMERIC(10, 2) NOT NULL,
+    price_yearly NUMERIC(10, 2) NOT NULL,
+    max_beds INT NOT NULL DEFAULT 50,
+    max_properties INT NOT NULL DEFAULT 1,
+    features JSONB NOT NULL DEFAULT '[]',
+    is_popular BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Tenant Organization Active Subscriptions
+CREATE TABLE subscriptions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    org_id UUID NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+    plan_id UUID NOT NULL REFERENCES subscription_plans(id) ON DELETE RESTRICT,
+    status VARCHAR(50) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'TRIAL', 'PAST_DUE', 'CANCELLED', 'EXPIRED')),
+    billing_cycle VARCHAR(20) DEFAULT 'MONTHLY' CHECK (billing_cycle IN ('MONTHLY', 'YEARLY')),
+    start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    end_date DATE NOT NULL,
+    auto_renew BOOLEAN DEFAULT TRUE,
+    payment_status VARCHAR(50) DEFAULT 'PAID' CHECK (payment_status IN ('PAID', 'PENDING', 'FAILED')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Organization Legal & Tax Billing Profiles
+CREATE TABLE organization_billing_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    org_id UUID NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+    legal_name VARCHAR(200) NOT NULL,
+    gstin VARCHAR(20),
+    pan_number VARCHAR(15),
+    billing_address TEXT NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    state VARCHAR(100) NOT NULL,
+    pincode VARCHAR(10) NOT NULL,
+    contact_email VARCHAR(255) NOT NULL,
+    contact_phone VARCHAR(20) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+
 ### Group A: Multi-Tenant & Identity Access Management (Auth)
 
 ```sql

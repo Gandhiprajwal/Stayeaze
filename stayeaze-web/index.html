@@ -11,9 +11,218 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script>
+      (function() {
+        try {
+          var isDark = false;
+          var store = localStorage.getItem('stayeaze-ui');
+          if (!store) store = localStorage.getItem('stayeaze-ui-storage');
+          if (store) {
+            var parsed = JSON.parse(store);
+            if (parsed && parsed.state && parsed.state.theme === 'dark') {
+              isDark = true;
+            }
+          } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            isDark = true;
+          }
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Theme-Aware 0ms Instant Kinetic Physics Preloader -->
+      <style>
+        #app-preloader {
+          position: fixed;
+          inset: 0;
+          z-index: 99999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%);
+          font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+          transition: background-color 0.3s ease;
+        }
+        html.dark #app-preloader {
+          background: linear-gradient(135deg, #070b14 0%, #0d1527 100%);
+        }
+
+        .preloader-card {
+          position: relative;
+          width: 320px;
+          padding: 28px 24px;
+          border-radius: 24px;
+          border: 1px solid rgba(226, 232, 240, 0.8);
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(20px);
+          box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.12);
+          text-align: center;
+          transition: all 0.3s ease;
+        }
+        html.dark .preloader-card {
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: rgba(15, 23, 42, 0.85);
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+        }
+
+        .preloader-glow {
+          position: absolute;
+          inset: -12px;
+          border-radius: 32px;
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(6, 182, 212, 0.18), rgba(168, 85, 247, 0.18));
+          filter: blur(24px);
+          animation: preloaderPulse 2.4s ease-in-out infinite alternate;
+        }
+        html.dark .preloader-glow {
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(34, 211, 238, 0.3), rgba(192, 132, 252, 0.3));
+        }
+        @keyframes preloaderPulse {
+          0% { opacity: 0.4; transform: scale(0.97); }
+          100% { opacity: 0.9; transform: scale(1.03); }
+        }
+
+        /* Physics Kinetic Ball Drop Chute */
+        .kinetic-chute {
+          position: relative;
+          width: 100px;
+          height: 90px;
+          margin: 0 auto 16px auto;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: flex-end;
+        }
+
+        .orbit-ring {
+          position: absolute;
+          width: 86px;
+          height: 36px;
+          bottom: 12px;
+          border-radius: 50%;
+          border: 2px dashed rgba(79, 70, 229, 0.3);
+          transform: rotateX(65deg);
+          animation: orbitRotate 4s linear infinite;
+        }
+        html.dark .orbit-ring {
+          border-color: rgba(34, 211, 238, 0.4);
+        }
+        @keyframes orbitRotate {
+          100% { transform: rotateX(65deg) rotate(360deg); }
+        }
+
+        .kinetic-ball {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #4f46e5, #06b6d4);
+          box-shadow: 0 8px 20px rgba(79, 70, 229, 0.4);
+          animation: ballBounce 1.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+          z-index: 2;
+        }
+        html.dark .kinetic-ball {
+          background: linear-gradient(135deg, #22d3ee, #a855f7);
+          box-shadow: 0 0 25px rgba(34, 211, 238, 0.6);
+        }
+        @keyframes ballBounce {
+          0% { transform: translateY(-44px) scale(0.95, 1.05); }
+          45% { transform: translateY(0) scale(1.05, 0.95); }
+          50% { transform: translateY(4px) scale(1.25, 0.75); } /* Squash impact */
+          60% { transform: translateY(-12px) scale(0.9, 1.1); } /* Stretch bounce */
+          100% { transform: translateY(-44px) scale(0.95, 1.05); }
+        }
+
+        .shadow-floor {
+          width: 36px;
+          height: 8px;
+          background: rgba(15, 23, 42, 0.15);
+          border-radius: 50%;
+          margin-top: 6px;
+          animation: shadowScale 1.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+        }
+        html.dark .shadow-floor {
+          background: rgba(34, 211, 238, 0.3);
+          box-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
+        }
+        @keyframes shadowScale {
+          0% { transform: scale(0.4); opacity: 0.2; }
+          50% { transform: scale(1.2); opacity: 0.8; }
+          100% { transform: scale(0.4); opacity: 0.2; }
+        }
+
+        .preloader-title {
+          font-size: 13px;
+          font-weight: 900;
+          letter-spacing: 0.16em;
+          color: #1e293b;
+          margin-bottom: 4px;
+        }
+        html.dark .preloader-title {
+          background: linear-gradient(90deg, #818cf8, #22d3ee, #c084fc);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
+        .preloader-subtitle {
+          font-size: 12px;
+          font-weight: 600;
+          color: #64748b;
+          margin-bottom: 18px;
+        }
+        html.dark .preloader-subtitle {
+          color: #94a3b8;
+        }
+
+        .preloader-bar-bg {
+          height: 7px;
+          width: 100%;
+          background: #e2e8f0;
+          border-radius: 9999px;
+          overflow: hidden;
+          padding: 1px;
+        }
+        html.dark .preloader-bar-bg {
+          background: rgba(30, 41, 59, 0.8);
+        }
+
+        .preloader-bar-fill {
+          height: 100%;
+          border-radius: 9999px;
+          background: linear-gradient(90deg, #4f46e5, #06b6d4);
+          animation: preloaderFill 1.8s ease-out forwards;
+        }
+        html.dark .preloader-bar-fill {
+          background: linear-gradient(90deg, #6366f1, #22d3ee, #a855f7);
+        }
+
+        @keyframes preloaderFill {
+          0% { width: 10%; }
+          50% { width: 65%; }
+          100% { width: 95%; }
+        }
+      </style>
+      <div id="app-preloader">
+        <div class="preloader-glow"></div>
+        <div class="preloader-card">
+          <div class="kinetic-chute">
+            <div class="orbit-ring"></div>
+            <div class="kinetic-ball"></div>
+            <div class="shadow-floor"></div>
+          </div>
+          <div class="preloader-title">STAYEAZE KINETIC MATRIX</div>
+          <div class="preloader-subtitle">Loading Quantum Spatial Engine...</div>
+          <div class="preloader-bar-bg">
+            <div class="preloader-bar-fill"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

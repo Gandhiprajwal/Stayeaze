@@ -1,5 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useDebounce } from '@/lib/hooks/use-debounce';
 import {
   ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown,
   Download, Settings2, Inbox, Search, CalendarRange, Trash2, CheckSquare,
@@ -220,14 +222,7 @@ export function DataTable<T extends { id: string }>({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState(params.search ?? '');
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(params.search ?? '');
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [params.search]);
+  const debouncedSearch = useDebounce(params.search ?? '', 300);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rawPayload, isLoading, isError, error } = useQuery<any, Error>({
@@ -246,6 +241,8 @@ export function DataTable<T extends { id: string }>({
       return res.data;
     },
     placeholderData: keepPreviousData,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   // Extract items array safely regardless of response wrapper

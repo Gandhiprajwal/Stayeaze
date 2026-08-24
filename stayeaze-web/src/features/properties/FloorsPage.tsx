@@ -9,6 +9,7 @@ import { RowActions } from '@/components/common/RowActions';
 import { FormDialog } from '@/components/common/FormDialog';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { FormInput } from '@/components/common/FormField';
+import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -23,7 +24,7 @@ import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 const ENDPOINT = '/floors';
 
 const emptyForm = {
-  name: '', number: 1, buildingId: '',
+  name: '', number: 1, buildingId: '', wifiSsid: '', wifiPassword: '',
 };
 
 export default function FloorsPage() {
@@ -45,7 +46,13 @@ export default function FloorsPage() {
   function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
   function openEdit(row: Floor) {
     setEditing(row);
-    form.reset({ name: row.name, number: row.number, buildingId: row.buildingId });
+    form.reset({
+      name: row.name,
+      number: row.number || (row as any).floorNumber || 1,
+      buildingId: row.buildingId || '',
+      wifiSsid: row.wifiSsid || '',
+      wifiPassword: row.wifiPassword || '',
+    });
     setDialogOpen(true);
   }
   function submit() {
@@ -55,6 +62,8 @@ export default function FloorsPage() {
       number: form.values.number,
       floorNumber: form.values.number,
       buildingId: form.values.buildingId,
+      wifiSsid: form.values.wifiSsid,
+      wifiPassword: form.values.wifiPassword,
     };
     if (editing) updateMut.mutate({ id: editing.id, payload }, { onSuccess: () => setDialogOpen(false) });
     else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
@@ -120,14 +129,23 @@ export default function FloorsPage() {
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Floor' : 'Add Floor'} onSubmit={submit}
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput label="Floor Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} placeholder="Floor 1" />
-          <FormInput label="Floor Number" type="number" id="number" value={String(form.values.number)} onChange={(e) => form.setValue('number', Number(e.target.value))} />
+          <FormInput label="Floor Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} placeholder="e.g. Ground Floor, 1st Floor, Terrace" />
+          <FormInput label="Floor Number / Level" type="number" id="number" value={String(form.values.number)} onChange={(e) => form.setValue('number', Number(e.target.value))} />
+          <FormInput label="Floor Wi-Fi Name (SSID)" id="wifiSsid" placeholder={form.values.name ? `${form.values.name} Wi-Fi` : 'Floor 1 Wi-Fi'} value={form.values.wifiSsid || ''} onChange={(e) => form.setValue('wifiSsid', e.target.value)} />
+          <FormInput label="Floor Wi-Fi Password" id="wifiPassword" placeholder="e.g. Floor1Pass" value={form.values.wifiPassword || ''} onChange={(e) => form.setValue('wifiPassword', e.target.value)} />
           <div className="space-y-1.5 sm:col-span-2">
-            <Label>Building</Label>
-            <Select value={form.values.buildingId} onValueChange={(v) => form.setValue('buildingId', v)}>
-              <SelectTrigger><SelectValue placeholder="Select building" /></SelectTrigger>
-              <SelectContent>{(buildings ?? []).map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-            </Select>
+            <Label required>Building</Label>
+            <SearchableSelect
+              options={(buildings ?? []).map((b) => ({
+                value: b.id,
+                label: b.name,
+                sublabel: b.code || 'Building',
+              }))}
+              value={form.values.buildingId}
+              onChange={(v) => form.setValue('buildingId', v)}
+              placeholder="Search & select building..."
+              searchPlaceholder="Search buildings by name..."
+            />
             {form.errors.buildingId && <p className="text-xs text-destructive">{form.errors.buildingId}</p>}
           </div>
         </div>

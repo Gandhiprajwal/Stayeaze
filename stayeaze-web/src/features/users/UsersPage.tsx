@@ -21,12 +21,13 @@ import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { validateEmail, validateMobile } from '@/lib/validation';
 
 const ENDPOINT = '/users';
 const statuses = [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'suspended', label: 'Suspended' }];
 
 const emptyForm = {
-  name: '', email: '', phone: '', role: 'PROPERTY_MANAGER' as UserRole, status: 'active' as User['status'], propertyIds: [] as string[],
+  name: '', email: '', phone: '', role: 'PROPERTY_MANAGER' as UserRole, status: 'active' as User['status'], propertyIds: [] as string[], orgId: '' as string,
 };
 
 export default function UsersPage() {
@@ -35,6 +36,7 @@ export default function UsersPage() {
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
   const currentUser = useAuthStore((s) => s.user);
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
 
   const { data: dbRoles } = useQuery({
     queryKey: ['roles-list-dropdown'],
@@ -46,23 +48,39 @@ export default function UsersPage() {
     queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
 
+  const { data: subscribersData } = useQuery({
+    queryKey: ['subscribers-dropdown-users'],
+    queryFn: () => api.get<any>('/super-admin/subscribers', { params: { pageSize: 100 } }).then((r) => r.data?.data || []),
+    enabled: isSuperAdmin,
+  });
+
   const propertyFilterOptions = (dbProperties ?? []).map((p) => ({
     value: p.id,
     label: p.name,
   }));
 
-  const roleOptions = (dbRoles ?? []).map((r) => {
-    let label = r.name;
-    if (r.name === 'ADMIN') label = 'Admin (Owner)';
-    else if (r.name === 'PROPERTY_MANAGER') label = 'Property Manager';
-    else if (r.name === 'SUPER_ADMIN') label = 'Super Admin';
-    return { value: r.name as UserRole, label };
-  }).filter((r) => {
-    if (r.value === 'SUPER_ADMIN') {
-      return currentUser?.role === 'SUPER_ADMIN';
-    }
-    return true;
-  });
+  const orgFilterOptions = (subscribersData ?? []).map((s: any) => ({
+    value: s.id,
+    label: s.name,
+  }));
+
+  const roleOptionsMap = new Map<UserRole, string>([
+    ['OWNER', 'Admin (Owner)'],
+    ['PROPERTY_MANAGER', 'Property Manager'],
+    ['RECEPTIONIST', 'Receptionist'],
+    ['ACCOUNTANT', 'Accountant'],
+    ['SECURITY_GUARD', 'Security Guard'],
+    ['STAFF', 'Maintenance Staff'],
+    ['TENANT', 'Tenant / Resident'],
+  ]);
+
+  if (isSuperAdmin) {
+    roleOptionsMap.set('SUPPORT', 'Platform Support (Application)');
+    roleOptionsMap.set('SUPER_ADMIN', 'Platform Super Admin');
+  }
+
+  const roleOptions = Array.from(roleOptionsMap.entries())
+    .map(([value, label]) => ({ value, label }));
 
   const createMut = useCreate<User>(ENDPOINT, 'User');
   const updateMut = useUpdate<User>(ENDPOINT, 'User');
@@ -70,18 +88,40 @@ export default function UsersPage() {
   const form = useForm(emptyForm);
 
   function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
-  function openEdit(row: User) {
+  function openEdit(row: User & { orgId?: string }) {
     setEditing(row);
-    form.reset({ name: row.name, email: row.email, phone: row.phone, role: row.role, status: row.status, propertyIds: row.propertyIds || [] });
+    const mappedRole: UserRole = (row.role === ('ADMIN' as any) || row.role === 'OWNER') ? 'OWNER' : row.role;
+    form.reset({
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      role: mappedRole,
+      status: row.status,
+      propertyIds: row.propertyIds || [],
+      orgId: row.orgId || '',
+    });
     setDialogOpen(true);
   }
+
   function submit() {
     if (!form.validate({
       name: (v) => !v ? 'Required' : undefined,
-      email: (v) => !v ? 'Required' : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v)) ? 'Invalid email' : undefined,
+      email: (v) => {
+        if (!v) return 'Required';
+        const res = validateEmail(String(v));
+        return res.isValid ? undefined : res.error;
+      },
+      phone: (v) => {
+        if (!v) return undefined;
+        const res = validateMobile(String(v));
+        return res.isValid ? undefined : res.error;
+      },
     })) return;
     const payload = {
-      ...form.values, propertyIds: form.values.propertyIds ?? [], avatar: undefined,
+      ...form.values,
+      propertyIds: form.values.propertyIds ?? [],
+      avatar: undefined,
+      orgId: isSuperAdmin && form.values.orgId ? form.values.orgId : undefined,
       lastActive: editing?.lastActive ?? new Date().toISOString(),
       createdAt: editing?.createdAt ?? new Date().toISOString(),
     };
@@ -102,18 +142,27 @@ export default function UsersPage() {
         </div>
       </div>
     )},
+    ...(isSuperAdmin ? [{
+      key: 'orgName' as any,
+      header: 'Organization / Subscriber',
+      sortable: true,
+      cell: (r: any) => (
+        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+          {r.orgName || 'StayEaze Platform'}
+        </span>
+      ),
+    }] : []),
     { key: 'role', header: 'Role', sortable: true, cell: (r) => (
       <span className="inline-flex items-center gap-1.5 text-sm font-medium">
         <ShieldCheck className="h-3.5 w-3.5 text-primary" />{formatRoleName(r.role)}
       </span>
     )},
-    { key: 'phone', header: 'Phone', cell: (r) => <span className="text-sm">{r.phone}</span> },
+    { key: 'phone', header: 'Phone', cell: (r) => <span className="text-sm">{r.phone || '—'}</span> },
     { key: 'propertyIds', header: 'Assigned Properties', cell: (r) => {
-      if (r.role === 'SUPER_ADMIN') {
-        return <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">All Properties (System-Wide)</span>;
+      if (r.role === 'SUPER_ADMIN' || r.role === 'SUPPORT') {
+        return <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">All Platform Properties</span>;
       }
 
-      // Check explicit propertyIds mapping first
       if (r.propertyIds && r.propertyIds.length > 0) {
         const names = r.propertyIds
           .map((id) => (dbProperties ?? []).find((p: any) => String(p.id).toLowerCase() === String(id).toLowerCase())?.name)
@@ -123,7 +172,6 @@ export default function UsersPage() {
         }
       }
 
-      // Fallback: match by email or name overlap with dbProperties
       const matched = (dbProperties ?? []).filter((p: any) => {
         const pEmail = (p.email || '').toLowerCase();
         const pName = (p.name || '').toLowerCase();
@@ -140,7 +188,6 @@ export default function UsersPage() {
         return <span className="text-sm font-medium">{matched.map((p: any) => p.name).join(', ')}</span>;
       }
 
-      // Fallback: If user was created for a specific property (e.g. Testproperty01)
       if (r.name && r.name !== 'Superadmin' && r.name !== 'Admin') {
         return <span className="text-sm font-medium">{r.name}</span>;
       }
@@ -154,11 +201,16 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="User Management" description="Manage back-office user accounts and access." icon={UserCog}
-        actions={<Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" /> Add User</Button>} />
-      <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search users by name or email..." exportFilename="users" initialSortBy="name"
+      <PageHeader
+        title={isSuperAdmin ? "Global User Accounts" : "User Management"}
+        description={isSuperAdmin ? "View and manage all registered user accounts and staff across all client organizations." : "Manage your organization's staff, managers, and access roles."}
+        icon={UserCog}
+        actions={<Button onClick={openCreate} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold"><Plus className="mr-1.5 h-4 w-4" /> Add User</Button>}
+      />
+      <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search users by name, email, or role..." exportFilename="users" initialSortBy="name"
         filters={[
           { key: 'role', label: 'Role', options: roleOptions },
+          ...(isSuperAdmin && orgFilterOptions.length > 0 ? [{ key: 'orgId', label: 'Organization', options: orgFilterOptions }] : []),
           { key: 'propertyId', label: 'Property', options: propertyFilterOptions },
           { key: 'status', label: 'Status', options: statuses }
         ]}
@@ -171,9 +223,23 @@ export default function UsersPage() {
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit User' : 'Add User'} onSubmit={submit}
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput label="Full Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} />
-          <FormInput label="Email" required type="email" id="email" value={form.values.email} onChange={(e) => form.setValue('email', e.target.value)} error={form.errors.email} />
-          <FormInput label="Phone" id="phone" value={form.values.phone} onChange={(e) => form.setValue('phone', e.target.value)} />
+          {isSuperAdmin && (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Target Organization / Tenant</Label>
+              <Select value={form.values.orgId || 'system_root'} onValueChange={(v) => form.setValue('orgId', v === 'system_root' ? '' : v)}>
+                <SelectTrigger><SelectValue placeholder="StayEaze Platform (System Root)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system_root">StayEaze Platform (System Root)</SelectItem>
+                  {(subscribersData ?? []).map((s: any) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} ({s.subdomain})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <FormInput label="Full Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} placeholder="e.g. Anita Sharma" />
+          <FormInput label="Email" required type="email" id="email" value={form.values.email} onChange={(e) => form.setValue('email', e.target.value)} error={form.errors.email} placeholder="e.g. manager@stayeaze.com" />
+          <FormInput label="Phone" id="phone" value={form.values.phone} onChange={(e) => form.setValue('phone', e.target.value)} placeholder="e.g. +91 98765 43210" />
           <div className="space-y-1.5"><Label>Role</Label><Select value={form.values.role} onValueChange={(v) => form.setValue('role', v as UserRole)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{roleOptions.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as User['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1.5 sm:col-span-2">

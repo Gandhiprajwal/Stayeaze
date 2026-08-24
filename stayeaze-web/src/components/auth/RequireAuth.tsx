@@ -17,12 +17,19 @@ export function RequireAuth({ module, allowedRoles, children }: RequireAuthProps
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+  if (allowedRoles && allowedRoles.length > 0) {
+    const userRole = user.role || '';
+    const cleanRole = userRole.replace('ROLE_', '');
+    const hasRole = allowedRoles.some((r) => r === userRole || r === cleanRole || `ROLE_${r}` === userRole);
+    if (!hasRole) {
+      return <Navigate to={cleanRole === 'TENANT' ? '/tenant/dashboard' : '/dashboard'} replace />;
+    }
   }
 
-  if (module && !canAccess(user.role, module)) {
-    return <Navigate to="/dashboard" replace />;
+  if (module && !canAccess(user.role || '', module)) {
+    const userRole = user.role || '';
+    const cleanRole = userRole.replace('ROLE_', '');
+    return <Navigate to={cleanRole === 'TENANT' ? '/tenant/dashboard' : '/dashboard'} replace />;
   }
 
   return <>{children}</>;

@@ -5,8 +5,7 @@ import { toast } from 'sonner';
 import {
   Hotel, Users, Wallet, TrendingUp, Building2, CalendarCheck,
   MessageSquareWarning, ArrowUpRight, AlertTriangle,
-  Server, Cpu, Database, Activity, Mail, MessageSquare, CreditCard, Radio, Key, Zap, HardDrive,
-
+  Server, Cpu, Database, Activity, Mail, MessageSquare, CreditCard, Radio, Key, Zap, HardDrive, Sparkles
 } from 'lucide-react';
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer,
@@ -24,9 +23,13 @@ import { formatCurrency, formatDate, initials, occupancyRate } from '@/lib/forma
 import api from '@/lib/api';
 import type { Property, Tenant, Invoice, Payment, Complaint } from '@/lib/types';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { useSystemMetricsStream } from '@/lib/hooks/useSystemMetricsStream';
+import { useRoleDashboardStream } from '@/lib/hooks/useRoleDashboardStream';
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const { isLiveStreaming } = useSystemMetricsStream();
+  const { isLiveStreaming: isRoleStreaming, streamData: roleMetrics } = useRoleDashboardStream();
 
   const { data: properties, isLoading: loadingProps } = useQuery({
     queryKey: ['dashboard', 'properties-minimal'],
@@ -59,91 +62,45 @@ export default function DashboardPage() {
     queryFn: () => api.get<{ data: Complaint[] }>('/complaints', { params: { pageSize: 5, sortBy: 'createdAt', sortOrder: 'desc' } }).then((r) => r.data.data),
   });
 
-  // Accurate Active Tenants (excluding checked out / archived / inactive)
-  const activeTenantsList = (tenants ?? []).filter((t) => {
-    const st = (t.status || '').toLowerCase();
-    return st === 'active' || st === 'checked_in';
+  // Dedicated Page-Based Server Stats
+  const { data: propertyStats } = useQuery({
+    queryKey: ['properties-stats'],
+    queryFn: () => api.get('/properties/stats').then((r) => r.data || {}),
   });
-  const activeTenants = activeTenantsList.length;
 
-  // Accurate Total & Occupied Beds calculation
-  const totalBedsFromProps = properties?.reduce((s, p) => s + (p.totalBeds || 0), 0) ?? 0;
-  const occupiedBedsFromProps = properties?.reduce((s, p) => s + (p.occupiedBeds || 0), 0) ?? 0;
+  const { data: tenantStats } = useQuery({
+    queryKey: ['tenants-stats'],
+    queryFn: () => api.get('/tenants/stats').then((r) => r.data || {}),
+  });
 
-  const totalBedsFromBuildings = (buildings ?? []).reduce((s, b) => s + (b.beds || 0), 0);
-  const occupiedBedsFromBuildings = (buildings ?? []).reduce((s, b) => s + (b.occupied || 0), 0);
+  const { data: invoiceStats } = useQuery({
+    queryKey: ['invoices-stats'],
+    queryFn: () => api.get('/invoices/stats').then((r) => r.data || {}),
+  });
 
-  const totalBedsFromFloors = (floors ?? []).reduce((s, f) => s + (f.beds || 0), 0);
-  const occupiedBedsFromFloors = (floors ?? []).reduce((s, f) => s + (f.occupied || 0), 0);
+  const { data: complaintStats } = useQuery({
+    queryKey: ['complaints-stats'],
+    queryFn: () => api.get('/complaints/stats').then((r) => r.data || {}),
+  });
 
-  const totalBeds = totalBedsFromProps > 0 
-    ? totalBedsFromProps 
-    : (totalBedsFromBuildings > 0 ? totalBedsFromBuildings : totalBedsFromFloors);
+  // Live SSE metrics with fallback to REST API stats
+  const liveActiveTenants = roleMetrics?.activeTenantsCount ?? tenantStats?.activeTenants ?? 0;
+  const liveTotalBeds = roleMetrics?.totalBeds ?? propertyStats?.totalBeds ?? 0;
+  const liveOccupiedBeds = roleMetrics?.occupiedBeds ?? propertyStats?.occupiedBeds ?? 0;
+  const liveOccupancyRate = roleMetrics?.occupancyRate ?? propertyStats?.occupancyRate ?? (liveTotalBeds > 0 ? Math.round((liveOccupiedBeds / liveTotalBeds) * 100) : 0);
+  const liveMonthlyRevenue = roleMetrics?.monthlyRevenue != null ? Number(roleMetrics.monthlyRevenue) : (invoiceStats?.monthlyRevenue ? Number(invoiceStats.monthlyRevenue) : 0);
+  const overdue = invoiceStats?.overdueInvoicesCount ?? 0;
+  const openComplaints = roleMetrics?.openComplaintsCount ?? ((complaintStats?.openComplaints || 0) + (complaintStats?.inProgressComplaints || 0));
 
-  const rawOccupiedBeds = occupiedBedsFromProps > 0 
-    ? occupiedBedsFromProps 
-    : (occupiedBedsFromBuildings > 0 ? occupiedBedsFromBuildings : (occupiedBedsFromFloors > 0 ? occupiedBedsFromFloors : activeTenants));
-
-  const occupiedBeds = totalBeds > 0 
-    ? Math.min(totalBeds, Math.max(rawOccupiedBeds, activeTenants)) 
-    : activeTenants;
-
-  const occupancy = totalBeds > 0 ? Math.min(100, Math.max(0, Math.round((occupiedBeds / totalBeds) * 1000) / 10)) : 0;
-  const invoicePaidTotal = invoices?.filter((i) => i.status === 'paid').reduce((s, i) => s + (i.paidAmount || 0), 0) ?? 0;
-  const paymentCollectionsTotal = payments?.reduce((s, p) => s + (p.amount || 0), 0) ?? 0;
-  const monthlyRevenue = invoicePaidTotal + paymentCollectionsTotal;
-  const overdue = invoices?.filter((i) => i.status === 'overdue').length ?? 0;
-  const openComplaints = complaints?.filter((c) => c.status === 'open' || c.status === 'in_progress').length ?? 0;
-
-  // Accurate Real Month-over-Month (MoM) Growth Trends
-  const now = new Date();
-  const curYear = now.getFullYear();
-  const curMonth = now.getMonth();
-  const prevMonth = curMonth === 0 ? 11 : curMonth - 1;
-  const prevMonthYear = curMonth === 0 ? curYear - 1 : curYear;
-
-  const curMonthRev = (payments ?? []).filter((p) => {
-    if (p.status !== 'success') return false;
-    const d = new Date(p.date || (p as any).createdAt || Date.now());
-    return d.getFullYear() === curYear && d.getMonth() === curMonth;
-  }).reduce((s, p) => s + (p.amount || 0), 0);
-
-  const prevMonthRev = (payments ?? []).filter((p) => {
-    if (p.status !== 'success') return false;
-    const d = new Date(p.date || (p as any).createdAt || Date.now());
-    return d.getFullYear() === prevMonthYear && d.getMonth() === prevMonth;
-  }).reduce((s, p) => s + (p.amount || 0), 0);
-
-  let revGrowthPct = 0;
-  if (prevMonthRev > 0) {
-    revGrowthPct = Math.round(((curMonthRev - prevMonthRev) / prevMonthRev) * 1000) / 10;
-  } else if (curMonthRev > 0) {
-    revGrowthPct = 100;
-  }
-  const revenueMomTrend = (curMonthRev > 0 || prevMonthRev > 0) ? {
+  // Month-over-Month Growth Trends from server stats
+  const revGrowthPct = invoiceStats?.revenueMomGrowthPct ?? 0;
+  const revenueMomTrend = invoiceStats?.monthlyRevenue > 0 || invoiceStats?.prevMonthRevenue > 0 ? {
     value: `${revGrowthPct >= 0 ? '+' : ''}${revGrowthPct}%`,
     direction: revGrowthPct >= 0 ? ('up' as const) : ('down' as const),
     positive: revGrowthPct >= 0,
   } : undefined;
 
-  const curMonthTenantsCount = (tenants ?? []).filter((t) => {
-    if (!t.createdAt) return false;
-    const d = new Date(t.createdAt);
-    return d.getFullYear() === curYear && d.getMonth() === curMonth;
-  }).length;
-
-  const prevMonthTenantsCount = (tenants ?? []).filter((t) => {
-    if (!t.createdAt) return false;
-    const d = new Date(t.createdAt);
-    return d.getFullYear() === prevMonthYear && d.getMonth() === prevMonth;
-  }).length;
-
-  const tenantGrowthDiff = curMonthTenantsCount - prevMonthTenantsCount;
-  const activeTenantTrend = (curMonthTenantsCount > 0 || prevMonthTenantsCount > 0) ? {
-    value: `${tenantGrowthDiff >= 0 ? '+' : ''}${tenantGrowthDiff}`,
-    direction: tenantGrowthDiff >= 0 ? ('up' as const) : ('down' as const),
-    positive: tenantGrowthDiff >= 0,
-  } : undefined;
+  const activeTenantTrend = undefined;
 
   const { data: allUsers } = useQuery({
     queryKey: ['dashboard', 'all-users'],
@@ -154,20 +111,24 @@ export default function DashboardPage() {
   const { data: sysMetrics, refetch: refetchMetrics } = useQuery({
     queryKey: ['dashboard', 'system-metrics'],
     queryFn: () => api.get<{
-      cpu: number;
-      jvm: { max: number; total: number; used: number; percent: number };
-      db: { active: number; max: number; percent: number };
+      cpu?: number;
+      jvm?: { max: number; total: number; used: number; percent?: number };
+      db?: { active: number; max: number; percent?: number };
+      dbPool?: { active: number; max: number; total: number; idle: number };
       services: {
-        redis?: { status: string; rtt: number };
-        postgres?: { status: string; rtt: number };
-        storage?: { status: string; rtt: number };
+        redis?: { status: string; rtt: number; engine?: string };
+        postgres?: { status: string; rtt: number; engine?: string };
+        storage?: { status: string; rtt: number; engine?: string; mode?: string };
         twilio: { status: string; rtt: number };
         smtp: { status: string; rtt: number };
         razorpay: { status: string; rtt: number };
       }
     }>('/system/metrics').then((r) => r.data),
-    refetchInterval: 5000,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: false,
   });
+
+  const activeSysMetrics = sysMetrics;
 
   const { data: orgProfile } = useQuery({
     queryKey: ['dashboard', 'org-billing-profile'],
@@ -175,14 +136,58 @@ export default function DashboardPage() {
     enabled: user?.role === 'OWNER' || user?.role === 'ADMIN' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'RECEPTIONIST' || user?.role === 'ACCOUNTANT',
   });
 
-  const redisConnected = sysMetrics?.services?.redis?.status?.toLowerCase() === 'connected';
-  const postgresConnected = sysMetrics?.services?.postgres?.status?.toLowerCase() === 'connected';
-  const storageConnected = sysMetrics?.services?.storage?.status?.toLowerCase() === 'connected';
-  const twilioConnected = sysMetrics?.services?.twilio?.status?.toLowerCase() === 'connected';
-  const smtpConnected = sysMetrics?.services?.smtp?.status?.toLowerCase() === 'connected';
-  const razorpayConnected = user?.role === 'SUPER_ADMIN'
-    ? sysMetrics?.services?.razorpay?.status?.toLowerCase() === 'connected'
-    : !!((orgProfile as any)?.hasRazorpayConfigured);
+  const renderStatusBadge = (status?: string) => {
+    const s = (status || 'disabled').toLowerCase();
+    if (s === 'connected' || s === 'up') {
+      return (
+        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+          Connected
+        </span>
+      );
+    }
+    if (s.includes('in-memory') || s.includes('memory') || s.includes('fallback')) {
+      return (
+        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+          In-Memory L2 (Active)
+        </span>
+      );
+    }
+    if (s.includes('local') || s.includes('disk')) {
+      return (
+        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+          Local Disk (Active)
+        </span>
+      );
+    }
+    if (s === 'disabled' || s === 'inactive') {
+      return (
+        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/20">
+          Disabled
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold bg-destructive/15 text-destructive border border-destructive/20">
+        Down
+      </span>
+    );
+  };
+
+  const redisStatus = activeSysMetrics?.services?.redis?.status;
+  const postgresStatus = activeSysMetrics?.services?.postgres?.status;
+  const storageStatus = activeSysMetrics?.services?.storage?.status;
+  const twilioStatus = activeSysMetrics?.services?.twilio?.status;
+  const smtpStatus = activeSysMetrics?.services?.smtp?.status;
+  const razorpayStatus = user?.role === 'SUPER_ADMIN'
+    ? activeSysMetrics?.services?.razorpay?.status
+    : ((orgProfile as any)?.hasRazorpayConfigured ? 'Connected' : 'Disabled');
+
+  const redisConnected = redisStatus?.toLowerCase() === 'connected';
+  const postgresConnected = postgresStatus?.toLowerCase() === 'connected';
+  const storageConnected = storageStatus?.toLowerCase() === 'connected';
+  const twilioConnected = twilioStatus?.toLowerCase() === 'connected';
+  const smtpConnected = smtpStatus?.toLowerCase() === 'connected';
+  const razorpayConnected = razorpayStatus?.toLowerCase() === 'connected';
 
 
 
@@ -252,26 +257,37 @@ export default function DashboardPage() {
     { name: 'Partial', value: invoices?.filter((i) => i.status === 'partial').length ?? 0 },
     { name: 'Overdue', value: invoices?.filter((i) => i.status === 'overdue').length ?? 0 },
   ];
+  const { data: subscribersData } = useQuery({
+    queryKey: ['dashboard', 'super-admin-subscribers'],
+    queryFn: () => api.get<any>('/super-admin/subscribers').then((r) => {
+      const d = r.data;
+      if (Array.isArray(d?.data)) return d.data;
+      if (Array.isArray(d)) return d;
+      if (Array.isArray(d?.content)) return d.content;
+      return [];
+    }),
+    enabled: user?.role === 'SUPER_ADMIN',
+  });
+
   const pieColors = ['hsl(var(--success))', 'hsl(var(--warning))', 'hsl(var(--info))', 'hsl(var(--destructive))'];
 
   if (user?.role === 'SUPER_ADMIN') {
+    const subscribersList: any[] = Array.isArray(subscribersData) ? subscribersData : [];
     const totalSaaSUsers = allUsers?.length ?? 0;
+    const totalSaaSProps = properties?.length ?? subscribersList.length ?? 0;
 
-    const totalSaaSProps = properties?.length ?? 0;
-    const saasMonthlyRevenue = totalSaaSProps * 4999;
+    const saasMonthlyRevenue = subscribersList.reduce((acc, s) => acc + (Number(s.planPrice ?? s.subscriptionPlanPrice) || 0), 0);
     const saasProfit = Math.round(saasMonthlyRevenue * 0.85);
 
-    const starterProps = (properties ?? []).filter((p) => (p.totalBeds ?? 24) < 15).length;
-    const professionalProps = (properties ?? []).filter((p) => (p.totalBeds ?? 24) >= 15 && (p.totalBeds ?? 24) <= 50).length;
-    const enterpriseProps = (properties ?? []).filter((p) => (p.totalBeds ?? 24) > 50).length;
+    const starterProps = subscribersList.filter((s) => (s.planName || s.subscriptionPlanName || '').toLowerCase().includes('starter')).length;
+    const professionalProps = subscribersList.filter((s) => (s.planName || s.subscriptionPlanName || '').toLowerCase().includes('pro')).length;
+    const enterpriseProps = subscribersList.filter((s) => (s.planName || s.subscriptionPlanName || '').toLowerCase().includes('enterprise')).length;
 
     const subscriptionPlans = [
-      { name: 'Starter Plan', value: starterProps },
-      { name: 'Professional Plan', value: professionalProps },
-      { name: 'Enterprise Plan', value: enterpriseProps },
+      { name: 'Starter Plan', value: starterProps || 0, color: '#6366f1' },
+      { name: 'Professional Plan', value: professionalProps || 0, color: '#2563eb' },
+      { name: 'Enterprise Plan', value: enterpriseProps || 0, color: '#16a34a' },
     ].filter((p) => p.value > 0);
-
-    const planColors = ['hsl(var(--muted-foreground) / 0.4)', 'hsl(var(--primary))', 'hsl(var(--success))'];
 
     const getSaaSGrowthData = () => {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -289,33 +305,35 @@ export default function DashboardPage() {
       }
 
       return last7Months.map((m) => {
-        const activeProps = (properties ?? []).filter((p) => {
-          if (!p.createdAt) return true;
-          const pDate = new Date(p.createdAt);
-          const pYear = pDate.getFullYear();
-          const pMonth = pDate.getMonth();
-          return pYear < m.year || (pYear === m.year && pMonth <= m.monthIndex);
+        const activeSubs = subscribersList.filter((s) => {
+          if (!s.startDate && !s.subscriptionStartDate && !s.createdAt) return true;
+          const sDate = new Date(s.startDate || s.subscriptionStartDate || s.createdAt);
+          const sYear = sDate.getFullYear();
+          const sMonth = sDate.getMonth();
+          return sYear < m.year || (sYear === m.year && sMonth <= m.monthIndex);
         });
 
-        const revenue = activeProps.length * 4999;
+        const revenue = activeSubs.reduce((acc, s) => acc + (Number(s.planPrice ?? s.subscriptionPlanPrice) || 0), 0);
         const profit = Math.round(revenue * 0.85);
 
         return {
           month: m.name,
-          revenue,
-          profit,
+          revenue: revenue || saasMonthlyRevenue,
+          profit: profit || saasProfit,
         };
       });
     };
 
     const saasGrowthData = getSaaSGrowthData();
 
-    const jvmUsed = sysMetrics ? (sysMetrics.jvm.used / (1024 * 1024 * 1024)).toFixed(1) : '0.0';
-    const jvmMax = sysMetrics ? (sysMetrics.jvm.max / (1024 * 1024 * 1024)).toFixed(1) : '0.0';
-    const jvmPercent = Math.round(sysMetrics?.jvm.percent ?? 0);
-    const dbPercent = Math.round(sysMetrics?.db.percent ?? 0);
-
-
+    const jvmUsed = activeSysMetrics?.jvm?.used ? (activeSysMetrics.jvm.used / (1024 * 1024 * 1024)).toFixed(1) : '0.0';
+    const jvmMax = activeSysMetrics?.jvm?.max ? (activeSysMetrics.jvm.max / (1024 * 1024 * 1024)).toFixed(1) : '0.0';
+    const jvmPercent = (activeSysMetrics?.jvm?.max && activeSysMetrics.jvm.max > 0)
+      ? Math.round((activeSysMetrics.jvm.used / activeSysMetrics.jvm.max) * 100)
+      : (activeSysMetrics?.jvm?.percent ?? 0);
+    const dbActive = activeSysMetrics?.dbPool?.active ?? activeSysMetrics?.db?.active ?? 0;
+    const dbMax = activeSysMetrics?.dbPool?.max ?? activeSysMetrics?.db?.max ?? 10;
+    const dbPercent = dbMax > 0 ? Math.round((dbActive / dbMax) * 100) : (activeSysMetrics?.db?.percent ?? 0);
 
     return (
       <div className="space-y-6">
@@ -350,8 +368,19 @@ export default function DashboardPage() {
           {/* Server Resource Utilization */}
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Server className="h-5 w-5 text-primary" /> Server Utilization
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Server className="h-5 w-5 text-primary" /> Server Utilization
+                </div>
+                {isLiveStreaming && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    LIVE SSE (2s)
+                  </span>
+                )}
               </CardTitle>
               <CardDescription>StayEaze hosting infrastructure and database node health</CardDescription>
             </CardHeader>
@@ -359,10 +388,10 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-1.5 font-medium"><Cpu className="h-4 w-4 text-muted-foreground" /> CPU Utilization</span>
-                  <span className="font-semibold text-primary">{sysMetrics?.cpu ?? 0}%</span>
+                  <span className="font-semibold text-primary">{activeSysMetrics?.cpu ?? 0}%</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${sysMetrics?.cpu ?? 0}%` }} />
+                  <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${activeSysMetrics?.cpu ?? 0}%` }} />
                 </div>
               </div>
 
@@ -379,7 +408,7 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-1.5 font-medium"><Database className="h-4 w-4 text-muted-foreground" /> PostgreSQL Active Connection Pool</span>
-                  <span className="font-semibold text-info">{sysMetrics?.db.active ?? 0} Active Pools / {sysMetrics?.db.max ?? 10} Max</span>
+                  <span className="font-semibold text-info">{dbActive} Active Pools / {dbMax} Max</span>
                 </div>
                 <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
                   <div className="h-full bg-info rounded-full transition-all duration-500" style={{ width: `${dbPercent}%` }} />
@@ -391,10 +420,21 @@ export default function DashboardPage() {
           {/* Third-party Connected Services */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Radio className="h-5 w-5 text-primary" /> Service Connections
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Radio className="h-5 w-5 text-primary" /> Service Connections
+                </div>
+                {isLiveStreaming && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    LIVE SSE
+                  </span>
+                )}
               </CardTitle>
-              <CardDescription>Real-time channels & response latency</CardDescription>
+              <CardDescription>Real-time channels &amp; response latency</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {/* Redis */}
@@ -407,12 +447,8 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    redisConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-                  }`}>
-                    {redisConnected ? 'Connected' : 'Down'}
-                  </span>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.redis?.rtt ?? 0}ms</p>
+                  {renderStatusBadge(redisStatus)}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {activeSysMetrics?.services?.redis?.rtt ?? 0}ms</p>
                 </div>
               </div>
 
@@ -426,31 +462,27 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    postgresConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-                  }`}>
-                    {postgresConnected ? 'Connected' : 'Down'}
-                  </span>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.postgres?.rtt ?? 2}ms</p>
+                  {renderStatusBadge(postgresStatus)}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {activeSysMetrics?.services?.postgres?.rtt ?? 2}ms</p>
                 </div>
               </div>
 
-              {/* AWS S3 / File Storage */}
+              {/* AWS S3 / Local File Storage */}
               <div className="flex items-center justify-between border-b pb-2">
                 <div className="flex items-center gap-2">
                   <HardDrive className="h-4 w-4 text-emerald-500" />
                   <div>
-                    <p className="text-sm font-medium">AWS S3 / File Storage</p>
-                    <p className="text-xs text-muted-foreground">KYC & Media Storage</p>
+                    <p className="text-sm font-medium">
+                      {activeSysMetrics?.services?.storage?.mode === 'Cloud S3' ? 'AWS S3 Cloud Storage' : 'Local File Storage'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {activeSysMetrics?.services?.storage?.engine || 'KYC & Media Storage'}
+                    </p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    storageConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-                  }`}>
-                    {storageConnected ? 'Connected' : 'Down'}
-                  </span>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.storage?.rtt ?? 4}ms</p>
+                  {renderStatusBadge(storageStatus)}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {activeSysMetrics?.services?.storage?.rtt ?? 1}ms</p>
                 </div>
               </div>
 
@@ -464,13 +496,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    razorpayConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-                  }`}>
-                    {razorpayConnected ? 'Connected' : 'Down'}
-                  </span>
+                  {renderStatusBadge(razorpayStatus)}
                   {razorpayConnected && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.razorpay?.rtt}ms</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {activeSysMetrics?.services?.razorpay?.rtt}ms</p>
                   )}
                 </div>
               </div>
@@ -485,13 +513,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    twilioConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-                  }`}>
-                    {twilioConnected ? 'Connected' : 'Down'}
-                  </span>
+                  {renderStatusBadge(twilioStatus)}
                   {twilioConnected && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.twilio?.rtt}ms</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {activeSysMetrics?.services?.twilio?.rtt}ms</p>
                   )}
                 </div>
               </div>
@@ -506,13 +530,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    smtpConnected ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-                  }`}>
-                    {smtpConnected ? 'Connected' : 'Down'}
-                  </span>
+                  {renderStatusBadge(smtpStatus)}
                   {smtpConnected && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {sysMetrics?.services?.smtp?.rtt}ms</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">RTT: {activeSysMetrics?.services?.smtp?.rtt}ms</p>
                   )}
                 </div>
               </div>
@@ -562,17 +582,25 @@ export default function DashboardPage() {
               <CardDescription>Workspaces plan distribution</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
-                  <Pie data={subscriptionPlans} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
-                    {subscriptionPlans.map((_, i) => (
-                      <Cell key={i} fill={planColors[i]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
+              {subscriptionPlans.length === 0 ? (
+                <div className="flex h-[280px] flex-col items-center justify-center text-center text-muted-foreground">
+                  <Sparkles className="h-8 w-8 text-muted-foreground/40 mb-2" />
+                  <p className="text-sm font-medium">No Active Subscriptions</p>
+                  <p className="text-xs text-muted-foreground">Workspace plan distribution will appear here once organizations subscribe.</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie data={subscriptionPlans} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={3}>
+                      {subscriptionPlans.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -600,10 +628,10 @@ export default function DashboardPage() {
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[120px] rounded-xl" />)
         ) : (
           <>
-            <StatCard label="Total Buildings" value={buildings?.length ?? 0} icon={Building2} accent="primary" hint={`${buildings?.length ?? 0} buildings registered`} />
-            <StatCard label="Occupancy Rate" value={`${occupancy}%`} icon={Building2} accent="success" hint={`${occupiedBeds}/${totalBeds} beds occupied`} />
-            <StatCard label="Active Tenants" value={activeTenants} icon={Users} accent="info" trend={activeTenantTrend} hint="Currently checked in" />
-            <StatCard label="Monthly Revenue" value={formatCurrency(monthlyRevenue)} icon={Wallet} accent="warning" trend={revenueMomTrend} hint="Collected this month" />
+            <StatCard label="Total Buildings" value={buildings?.length ?? roleMetrics?.totalBuildings ?? 0} icon={Building2} accent="primary" hint={`${buildings?.length ?? 0} buildings registered`} />
+            <StatCard label="Occupancy Rate" value={`${liveOccupancyRate}%`} icon={Building2} accent="success" hint={`${liveOccupiedBeds}/${liveTotalBeds} beds occupied`} />
+            <StatCard label="Active Tenants" value={liveActiveTenants} icon={Users} accent="info" trend={activeTenantTrend} hint="Currently checked in" />
+            <StatCard label="Monthly Revenue" value={formatCurrency(liveMonthlyRevenue)} icon={Wallet} accent="warning" trend={revenueMomTrend} hint="Collected this month" />
           </>
         )}
       </div>

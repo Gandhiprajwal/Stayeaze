@@ -1,11 +1,12 @@
 // Formatting + small helpers used across the console.
 
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount?: number | null): string {
+  const val = typeof amount === 'number' && !isNaN(amount) ? amount : (Number(amount) || 0);
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(val);
 }
 
 export function formatNumber(n: number): string {
@@ -26,6 +27,20 @@ export function formatDateTime(date?: string | Date | null): string {
   return d.toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
+}
+
+export function formatChatTimestamp(date?: string | Date | null): string {
+  if (!date) return '';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (!d || isNaN(d.getTime())) return '';
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  if (isToday) {
+    return `Today, ${timeStr}`;
+  }
+  const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  return `${dateStr}, ${timeStr}`;
 }
 
 export function timeAgo(date?: string | Date | null): string {
@@ -57,6 +72,16 @@ export function initials(name: string): string {
 export function occupancyRate(occupied: number, total: number): number {
   if (!total || total <= 0) return 0;
   return Math.round(((occupied || 0) / total) * 100);
+}
+
+export function formatRoomName(num?: string | number | null): string {
+  if (num === null || num === undefined) return '—';
+  let str = String(num).trim();
+  if (!str) return '—';
+  while (/^room\s+/i.test(str)) {
+    str = str.replace(/^room\s+/i, '').trim();
+  }
+  return `Room ${str}`;
 }
 
 // CSV export for data tables.
@@ -96,4 +121,14 @@ export function numberToWords(num: number): string {
   }
 
   return (inWords(Math.floor(num)).trim() + ' Rupees Only').replace(/\s+/g, ' ');
+}
+
+export function resolveFileUrl(url?: string | null): string {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
+    return url;
+  }
+  const backendBase = (import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL?.replace(/\/api\/v1\/?$/, '') || 'http://localhost:8080').replace(/\/$/, '');
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  return `${backendBase}${cleanPath}`;
 }

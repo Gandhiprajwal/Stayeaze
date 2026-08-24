@@ -10,6 +10,7 @@ import { RowActions } from '@/components/common/RowActions';
 import { FormDialog } from '@/components/common/FormDialog';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { FormInput } from '@/components/common/FormField';
+import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -18,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import api from '@/lib/api';
 import type { Room, Floor } from '@/lib/types';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatRoomName } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 
 const ENDPOINT = '/rooms';
@@ -41,6 +42,7 @@ const allAmenities = ['AC', 'WiFi', 'Geyser', 'Wardrobe', 'Study Table', 'Balcon
 const emptyForm = {
   number: '', type: 'double' as Room['type'], sharing: 2, beds: 2, occupied: 0,
   rent: 0, status: 'available' as Room['status'], floorId: '', amenities: [] as string[],
+  wifiSsid: '', wifiPassword: '',
 };
 
 export default function RoomsPage() {
@@ -79,6 +81,8 @@ export default function RoomsPage() {
       status: (row.status || 'available').toLowerCase() as Room['status'],
       floorId: row.floorId || '',
       amenities: row.amenities ?? [],
+      wifiSsid: row.wifiSsid || '',
+      wifiPassword: row.wifiPassword || '',
     });
     setDialogOpen(true);
   }
@@ -94,10 +98,16 @@ export default function RoomsPage() {
       status: form.values.status,
       amenities: form.values.amenities ?? [],
     };
-    if (editing) updateMut.mutate({ id: editing.id, payload }, { onSuccess: () => setDialogOpen(false) });
-    else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
+    const onSuccess = () => {
+      queryClient.invalidateQueries();
+      setDialogOpen(false);
+    };
+    if (editing) updateMut.mutate({ id: editing.id, payload }, { onSuccess });
+    else createMut.mutate(payload, { onSuccess });
   }
-  function confirmDelete() { if (deleteTarget) deleteMut.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) }); }
+  function confirmDelete() {
+    if (deleteTarget) deleteMut.mutate(deleteTarget.id, { onSuccess: () => { queryClient.invalidateQueries(); setDeleteTarget(null); } });
+  }
   function toggleAmenity(a: string) {
     const current = form.values.amenities || [];
     form.setValue('amenities', current.includes(a)
@@ -108,7 +118,7 @@ export default function RoomsPage() {
   const columns: Column<Room>[] = [
     { key: 'number', header: 'Room', sortable: true, cell: (r: any) => {
       const num = r.roomNumber || r.number || '';
-      const display = num.toString().toLowerCase().startsWith('room') ? num : `Room ${num}`;
+      const display = formatRoomName(num);
       return (
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><DoorOpen className="h-5 w-5" /></div>
@@ -186,11 +196,27 @@ export default function RoomsPage() {
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <FormInput label="Room Number" required id="number" value={form.values.number} onChange={(e) => form.setValue('number', e.target.value)} error={form.errors.number} />
-          <div className="space-y-1.5"><Label>Floor</Label><Select value={form.values.floorId} onValueChange={(v) => form.setValue('floorId', v)}><SelectTrigger><SelectValue placeholder="Select floor" /></SelectTrigger><SelectContent>{(floors ?? []).map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}</SelectContent></Select>{form.errors.floorId && <p className="text-xs text-destructive">{form.errors.floorId}</p>}</div>
+          <div className="space-y-1.5">
+            <Label required>Floor</Label>
+            <SearchableSelect
+              options={(floors ?? []).map((f) => ({
+                value: f.id,
+                label: f.name,
+                sublabel: f.buildingName || `Level ${f.number || f.floorNumber || 1}`,
+              }))}
+              value={form.values.floorId}
+              onChange={(v) => form.setValue('floorId', v)}
+              placeholder="Search & select floor..."
+              searchPlaceholder="Search floors..."
+            />
+            {form.errors.floorId && <p className="text-xs text-destructive">{form.errors.floorId}</p>}
+          </div>
           <div className="space-y-1.5"><Label>Room Type</Label><Select value={form.values.type} onValueChange={(v) => { form.setValue('type', v as Room['type']); const share = v === 'single' ? 1 : v === 'double' ? 2 : v === 'triple' ? 3 : 4; form.setValue('sharing', share); form.setValue('beds', share); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{roomTypes.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
           <FormInput label="Monthly Rent (₹)" type="number" id="rent" value={String(form.values.rent)} onChange={(e) => form.setValue('rent', Number(e.target.value))} />
           <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Room['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
           <FormInput label="Occupied Beds" type="number" id="occupied" value={String(form.values.occupied)} onChange={(e) => form.setValue('occupied', Number(e.target.value))} />
+          <FormInput label="Room Wi-Fi Name (SSID)" id="wifiSsid" placeholder={form.values.number ? `Room ${form.values.number}` : 'Room 101'} value={form.values.wifiSsid || ''} onChange={(e) => form.setValue('wifiSsid', e.target.value)} />
+          <FormInput label="Room Wi-Fi Password" id="wifiPassword" placeholder="e.g. Room202Pass" value={form.values.wifiPassword || ''} onChange={(e) => form.setValue('wifiPassword', e.target.value)} />
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Amenities</Label>
             <div className="flex flex-wrap gap-2 rounded-lg border p-3">

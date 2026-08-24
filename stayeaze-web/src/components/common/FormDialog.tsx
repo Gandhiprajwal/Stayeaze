@@ -11,20 +11,21 @@ interface FormDialogProps {
   description?: string;
   onSubmit: () => void;
   loading?: boolean;
+  disabled?: boolean;
   submitLabel?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   children: React.ReactNode;
 }
 
 const sizeMap = {
-  sm: 'max-w-md',
-  md: 'max-w-lg',
-  lg: 'max-w-2xl',
-  xl: 'max-w-4xl',
+  sm: 'w-[95vw] sm:max-w-md',
+  md: 'w-[95vw] sm:max-w-lg',
+  lg: 'w-[95vw] sm:max-w-2xl',
+  xl: 'w-[95vw] sm:max-w-4xl',
 };
 
 export function FormDialog({
-  open, onOpenChange, title, description, onSubmit, loading, submitLabel = 'Save', size = 'md', children,
+  open, onOpenChange, title, description, onSubmit, loading, disabled, submitLabel = 'Save', size = 'md', children,
 }: FormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -42,7 +43,7 @@ export function FormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || disabled}>
               {loading && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               {submitLabel}
             </Button>

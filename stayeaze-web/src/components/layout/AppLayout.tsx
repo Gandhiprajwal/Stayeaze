@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Hotel, ChevronLeft, ChevronRight, Menu, Search, Sun, Moon, LogOut,
-  Settings as SettingsIcon, UserCog, Command, RotateCcw,
+  Settings as SettingsIcon, UserCog, Command, RotateCcw, Wrench, ShieldAlert, AlertTriangle, LifeBuoy,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useUIStore } from '@/lib/stores/ui-store';
 import { filterNavForRole } from '@/lib/nav';
 import { cn } from '@/lib/utils';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -26,22 +26,54 @@ import { toast } from '@/hooks/use-toast';
 import api from '@/lib/api';
 
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle } from 'lucide-react';
+
+import { WorkspaceLockedModal } from '@/components/subscription/WorkspaceLockedModal';
+import { OrganizationSetupGuardModal } from '@/components/subscription/OrganizationSetupGuardModal';
+import { RaiseSupportTicketModal } from '@/components/support/RaiseSupportTicketModal';
+
+import { useBranding } from '@/lib/branding-context';
 
 export function AppLayout() {
   const { user, logout } = useAuthStore();
   const { sidebarCollapsed, toggleSidebar, theme, toggleTheme } = useUIStore();
+  const { brandName, brandLogo, branding, isWhiteLabeled } = useBranding();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [resetDbOpen, setResetDbOpen] = useState(false);
   const [resettingDb, setResettingDb] = useState(false);
+
+  const { data: maintenanceData } = useQuery({
+    queryKey: ['platform-maintenance-status'],
+    queryFn: () => api.get<any>('/auth/maintenance-status').then((r) => r.data),
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes instead of polling every 10 seconds
+    refetchOnWindowFocus: false,
+  });
+
+  const isMaintenanceMode = maintenanceData?.maintenanceModeEnabled;
+  const maintenanceMessage = maintenanceData?.maintenanceMessage || 'StayEaze is undergoing scheduled maintenance. We will be back shortly.';
+
+  const isPlatformOrTenant = user?.role === 'SUPER_ADMIN' || user?.role === 'SUPPORT' || user?.role === 'TENANT';
 
   const { data: orgProfile } = useQuery({
     queryKey: ['org-billing-profile-onboarding'],
     queryFn: () => api.get<any>('/organization-billing-profile').then((r) => r.data),
-    enabled: !!user && (user.role === 'OWNER' || user.role === 'ADMIN'),
+    enabled: !!user && !isPlatformOrTenant,
   });
+
+  const isSetupIncomplete = !!orgProfile && !orgProfile.isSetupComplete && !isPlatformOrTenant;
+  const isSetupGuardOpen = isSetupIncomplete && !location.pathname.startsWith('/settings') && !location.pathname.startsWith('/subscription');
+
+  const { data: subDetails } = useQuery<any>({
+    queryKey: ['my-subscription-details-app-layout'],
+    queryFn: () => api.get('/subscription/my-subscription').then((r) => r.data),
+    enabled: !!user && !isPlatformOrTenant,
+  });
+
+  const isGraceExpired = subDetails?.endDate ? (new Date(subDetails.endDate).getTime() + 3 * 86400000) < Date.now() : false;
+  const isWorkspaceLocked = isGraceExpired && !isPlatformOrTenant;
 
   const sections = user ? filterNavForRole(user.role) : [];
 
@@ -49,6 +81,55 @@ export function AppLayout() {
     logout();
     navigate('/login');
   };
+
+  // Global Cmd+K / Ctrl+K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  if (isMaintenanceMode && user?.role !== 'SUPER_ADMIN') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-900 px-4 text-center text-white">
+        <div className="mx-auto max-w-md space-y-6 rounded-2xl border border-slate-800 bg-slate-950 p-8 shadow-2xl backdrop-blur">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20">
+            <Wrench className="h-8 w-8 animate-bounce" />
+          </div>
+          <div className="space-y-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400 border border-amber-500/20">
+              <ShieldAlert className="h-3.5 w-3.5" /> Maintenance Mode Active
+            </span>
+            <h1 className="font-heading text-2xl font-bold tracking-tight text-slate-100">
+              System Under Maintenance
+            </h1>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              {maintenanceMessage}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-800/80 bg-slate-900/60 p-4 text-xs text-slate-400">
+            <p className="font-semibold text-slate-300">Expected Resolution</p>
+            <p className="mt-1">Our engineering team is conducting scheduled system updates. Services will resume shortly.</p>
+          </div>
+
+          <div className="pt-2 flex flex-col gap-2">
+            <Button variant="outline" onClick={() => window.location.reload()} className="w-full border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800">
+              Refresh Page
+            </Button>
+            <Button variant="ghost" onClick={handleLogout} className="w-full text-xs text-slate-500 hover:text-slate-300">
+              <LogOut className="mr-1.5 h-3.5 w-3.5" /> Sign Out of Console
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleResetDatabase = async () => {
     setResettingDb(true);
@@ -74,29 +155,23 @@ export function AppLayout() {
     }
   };
 
-  // Global Cmd+K / Ctrl+K shortcut
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setCmdOpen((v) => !v);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
-
   const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       {/* Brand */}
       <div className={cn('flex h-16 items-center gap-2.5 border-b border-white/10 px-4', sidebarCollapsed && 'justify-center px-2')}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Hotel className="h-5 w-5" />
-        </div>
+        {brandLogo ? (
+          <img src={brandLogo} alt={brandName} className="h-9 w-9 rounded-lg object-contain bg-white/10 p-0.5" />
+        ) : (
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Hotel className="h-5 w-5" />
+          </div>
+        )}
         {!sidebarCollapsed && (
           <div className="min-w-0">
-            <p className="font-heading text-base font-bold leading-none tracking-tight">StayEaze</p>
-            <p className="mt-0.5 text-[11px] text-white/50">Management Console</p>
+            <p className="font-heading text-base font-bold leading-none tracking-tight truncate">{brandName}</p>
+            <p className="mt-0.5 text-[11px] text-white/50 truncate">
+              {isWhiteLabeled && branding.brandTagline ? branding.brandTagline : 'Management Console'}
+            </p>
           </div>
         )}
       </div>
@@ -154,7 +229,7 @@ export function AppLayout() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-full w-full overflow-hidden bg-background">
       {/* Desktop sidebar */}
       <aside
         className={cn(
@@ -175,16 +250,23 @@ export function AppLayout() {
 
       {/* Main */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        {isMaintenanceMode && user?.role === 'SUPER_ADMIN' && (
+          <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md shrink-0">
+            <div className="flex items-center gap-2">
+              <Wrench className="h-4 w-4 animate-spin" />
+              <span>PLATFORM MAINTENANCE MODE IS ACTIVE: Non-superadmin access is currently locked out.</span>
+            </div>
+            <Link to="/settings?tab=saas-invoicing" className="underline hover:text-slate-900 font-extrabold ml-4">
+              Manage Settings & Turn Off →
+            </Link>
+          </div>
+        )}
         {/* Topbar */}
         <header className="flex h-16 shrink-0 items-center gap-3 border-b bg-card px-4 sm:px-6">
-          {/* Mobile menu */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)}>
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-          </Sheet>
+          {/* Mobile menu trigger */}
+          <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu">
+            <Menu className="h-5 w-5" />
+          </Button>
 
           {/* Search — opens command palette */}
           <button
@@ -221,6 +303,23 @@ export function AppLayout() {
               </Button>
             )}
 
+            {/* Help & Support Button */}
+            {user?.role !== 'SUPER_ADMIN' && user?.role !== 'SUPPORT' && (
+              <RaiseSupportTicketModal
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs text-muted-foreground hover:text-foreground hidden sm:flex"
+                    title="Raise Platform Support Ticket"
+                  >
+                    <LifeBuoy className="h-4 w-4 text-indigo-500" />
+                    <span>Support</span>
+                  </Button>
+                }
+              />
+            )}
+
             {/* Notification bell */}
             <NotificationBell />
 
@@ -234,6 +333,9 @@ export function AppLayout() {
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-accent">
                   <Avatar className="h-8 w-8">
+                    {user?.avatarUrl ? (
+                      <AvatarImage src={user.avatarUrl} alt={user.name} />
+                    ) : null}
                     <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
                       {user ? initials(user.name) : '?'}
                     </AvatarFallback>
@@ -257,8 +359,8 @@ export function AppLayout() {
                     <SettingsIcon className="mr-2 h-4 w-4" /> Settings
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled>
-                  <UserCog className="mr-2 h-4 w-4" /> My Profile
+                <DropdownMenuItem className="cursor-pointer" onClick={() => setSupportModalOpen(true)}>
+                  <LifeBuoy className="mr-2 h-4 w-4 text-indigo-500" /> Platform Support
                 </DropdownMenuItem>
                 {user?.role === 'SUPER_ADMIN' && (
                   <>
@@ -281,24 +383,41 @@ export function AppLayout() {
         </header>
 
         {/* Organization Onboarding Guard Banner */}
-        {orgProfile && !orgProfile.isSetupComplete && (
+        {isSetupIncomplete && (
           <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 text-amber-900 dark:text-amber-200 shrink-0">
-            <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 text-xs font-medium sm:text-sm">
-              <div className="flex items-center gap-2">
+            <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 text-xs font-medium sm:text-sm">
+              <div className="flex items-center gap-2 flex-wrap">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                 <span>
-                  <strong>Organization Setup Required:</strong> Please complete your organization legal name, address, and Razorpay credentials to enable full feature access.
+                  <strong>Organization Setup Required ({orgProfile?.completionPercentage || 0}% complete):</strong> Features are locked until required details are saved.
                 </span>
+                {Array.isArray(orgProfile?.missingFields) && orgProfile.missingFields.length > 0 && (
+                  <div className="hidden md:flex items-center gap-1.5 ml-1">
+                    <span className="text-[11px] text-amber-700 dark:text-amber-300">Missing:</span>
+                    {orgProfile.missingFields.slice(0, 3).map((f: string, idx: number) => (
+                      <span key={idx} className="bg-amber-200/60 dark:bg-amber-900/50 text-amber-950 dark:text-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-700">
+                        {f}
+                      </span>
+                    ))}
+                    {orgProfile.missingFields.length > 3 && (
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                        +{orgProfile.missingFields.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              <Button size="sm" className="h-7 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shrink-0" onClick={() => navigate('/settings?tab=organization')}>
-                Complete Setup
-              </Button>
+              {(user?.role === 'OWNER' || user?.role === 'ADMIN') && (
+                <Button size="sm" className="h-7 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shrink-0 shadow-sm" onClick={() => navigate('/settings?tab=organization')}>
+                  Complete Setup & Unlock
+                </Button>
+              )}
             </div>
           </div>
         )}
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 min-h-0 overflow-y-auto">
           <div className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
             <Outlet />
           </div>
@@ -317,6 +436,24 @@ export function AppLayout() {
         variant="destructive"
         onConfirm={handleResetDatabase}
         loading={resettingDb}
+      />
+
+      <WorkspaceLockedModal
+        open={isWorkspaceLocked}
+        expiryDate={subDetails?.endDate ? new Date(subDetails.endDate).toLocaleDateString('en-IN') : undefined}
+        isAdmin={user?.role === 'OWNER' || user?.role === 'ADMIN'}
+      />
+
+      <OrganizationSetupGuardModal
+        open={isSetupGuardOpen}
+        missingFields={orgProfile?.missingFields}
+        completionPercentage={orgProfile?.completionPercentage}
+        isAdmin={user?.role === 'OWNER' || user?.role === 'ADMIN'}
+      />
+
+      <RaiseSupportTicketModal
+        open={supportModalOpen}
+        onOpenChange={setSupportModalOpen}
       />
     </div>
   );

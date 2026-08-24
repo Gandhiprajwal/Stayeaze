@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Hotel, Pencil, Trash2, Eye, CreditCard } from 'lucide-react';
+import { Plus, Hotel, Pencil, Trash2, Eye, CreditCard, ShieldCheck } from 'lucide-react';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { DataTable, type Column } from '@/components/common/DataTable';
@@ -8,6 +8,7 @@ import { StatusBadge, statusTone } from '@/components/common/StatusBadge';
 import { RowActions } from '@/components/common/RowActions';
 import { FormDialog } from '@/components/common/FormDialog';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+import { DestructiveActionModal } from '@/components/common/DestructiveActionModal';
 import { FormInput } from '@/components/common/FormField';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +21,7 @@ import { formatCurrency, formatDate, occupancyRate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { toast } from 'sonner';
+import { StateCityPincodeSelector } from '@/components/common/StateCityPincodeSelector';
 
 const ENDPOINT = '/properties';
 
@@ -37,6 +39,7 @@ const propertyStatuses = [
 const emptyForm = {
   name: '', code: '', type: 'PG' as Property['type'], address: '', city: '', state: '', pincode: '',
   manager: '', phone: '', email: '', status: 'active' as Property['status'],
+  securityDeposit: 0,
   razorpayKeyId: '', razorpayKeySecret: '',
   orgName: '', orgSubdomain: '', ownerEmail: '', ownerPhone: '', ownerPassword: '',
 };
@@ -66,6 +69,7 @@ export default function PropertiesPage() {
       name: row.name, code: row.code, type: row.type, address: row.address, city: row.city,
       state: row.state, pincode: row.pincode, manager: row.manager, phone: row.phone,
       email: row.email, status: row.status,
+      securityDeposit: row.securityDeposit ?? 0,
       razorpayKeyId: row.razorpayKeyId ?? '',
       razorpayKeySecret: row.razorpayKeySecret ?? '',
       orgName: '', orgSubdomain: '', ownerEmail: '', ownerPhone: '', ownerPassword: '',
@@ -173,9 +177,6 @@ export default function PropertiesPage() {
         title="Properties"
         description="Manage your PG, hostel and co-living properties."
         icon={Hotel}
-        actions={
-          isSuperAdmin ? <Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" /> Add Property</Button> : undefined
-        }
       />
       <DataTable
         endpoint={ENDPOINT}
@@ -229,36 +230,66 @@ export default function PropertiesPage() {
               <SelectContent>{propertyStatuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
+
           <FormInput label="Address" id="address" className="sm:col-span-2" value={form.values.address} onChange={(e) => form.setValue('address', e.target.value)} />
-          <FormInput label="City" required id="city" value={form.values.city} onChange={(e) => form.setValue('city', e.target.value)} error={form.errors.city} />
-          <FormInput label="State" id="state" value={form.values.state} onChange={(e) => form.setValue('state', e.target.value)} />
-          <FormInput label="Pincode" id="pincode" value={form.values.pincode} onChange={(e) => form.setValue('pincode', e.target.value)} />
+          <div className="sm:col-span-2">
+            <StateCityPincodeSelector
+              state={form.values.state}
+              city={form.values.city}
+              pincode={form.values.pincode}
+              onStateChange={(v) => form.setValue('state', v)}
+              onCityChange={(v) => form.setValue('city', v)}
+              onPincodeChange={(v) => form.setValue('pincode', v)}
+            />
+          </div>
           <FormInput label="Manager" id="manager" value={form.values.manager} onChange={(e) => form.setValue('manager', e.target.value)} />
           <FormInput label="Phone" id="phone" value={form.values.phone} onChange={(e) => form.setValue('phone', e.target.value)} />
           <FormInput label="Email" type="email" id="email" value={form.values.email} onChange={(e) => form.setValue('email', e.target.value)} />
-          <div className="sm:col-span-2 border-t pt-3 mt-1">
-            <h4 className="font-semibold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
-              <CreditCard className="h-3.5 w-3.5 text-primary" /> Property Razorpay Gateway Credentials
-            </h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Enter unique Razorpay API credentials for this property. Tenant rent payments for this property will be processed using this account.
-            </p>
-          </div>
           <FormInput
-            label="Razorpay Key ID"
-            id="razorpayKeyId"
-            value={form.values.razorpayKeyId}
-            onChange={(e) => form.setValue('razorpayKeyId', e.target.value)}
-            placeholder="rzp_live_... / rzp_test_..."
+            label="Refundable Security Deposit (₹)"
+            type="number"
+            id="securityDeposit"
+            value={form.values.securityDeposit ?? 0}
+            onChange={(e) => form.setValue('securityDeposit', Number(e.target.value))}
+            placeholder="e.g. 5000"
           />
-          <FormInput
-            label="Razorpay Key Secret"
-            type="password"
-            id="razorpayKeySecret"
-            value={form.values.razorpayKeySecret}
-            onChange={(e) => form.setValue('razorpayKeySecret', e.target.value)}
-            placeholder={editing?.hasRazorpaySecret ? "•••••••• (Saved in DB - leave blank to keep)" : "Enter Razorpay Key Secret"}
-          />
+          {!isSuperAdmin ? (
+            <>
+              <div className="sm:col-span-2 border-t pt-3 mt-1">
+                <h4 className="font-semibold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
+                  <CreditCard className="h-3.5 w-3.5 text-primary" /> Property Razorpay Gateway Credentials
+                </h4>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Enter unique Razorpay API credentials for this property. Tenant rent payments for this property will be processed using this account.
+                </p>
+              </div>
+              <FormInput
+                label="Razorpay Key ID"
+                id="razorpayKeyId"
+                value={form.values.razorpayKeyId}
+                onChange={(e) => form.setValue('razorpayKeyId', e.target.value)}
+                placeholder="rzp_live_... / rzp_test_..."
+              />
+              <FormInput
+                label="Razorpay Key Secret"
+                type="password"
+                id="razorpayKeySecret"
+                value={form.values.razorpayKeySecret}
+                onChange={(e) => form.setValue('razorpayKeySecret', e.target.value)}
+                placeholder={editing?.hasRazorpaySecret ? "•••••••• (Saved in DB - leave blank to keep)" : "Enter Razorpay Key Secret"}
+              />
+            </>
+          ) : (
+            <div className="sm:col-span-2 border-t pt-3 mt-1">
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-amber-600 dark:text-amber-400 text-xs flex items-start gap-2.5">
+                <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold block text-amber-700 dark:text-amber-300">Security & Gateway Management Policy</span>
+                  Razorpay API Key & Secret credentials cannot be updated by Super Admin. For security & compliance, credentials must be uploaded directly by the Property Owner or Property Manager from their dashboard settings.
+                </div>
+              </div>
+            </div>
+          )}
           {!editing && isSuperAdmin && (
             <>
               <div className="sm:col-span-2 border-t pt-4 my-2">
@@ -275,13 +306,19 @@ export default function PropertiesPage() {
         </div>
       </FormDialog>
 
-      <ConfirmDialog
+      <DestructiveActionModal
         open={!!deleteTarget}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title="Delete Property"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone and will remove all associated data.`}
-        confirmLabel="Delete"
-        variant="destructive"
+        title="Permanently Delete Property Branch"
+        description={`You are about to irreversibly delete "${deleteTarget?.name}" (${deleteTarget?.code}). This cannot be undone.`}
+        typeToConfirm={deleteTarget?.code || deleteTarget?.name}
+        consequences={[
+          'All buildings, floors, rooms, and bed inventory configurations in this property will be permanently deleted.',
+          'Active tenant assignments and room allocations for this branch will be detached.',
+          'Rent invoice history and security deposit ledger entries for this branch will be permanently unlinked.',
+        ]}
+        confirmLabel="Permanently Delete Property"
+        variant="danger"
         onConfirm={confirmDelete}
         loading={deleteMut.isPending}
       />

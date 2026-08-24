@@ -1,5 +1,9 @@
 import { useState } from 'react';
-import { Receipt, Plus, Pencil, Trash2, Wallet, TrendingUp, AlertCircle, CheckCircle2, RefreshCw, CreditCard, Printer, Banknote, QrCode, Building2, ShieldCheck, Sparkles } from 'lucide-react';
+import {
+  Receipt, Plus, Pencil, Trash2, Wallet, TrendingUp, AlertCircle, CheckCircle2,
+  RefreshCw, CreditCard, Printer, Banknote, QrCode, Building2, ShieldCheck,
+  Sparkles, Hourglass, Check, X, UserCheck
+} from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -12,6 +16,7 @@ import { FormDialog } from '@/components/common/FormDialog';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { FormInput } from '@/components/common/FormField';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -23,11 +28,15 @@ import { formatCurrency, formatDate, numberToWords } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm, useBulkDelete } from '@/lib/hooks/use-crud';
 
 import { TenantSelect } from '@/components/common/TenantSelect';
+import { SearchableSelect } from '@/components/common/SearchableSelect';
 
 const ENDPOINT = '/invoices';
 const statuses = [
-  { value: 'paid', label: 'Paid' }, { value: 'unpaid', label: 'Unpaid' },
-  { value: 'partial', label: 'Partial' }, { value: 'overdue', label: 'Overdue' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'unpaid', label: 'Unpaid' },
+  { value: 'pending_approval', label: 'Pending Approval (UTR)' },
+  { value: 'partial', label: 'Partial' },
+  { value: 'overdue', label: 'Overdue' },
 ];
 
 const emptyForm = {
@@ -83,6 +92,47 @@ export default function BillingPage() {
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
   const [paymentRef, setPaymentRef] = useState<string>('');
   const [isRazorpayProcessing, setIsRazorpayProcessing] = useState<boolean>(false);
+
+  // Pending UTR Approvals
+  const { data: pendingApprovals } = useQuery<any[]>({
+    queryKey: ['pending-utr-approvals'],
+    queryFn: () => api.get('/invoices/pending-approvals').then((r) => r.data || []),
+    refetchInterval: 8000,
+  });
+
+  const approveUtrMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post(`/invoices/${id}/approve-payment`);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Payment verified and invoice marked as PAID.');
+      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      queryClient.invalidateQueries({ queryKey: ['pending-utr-approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to approve payment');
+    },
+  });
+
+  const rejectUtrMut = useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason?: string }) => {
+      const res = await api.post(`/invoices/${id}/reject-payment`, { reason });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.info('Payment proof rejected. Invoice reverted to unpaid.');
+      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      queryClient.invalidateQueries({ queryKey: ['pending-utr-approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to reject payment');
+    },
+  });
 
   // Batch Monthly Invoices Generation
   const batchGenerateMut = useMutation({
@@ -169,7 +219,7 @@ export default function BillingPage() {
           key: orderData.keyId,
           amount: orderData.amount,
           currency: orderData.currency,
-          name: 'StayEaze Living Solutions',
+          name: orderData.propertyName || (invoice.propertyId ? propMap.get(invoice.propertyId) : undefined) || 'Property Rent Payment',
           description: `Rent Invoice Payment - ${orderData.invoiceNumber}`,
           order_id: orderData.orderId,
           prefill: {
@@ -234,7 +284,6 @@ export default function BillingPage() {
     if (!form.validate({ tenantName: (v) => (!v ? 'Required' : undefined), amount: (v) => (Number(v) <= 0 ? 'Amount must be positive' : undefined) })) return;
     const payload = {
       ...form.values,
-      invoiceNumber: `INV-${String(Date.now()).slice(-6)}`,
       createdAt: new Date().toISOString(),
     };
     createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
@@ -301,7 +350,7 @@ export default function BillingPage() {
   const columns: Column<Invoice>[] = [
     { key: 'invoiceNumber', header: 'Invoice', sortable: true, cell: (r) => <span className="font-mono text-xs font-medium text-primary">{r.invoiceNumber}</span> },
     { key: 'tenantName', header: 'Tenant', sortable: true, cell: (r) => <span className="font-medium">{r.tenantName}</span> },
-    { key: 'propertyId', header: 'Property', sortable: true, cell: (r) => <span className="text-sm">{propMap.get(r.propertyId) ?? '—'}</span> },
+    { key: 'propertyId', header: 'Property', sortable: true, cell: (r) => <span className="text-sm">{String(propMap.get(r.propertyId) || '—')}</span> },
     { key: 'period', header: 'Period', sortable: true, cell: (r) => <span className="text-sm">{r.period || formatDate(r.createdAt)}</span> },
     { key: 'amount', header: 'Amount', sortable: true, cell: (r) => <span className="font-medium tabular-nums">{formatCurrency(r.amount)}</span> },
     { key: 'paidAmount', header: 'Paid', sortable: true, cell: (r) => <span className="tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(r.paidAmount)}</span> },
@@ -346,6 +395,63 @@ export default function BillingPage() {
         <StatCard label="Overdue Invoices" value={overdueCount} icon={AlertCircle} accent="destructive" hint="Follow-up needed" />
         <StatCard label="Paid Invoices" value={paidCount} icon={CheckCircle2} accent="info" hint="Completed payments" />
       </div>
+
+      {/* Pending On-Desk & UTR Verifications Panel */}
+      {pendingApprovals && pendingApprovals.length > 0 && (
+        <div className="p-4 rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800/60 space-y-3 shadow-xs">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+              <h3 className="text-sm font-bold text-amber-950 dark:text-amber-200">
+                Action Required: {pendingApprovals.length} On-Desk / UTR Payment(s) Pending Approval
+              </h3>
+            </div>
+            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold">
+              Verification Queue
+            </Badge>
+          </div>
+
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {pendingApprovals.map((inv: any) => (
+              <div key={inv.id} className="p-3 rounded-lg border bg-card space-y-2 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs font-mono text-primary">{inv.invoiceNumber}</span>
+                  <span className="text-xs font-black text-slate-900 dark:text-white">{formatCurrency(Number(inv.amountDue || 0))}</span>
+                </div>
+                <div className="text-[11px] text-muted-foreground space-y-0.5">
+                  <p>Resident: <strong>{inv.tenantName}</strong> (Room {inv.roomNumber || '—'} / Bed {inv.bedNumber || '—'})</p>
+                  <p className="font-mono text-amber-700 dark:text-amber-300 font-semibold">{inv.paymentReference || 'UTR not specified'}</p>
+                  <p className="text-[10px]">Mode: {inv.paymentMethod || 'UPI'}</p>
+                </div>
+                <div className="flex items-center gap-2 pt-1 border-t">
+                  <Button
+                    size="sm"
+                    className="h-7 text-[11px] flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                    disabled={approveUtrMut.isPending || rejectUtrMut.isPending}
+                    onClick={() => approveUtrMut.mutate(inv.id)}
+                  >
+                    <Check className="mr-1 h-3 w-3" /> Approve & Mark Paid
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-[11px] text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                    disabled={approveUtrMut.isPending || rejectUtrMut.isPending}
+                    onClick={() => {
+                      const reason = prompt('Enter rejection reason (optional):', 'UTR not matching bank statement');
+                      if (reason !== null) {
+                        rejectUtrMut.mutate({ id: inv.id, reason });
+                      }
+                    }}
+                  >
+                    <X className="mr-1 h-3 w-3" /> Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <DataTable
         endpoint={ENDPOINT}
@@ -410,18 +516,18 @@ export default function BillingPage() {
           />
           <div className="space-y-1.5">
             <Label>Property</Label>
-            <Select value={form.values.propertyId} onValueChange={(v) => form.setValue('propertyId', v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select property" />
-              </SelectTrigger>
-              <SelectContent>
-                {(properties ?? []).map((p: any) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              options={(properties ?? []).map((p: any) => ({
+                value: p.id,
+                label: p.name,
+                sublabel: p.city || p.code || 'Property',
+                badge: p.type || 'PG',
+              }))}
+              value={form.values.propertyId}
+              onChange={(v) => form.setValue('propertyId', v)}
+              placeholder="Search & select property..."
+              searchPlaceholder="Search properties by name..."
+            />
           </div>
           <FormInput
             label="Billing Period"
@@ -735,8 +841,27 @@ export default function BillingPage() {
 
                 {/* Particulars Itemized Table */}
                 {(() => {
-                  const accommodationRent = Math.round(viewInvoice.amount * 0.85);
-                  const utilityMaintenance = viewInvoice.amount - accommodationRent;
+                  const items = (viewInvoice as any).items && (viewInvoice as any).items.length > 0
+                    ? (viewInvoice as any).items
+                    : (() => {
+                        const total = viewInvoice.amount || 0;
+                        const tenantRent = Number(tenant?.rent || 0);
+                        const tenantDeposit = Number(tenant?.deposit || 0);
+
+                        if (tenantDeposit > 0 && tenantRent > 0 && total === (tenantRent + tenantDeposit)) {
+                          return [
+                            { description: 'First Month Room Accommodation Rent', amount: tenantRent, category: 'Room Rent' },
+                            { description: 'Refundable Security Deposit', amount: tenantDeposit, category: 'Security Deposit' },
+                          ];
+                        } else if (tenantDeposit > 0 && total === tenantDeposit) {
+                          return [
+                            { description: 'Refundable Security Deposit', amount: tenantDeposit, category: 'Security Deposit' },
+                          ];
+                        }
+                        return [
+                          { description: `Monthly Room Rent & Accommodation (${viewInvoice.period || 'Current Cycle'})`, amount: total, category: 'Room Rent' },
+                        ];
+                      })();
 
                   return (
                     <>
@@ -750,24 +875,20 @@ export default function BillingPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          <tr className="border-b border-slate-300">
-                            <td className="p-2 border border-slate-300 text-center font-medium">1</td>
-                            <td className="p-2 border border-slate-300 font-semibold">
-                              Monthly Room Rent & Accommodation
-                              <p className="text-[10px] font-normal text-slate-500">Room accommodation and furnished stay for {viewInvoice.period || 'August 2026'}.</p>
-                            </td>
-                            <td className="p-2 border border-slate-300 text-center text-slate-700 font-medium">Room Rent</td>
-                            <td className="p-2 border border-slate-300 text-right font-bold tabular-nums">{formatCurrency(accommodationRent)}</td>
-                          </tr>
-                          <tr className="border-b border-slate-300">
-                            <td className="p-2 border border-slate-300 text-center font-medium">2</td>
-                            <td className="p-2 border border-slate-300 font-semibold">
-                              Maintenance, Water & Utility Services
-                              <p className="text-[10px] font-normal text-slate-500">Includes Wi-Fi, 24/7 security, housekeeping & water supply.</p>
-                            </td>
-                            <td className="p-2 border border-slate-300 text-center text-slate-700 font-medium">Utilities</td>
-                            <td className="p-2 border border-slate-300 text-right font-bold tabular-nums">{formatCurrency(utilityMaintenance)}</td>
-                          </tr>
+                          {items.map((it: any, idx: number) => (
+                            <tr key={idx} className="border-b border-slate-300">
+                              <td className="p-2 border border-slate-300 text-center font-medium">{idx + 1}</td>
+                              <td className="p-2 border border-slate-300 font-semibold">
+                                {it.description}
+                              </td>
+                              <td className="p-2 border border-slate-300 text-center text-slate-700 font-medium">
+                                {it.description?.toLowerCase().includes('deposit') ? 'Security Deposit' : 'Room Rent'}
+                              </td>
+                              <td className="p-2 border border-slate-300 text-right font-bold tabular-nums">
+                                {formatCurrency(Number(it.amount || 0))}
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                         <tfoot>
                           <tr className="bg-slate-900 text-white font-bold text-xs">

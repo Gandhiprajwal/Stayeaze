@@ -1,6 +1,4 @@
-// Domain types shared across the StayEaze back-office.
-
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'OWNER' | 'PROPERTY_MANAGER' | 'RECEPTIONIST' | 'ACCOUNTANT' | 'SECURITY_GUARD' | 'STAFF' | 'TENANT';
+export type UserRole = 'SUPER_ADMIN' | 'SUPPORT' | 'ADMIN' | 'OWNER' | 'PROPERTY_MANAGER' | 'RECEPTIONIST' | 'ACCOUNTANT' | 'SECURITY_GUARD' | 'STAFF' | 'TENANT';
 
 export interface User {
   id: string;
@@ -10,10 +8,14 @@ export interface User {
   role: UserRole;
   status: 'active' | 'inactive' | 'suspended';
   avatar?: string;
+  avatarUrl?: string;
   propertyIds: string[];
   lastActive: string;
   createdAt: string;
+  orgId?: string;
+  twoFactorEnabled?: boolean;
 }
+
 
 export interface Role {
   id: string;
@@ -53,12 +55,14 @@ export interface Property {
   razorpayKeyId?: string;
   razorpayKeySecret?: string;
   hasRazorpaySecret?: boolean;
+  securityDeposit?: number;
   createdAt: string;
 }
 
 export interface Building {
   id: string;
   propertyId: string;
+  propertyName?: string;
   name: string;
   code: string;
   floors: number;
@@ -81,6 +85,8 @@ export interface Floor {
   beds: number;
   occupied: number;
   status?: string;
+  wifiSsid?: string;
+  wifiPassword?: string;
 }
 
 export interface Room {
@@ -97,11 +103,14 @@ export interface Room {
   sharingType?: string;
   sharing: number;
   beds: number;
+  capacity?: number;
   occupied: number;
   rent: number;
   baseRent?: number;
   status: 'available' | 'occupied' | 'partially_occupied' | 'maintenance' | 'reserved' | 'partially_reserved' | 'archived' | 'blocked';
   amenities: string[];
+  wifiSsid?: string;
+  wifiPassword?: string;
 }
 
 export interface Bed {
@@ -149,8 +158,15 @@ export interface Tenant {
   deposit: number;
   leaseStart: string;
   leaseEnd: string;
-  status: 'active' | 'inactive' | 'notice_period' | 'checked_out' | 'pending_checkin';
+  status: 'active' | 'inactive' | 'notice_period' | 'checked_out' | 'pending_checkin' | 'archived';
   kycStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  isAgreementAccepted?: boolean;
+  agreementAcceptedAt?: string;
+  refundUpi?: string;
+  refundAccountName?: string;
+  refundAccountNumber?: string;
+  refundIfsc?: string;
+  refundBankName?: string;
   photo?: string;
   createdAt?: string;
 }
@@ -177,6 +193,9 @@ export interface Booking {
   durationMonths: number;
   rent: number;
   deposit: number;
+  advanceAmount?: number;
+  paymentMethod?: string;
+  razorpayPaymentId?: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'expired' | 'checked_in';
   source: 'direct' | 'website' | 'agent' | 'referral';
   createdAt: string;
@@ -186,15 +205,24 @@ export interface CheckIn {
   id: string;
   code: string;
   tenantName: string;
+  tenantEmail?: string;
+  tenantPhone?: string;
+  tenantId?: string;
   bookingId?: string;
   propertyId: string;
+  propertyName?: string;
   roomNumber: string;
   bedNumber: string;
   checkInDate: string;
   leaseEnd: string;
   rent: number;
+  rentAmount?: number;
   depositPaid: number;
+  securityDeposit?: number;
+  advanceAmount?: number;
   idVerified: boolean;
+  paymentMethod?: string;
+  razorpayPaymentId?: string;
   status: 'completed' | 'pending';
 }
 
@@ -209,8 +237,19 @@ export interface CheckOut {
   noticeDate: string;
   depositRefund: number;
   deductions: number;
+  netRefundAmount?: number;
   reason: string;
   status: 'notice_period' | 'completed' | 'pending';
+  refundStatus?: 'NOT_ELIGIBLE' | 'PENDING_APPROVAL' | 'REFUNDED' | 'REJECTED';
+  refundApprovedBy?: string;
+  refundApprovedAt?: string;
+  refundPaymentMode?: string;
+  refundTransactionRef?: string;
+  refundNotes?: string;
+  beneficiaryUpi?: string;
+  beneficiaryBank?: string;
+  beneficiaryAccount?: string;
+  beneficiaryIfsc?: string;
 }
 
 export interface Invoice {
@@ -224,8 +263,8 @@ export interface Invoice {
   paidAmount: number;
   dueDate: string;
   issueDate?: string;
-  status: 'paid' | 'unpaid' | 'partial' | 'overdue';
-  paymentMethod?: 'CASH' | 'RAZORPAY' | 'UPI' | 'BANK_TRANSFER';
+  status: 'paid' | 'unpaid' | 'partial' | 'overdue' | 'pending_approval';
+  paymentMethod?: 'CASH' | 'RAZORPAY' | 'UPI' | 'BANK_TRANSFER' | 'ON_DESK';
   paymentReference?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
@@ -252,6 +291,47 @@ export interface InvoiceIssuerSnapshot {
   authorizedSignatory?: string;
   invoiceTerms?: string;
   lateFeeNote?: string;
+  subscriptionPlanName?: string;
+  subscriptionPlanPrice?: number;
+  subscriptionBillingCycle?: string;
+  subscriptionStatus?: string;
+  subscriptionStartDate?: string;
+  subscriptionEndDate?: string;
+  subscriptionPaymentId?: string;
+  subscriptionOrderId?: string;
+}
+
+export interface SubscriptionDetails {
+  id?: string;
+  orgId?: string;
+  orgName?: string;
+  subdomain?: string;
+  planName: string;
+  planPrice: number;
+  billingCycle: string;
+  status: string;
+  startDate?: string;
+  endDate?: string;
+  daysRemaining: number;
+  paymentId?: string;
+  orderId?: string;
+  propertyCount: number;
+  totalBeds: number;
+  occupiedBeds: number;
+  maxBeds: number;
+  propertyLimitLabel: string;
+  supportSla: string;
+}
+
+export interface SubscriptionPlanApi {
+  id: string;
+  name: string;
+  badge: string;
+  popular?: boolean;
+  monthlyPrice: number;
+  annualPrice: number;
+  description: string;
+  features: string[];
 }
 
 export interface Payment {
@@ -306,14 +386,23 @@ export interface Maintenance {
 export interface Visitor {
   id: string;
   visitorName: string;
-  visitorPhone: string;
-  tenantName: string;
-  propertyId: string;
-  purpose: 'meeting' | 'delivery' | 'maintenance' | 'other';
-  checkInTime: string;
+  visitorPhone?: string;
+  mobileNumber?: string;
+  tenantId?: string;
+  tenantName?: string;
+  propertyId?: string;
+  purpose: 'meeting' | 'delivery' | 'maintenance' | 'other' | string;
+  photoUrl?: string | null;
+  passCode?: string | null;
+  qrCodeData?: string | null;
+  vehicleNumber?: string | null;
+  expectedArrival?: string | null;
+  rejectionReason?: string | null;
+  checkInTime?: string;
   checkOutTime?: string;
-  status: 'checked_in' | 'checked_out';
-  approvedBy: string;
+  exitTime?: string;
+  status: 'pre_registered' | 'waiting_approval' | 'approved' | 'rejected' | 'checked_in' | 'checked_out' | 'exited' | string;
+  approvedBy?: string;
 }
 
 export interface AuditLog {

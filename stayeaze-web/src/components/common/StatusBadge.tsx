@@ -31,10 +31,11 @@ export function StatusBadge({ status, tone = 'neutral', className }: StatusBadge
 export function statusTone(status?: string | null): Tone {
   if (!status) return 'neutral';
   const s = status.toString().toLowerCase();
-  if (['active', 'paid', 'success', 'completed', 'resolved', 'closed', 'confirmed', 'checked_in', 'available', 'checked_out'].includes(s)) return 'success';
-  if (['pending', 'partial', 'notice_period', 'partially_occupied', 'in_progress'].includes(s)) return 'warning';
-  if (['reserved', 'partially_reserved', 'open', 'low', 'medium', 'high'].includes(s)) return 'info';
+  if (['active', 'paid', 'success', 'completed', 'resolved', 'closed', 'confirmed', 'checked_in', 'available', 'approved'].includes(s)) return 'success';
+  if (['pending', 'partial', 'notice_period', 'partially_occupied', 'in_progress', 'pending_approval', 'waiting_approval'].includes(s)) return 'warning';
+  if (['reserved', 'partially_reserved', 'open', 'low', 'medium', 'high', 'pre_registered'].includes(s)) return 'info';
   if (['occupied', 'fully_occupied'].includes(s)) return 'default';
-  if (['overdue', 'failed', 'cancelled', 'expired', 'suspended', 'critical', 'inactive', 'maintenance', 'blocked', 'archived'].includes(s)) return 'destructive';
+  if (['overdue', 'failed', 'cancelled', 'expired', 'suspended', 'critical', 'inactive', 'maintenance', 'blocked', 'archived', 'rejected', 'denied'].includes(s)) return 'destructive';
+  if (['checked_out', 'exited'].includes(s)) return 'neutral';
   return 'neutral';
 }

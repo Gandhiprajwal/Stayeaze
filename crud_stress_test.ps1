@@ -6,7 +6,7 @@ param(
     [int]$Concurrency = 5,
     [int]$IterationsPerResource = 10,
     [string]$BaseUrl = "http://localhost:8080/api/v1",
-    [string]$Email = "testproperty01@gmail.com",
+    [string]$Email = "testowner1@gmail.com",
     [string]$Password = "Friend@2010"
 )
 
@@ -18,7 +18,8 @@ $wc = New-Object System.Net.WebClient
 $wc.Headers["Content-Type"] = "application/json"
 try {
     $rawResp = $wc.UploadString("$BaseUrl/auth/login", $loginBody)
-    $token   = ($rawResp | ConvertFrom-Json).accessToken
+    $respObj = $rawResp | ConvertFrom-Json
+    $token   = if ($respObj.token) { $respObj.token } else { $respObj.accessToken }
     Write-Host "✅ Login OK`n" -ForegroundColor Green
 } catch {
     Write-Host "❌ Login failed: $_" -ForegroundColor Red
@@ -166,8 +167,8 @@ function Test-CRUDResource {
 # ─── 1. Tenants CRUD ─────────────────────────────────────────────────────────
 Test-CRUDResource -resourceName "Tenants" `
     -createPath "/tenants" `
-    -createBodyFn { param($i) "{`"firstName`":`"Stress`",`"lastName`":`"Tenant$i`",`"mobile`":`"91000000$($i.ToString().PadLeft(2,'0'))`",`"propertyId`":`"$propId`"}" } `
-    -updateBodyFn { param($id, $i) "{`"firstName`":`"StressUpdated`",`"lastName`":`"Tenant$i`",`"mobile`":`"91000000$($i.ToString().PadLeft(2,'0'))`",`"propertyId`":`"$propId`"}" }
+    -createBodyFn { param($i) "{`"name`":`"Stress Tenant$i`",`"firstName`":`"Stress`",`"lastName`":`"Tenant$i`",`"mobile`":`"91000000$($i.ToString().PadLeft(2,'0'))`",`"status`":`"ACTIVE`"}" } `
+    -updateBodyFn { param($id, $i) "{`"name`":`"StressUpdated Tenant$i`",`"firstName`":`"StressUpdated`",`"lastName`":`"Tenant$i`",`"mobile`":`"91000000$($i.ToString().PadLeft(2,'0'))`",`"status`":`"ACTIVE`"}" }
 
 # Fetch an existing tenant ID for nested tests
 $tenantResp = Invoke-RestMethod -Uri "$BaseUrl/tenants?pageSize=1" -Headers @{ "Authorization" = "Bearer $token" }
