@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Building2, Plus, Pencil, Trash2, Layers, RotateCcw } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
@@ -23,8 +23,16 @@ import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 
 const ENDPOINT = '/floors';
 
-const emptyForm = {
-  name: '', number: 1, buildingId: '', wifiSsid: '', wifiPassword: '',
+type FormValues = {
+  name: string;
+  number: number;
+  buildingId: string;
+};
+
+const emptyForm: FormValues = {
+  name: '',
+  number: 1,
+  buildingId: '',
 };
 
 export default function FloorsPage() {
@@ -34,7 +42,11 @@ export default function FloorsPage() {
 
   const { data: buildings } = useQuery({
     queryKey: ['floors-buildings'],
-    queryFn: () => api.get<{ data: BuildingType[] }>('/buildings', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryFn: () => api.get<BuildingType[]>('/buildings', { params: { pageSize: 100 } }).then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload as BuildingType[];
+      return (payload as { data: BuildingType[] }).data ?? [];
+    }),
   });
   const buildingMap = new Map((buildings ?? []).map((b) => [b.id, b.name]));
 
@@ -50,8 +62,6 @@ export default function FloorsPage() {
       name: row.name,
       number: row.number || (row as any).floorNumber || 1,
       buildingId: row.buildingId || '',
-      wifiSsid: row.wifiSsid || '',
-      wifiPassword: row.wifiPassword || '',
     });
     setDialogOpen(true);
   }
@@ -62,8 +72,6 @@ export default function FloorsPage() {
       number: form.values.number,
       floorNumber: form.values.number,
       buildingId: form.values.buildingId,
-      wifiSsid: form.values.wifiSsid,
-      wifiPassword: form.values.wifiPassword,
     };
     if (editing) updateMut.mutate({ id: editing.id, payload }, { onSuccess: () => setDialogOpen(false) });
     else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
@@ -131,8 +139,6 @@ export default function FloorsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <FormInput label="Floor Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} placeholder="e.g. Ground Floor, 1st Floor, Terrace" />
           <FormInput label="Floor Number / Level" type="number" id="number" value={String(form.values.number)} onChange={(e) => form.setValue('number', Number(e.target.value))} />
-          <FormInput label="Floor Wi-Fi Name (SSID)" id="wifiSsid" placeholder={form.values.name ? `${form.values.name} Wi-Fi` : 'Floor 1 Wi-Fi'} value={form.values.wifiSsid || ''} onChange={(e) => form.setValue('wifiSsid', e.target.value)} />
-          <FormInput label="Floor Wi-Fi Password" id="wifiPassword" placeholder="e.g. Floor1Pass" value={form.values.wifiPassword || ''} onChange={(e) => form.setValue('wifiPassword', e.target.value)} />
           <div className="space-y-1.5 sm:col-span-2">
             <Label required>Building</Label>
             <SearchableSelect

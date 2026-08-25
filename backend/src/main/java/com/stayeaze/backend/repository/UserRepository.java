@@ -13,8 +13,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.domain.Specification;
+
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificationExecutor<User> {
+
     Optional<User> findByEmail(String email);
     Optional<User> findByMobile(String mobile);
     Optional<User> findFirstByMobile(String mobile);

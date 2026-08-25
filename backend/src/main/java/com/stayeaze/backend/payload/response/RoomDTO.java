@@ -25,6 +25,8 @@ public class RoomDTO implements Serializable {
     private int occupied;
     private int beds;
     private String status;
+    private String wifiSsid;
+    private String wifiPassword;
     private java.util.List<String> amenities = new java.util.ArrayList<>();
 
     public RoomDTO() {}

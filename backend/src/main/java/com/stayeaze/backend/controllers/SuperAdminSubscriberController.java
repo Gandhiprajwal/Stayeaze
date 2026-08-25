@@ -70,13 +70,23 @@ public class SuperAdminSubscriberController {
     @GetMapping("/stats")
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ResponseEntity<?> getSubscriberStats() {
-        long total = organizationRepository.countNonSystemOrganizations();
-        long active = organizationRepository.countNonSystemOrganizationsByStatus("ACTIVE");
-        long trial = organizationRepository.countNonSystemOrganizationsByStatus("TRIAL");
-        long expired = organizationRepository.countNonSystemOrganizationsByStatus("EXPIRED");
-        long suspended = organizationRepository.countNonSystemOrganizationsByStatus("SUSPENDED");
-        long paymentLocked = organizationRepository.countNonSystemOrganizationsByStatus("PAYMENT_LOCKED");
-        long pendingApprovals = organizationRepository.countNonSystemOrganizationsByStatus("PENDING_APPROVAL");
+        Map<String, Long> statusCounts = new HashMap<>();
+        long total = 0;
+        for (Object[] row : organizationRepository.countOrganizationsByStatusGrouped()) {
+            if (row != null && row.length >= 2 && row[0] != null && row[1] != null) {
+                String st = row[0].toString().toUpperCase();
+                long cnt = ((Number) row[1]).longValue();
+                statusCounts.put(st, cnt);
+                total += cnt;
+            }
+        }
+
+        long active = statusCounts.getOrDefault("ACTIVE", 0L);
+        long trial = statusCounts.getOrDefault("TRIAL", 0L);
+        long expired = statusCounts.getOrDefault("EXPIRED", 0L);
+        long suspended = statusCounts.getOrDefault("SUSPENDED", 0L);
+        long paymentLocked = statusCounts.getOrDefault("PAYMENT_LOCKED", 0L);
+        long pendingApprovals = statusCounts.getOrDefault("PENDING_APPROVAL", 0L);
         long pendingExtensions = subscriptionExtensionRequestRepository.countByStatus("PENDING");
 
         long enterprise = organizationBillingProfileRepository.countEnterpriseProfiles();
@@ -544,7 +554,7 @@ public class SuperAdminSubscriberController {
         return ResponseEntity.ok(res);
     }
 
-    private static final Set<String> ALLOWED_SUBSCRIBER_STATUSES = Set.of("ACTIVE", "SUSPENDED", "EXPIRED", "CANCELLED", "TRIAL");
+    private static final Set<String> ALLOWED_SUBSCRIBER_STATUSES = Set.of("ACTIVE", "SUSPENDED", "EXPIRED", "CANCELLED", "TRIAL", "PAYMENT_LOCKED");
 
     @PutMapping("/{orgId}/status")
     public ResponseEntity<?> updateSubscriberStatus(@PathVariable UUID orgId, @RequestBody Map<String, String> body) {
@@ -569,6 +579,9 @@ public class SuperAdminSubscriberController {
         bp.setSubscriptionStatus(upperStatus);
         bp.setUpdatedAt(OffsetDateTime.now());
         organizationBillingProfileRepository.save(bp);
+
+        org.setStatus(upperStatus);
+        organizationRepository.save(org);
 
         return ResponseEntity.ok(new MessageResponse("Subscriber status updated to " + upperStatus + " successfully."));
     }

@@ -81,11 +81,14 @@ public class Property {
     @Column(name = "upi_vpa", length = 100)
     private String upiVpa = "stayeaze@icici";
 
-    @Column(name = "wifi_ssid", length = 150)
+    @Column(name = "wifi_ssid", length = 100)
     private String wifiSsid;
 
-    @Column(name = "wifi_password", length = 150)
+    @Column(name = "wifi_password", length = 100)
     private String wifiPassword;
+
+    @Column(name = "wifi_networks_json", columnDefinition = "text")
+    private String wifiNetworksJson;
 
     @Column(name = "authorized_signatory", length = 150)
     private String authorizedSignatory = "StayEaze Management Authorized Signatory";
@@ -437,5 +440,13 @@ public class Property {
 
     public void setSecurityDeposit(java.math.BigDecimal securityDeposit) {
         this.securityDeposit = securityDeposit;
+    }
+
+    public String getWifiNetworksJson() {
+        return wifiNetworksJson;
+    }
+
+    public void setWifiNetworksJson(String wifiNetworksJson) {
+        this.wifiNetworksJson = wifiNetworksJson;
     }
 }

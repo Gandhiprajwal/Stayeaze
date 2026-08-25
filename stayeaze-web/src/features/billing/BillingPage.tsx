@@ -1,8 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Receipt, Plus, Pencil, Trash2, Wallet, TrendingUp, AlertCircle, CheckCircle2,
   RefreshCw, CreditCard, Printer, Banknote, QrCode, Building2, ShieldCheck,
-  Sparkles, Hourglass, Check, X, UserCheck
+  Sparkles, Hourglass, Check, X, UserCheck, Zap
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -47,6 +48,7 @@ const emptyForm = {
 
 export default function BillingPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
@@ -137,19 +139,24 @@ export default function BillingPage() {
   // Batch Monthly Invoices Generation
   const batchGenerateMut = useMutation({
     mutationFn: async () => {
-      const res = await api.post('/invoices/auto-generate');
+      const now = new Date();
+      const res = await api.post('/billing/monthly-rent-run', {
+        billingMonth: now.getMonth() + 1,
+        billingYear: now.getFullYear(),
+        dueDateDays: 5,
+      });
       return res.data;
     },
     onSuccess: (res: any) => {
-      const count = res.generatedCount ?? 0;
-      const skipped = res.skippedCheckedOutCount ?? 0;
+      const count = res.invoicesGenerated ?? 0;
       if (count > 0) {
-        toast.success(`Generated ${count} monthly rent invoice(s) for due 1-month check-in anniversaries! (${skipped} checked-out tenants excluded)`);
+        toast.success(res.message || `Successfully generated ${count} invoice(s) for ${res.month} ${res.year}!`);
       } else {
-        toast.info(`No invoices due today. Checked active tenants' check-in anniversaries (${skipped} checked-out tenants excluded).`);
+        toast.info(res.message || `All active tenants are already invoiced for ${res.month} ${res.year}.`);
       }
       queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
       queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/payments'] });
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.message || 'Failed to generate monthly invoices');
@@ -368,6 +375,14 @@ export default function BillingPage() {
         icon={Receipt}
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="gap-1.5 border-amber-300 text-amber-900 bg-amber-50/50 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:bg-amber-950/30 font-semibold"
+              onClick={() => navigate('/utilities')}
+            >
+              <Zap className="mr-1.5 h-4 w-4 text-amber-600 fill-amber-500" />
+              Utilities & Meters
+            </Button>
             <Button
               variant="outline"
               disabled={batchGenerateMut.isPending}

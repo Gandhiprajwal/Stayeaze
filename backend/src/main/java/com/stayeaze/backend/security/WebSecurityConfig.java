@@ -107,9 +107,17 @@ public class WebSecurityConfig {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .headers(headers -> headers
-                        .frameOptions(frame -> frame.deny())
+                        .frameOptions(frame -> frame.sameOrigin())
                         .xssProtection(xss -> xss.headerValue(org.springframework.security.web.header.writers.XXssProtectionHeaderWriter.HeaderValue.ENABLED_MODE_BLOCK))
-                        .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:;"))
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; " +
+                                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://*.razorpay.com; " +
+                                "frame-src 'self' https://api.razorpay.com https://*.razorpay.com; " +
+                                "connect-src 'self' https://api.razorpay.com https://*.razorpay.com https://*.sentry.io https://*.sentry-cdn.com https://*.sardine.ai https://*.stripe.network; " +
+                                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+                                "img-src 'self' data: https:; " +
+                                "font-src 'self' data: https://fonts.gstatic.com;"
+                        ))
                 )
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

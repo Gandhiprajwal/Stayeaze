@@ -50,6 +50,9 @@ public class SaaSInvoice {
     @Column(name = "notes", length = 500)
     private String notes;
 
+    @Column(name = "transaction_id", length = 100)
+    private String transactionId;
+
     @Column(name = "invoice_date")
     private OffsetDateTime invoiceDate = OffsetDateTime.now();
 
@@ -58,6 +61,14 @@ public class SaaSInvoice {
 
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
+
+    public String getTransactionId() {
+        return transactionId;
+    }
+
+    public void setTransactionId(String transactionId) {
+        this.transactionId = transactionId;
+    }
 
     public SaaSInvoice() {
     }

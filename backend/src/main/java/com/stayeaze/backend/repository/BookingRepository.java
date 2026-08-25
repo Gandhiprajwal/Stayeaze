@@ -27,5 +27,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query(value = "SELECT b.* FROM bookings b JOIN tenants t ON b.tenant_id = t.id WHERE t.org_id = CAST(:orgId AS uuid) ORDER BY b.created_at DESC", nativeQuery = true)
     List<Booking> findByOrganizationIdNative(@Param("orgId") UUID orgId);
 
+    @Query("SELECT DISTINCT b.tenant FROM Booking b WHERE b.bed.room.id = :roomId AND (b.status = 'CONFIRMED' OR b.status = 'CHECKED_IN' OR b.status = 'ACTIVE') AND (b.tenant.status IS NULL OR UPPER(b.tenant.status) = 'ACTIVE')")
+    List<Tenant> findActiveTenantsByRoomId(@Param("roomId") UUID roomId);
+
     Page<Booking> findAll(Pageable pageable);
 }

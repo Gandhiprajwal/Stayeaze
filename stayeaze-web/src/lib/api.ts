@@ -2,14 +2,27 @@ import axios from 'axios';
 import MockAdapter from './mock-adapter';
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1',
+  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true,
 });
 
-// Attach mock adapter (simulates a Spring Boot backend in-memory).
-// MockAdapter.attach(api);
+// BroadcastChannel for seamless multi-tab token synchronization
+const authBroadcast = typeof window !== 'undefined' && 'BroadcastChannel' in window
+  ? new BroadcastChannel('stayeaze_auth_channel')
+  : null;
+
+if (authBroadcast) {
+  authBroadcast.onmessage = (event) => {
+    if (event.data?.type === 'TOKEN_REFRESHED' && event.data.token) {
+      localStorage.setItem('stayeaze_token', event.data.token);
+      if (event.data.refreshToken) {
+        localStorage.setItem('stayeaze_refresh_token', event.data.refreshToken);
+      }
+    }
+  };
+}
 
 // Request interceptor — attach bearer token.
 api.interceptors.request.use((config) => {
@@ -81,7 +94,15 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error?.config;
 
-    if (error?.response?.status === 401 && originalRequest && !originalRequest._retry && !originalRequest.url?.includes('/auth/') && !!localStorage.getItem('stayeaze_token')) {
+    // Handle 401 Unauthorized — Attempt seamless silent token refresh
+    if (
+      error?.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/auth/login') &&
+      !originalRequest.url?.includes('/auth/refresh') &&
+      !!localStorage.getItem('stayeaze_token')
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -98,10 +119,12 @@ api.interceptors.response.use(
 
       try {
         const storedRefreshToken = localStorage.getItem('stayeaze_refresh_token');
+        const refreshEndpoint = (import.meta.env.VITE_API_URL || '/api/v1') + '/auth/refresh';
+
         const refreshRes = await axios.post(
-          (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1') + '/auth/refresh',
+          refreshEndpoint,
           { refreshToken: storedRefreshToken || undefined },
-          { withCredentials: true }
+          { withCredentials: true, timeout: 10000 }
         );
 
         const newAccessToken = refreshRes.data?.accessToken || refreshRes.data?.token;
@@ -132,28 +155,44 @@ api.interceptors.response.use(
             }
           } catch (ignored) {}
 
+          // Notify other browser tabs
+          if (authBroadcast) {
+            authBroadcast.postMessage({
+              type: 'TOKEN_REFRESHED',
+              token: newAccessToken,
+              refreshToken: newRefreshToken,
+            });
+          }
+
           processQueue(null, newAccessToken);
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
           isRefreshing = false;
           return api(originalRequest);
         }
-      } catch (refreshErr) {
+      } catch (refreshErr: any) {
         processQueue(refreshErr, null);
         isRefreshing = false;
-        // Clear stale refresh token so we don't retry with an expired one
-        localStorage.removeItem('stayeaze_refresh_token');
-      }
 
-      // If refresh token fails or doesn't exist, purge session and redirect
-      const publicPaths = ['/pricing', '/', '/about', '/contact', '/faq', '/terms', '/privacy', '/login', '/signup', '/onboard'];
-      const currentPath = window.location.pathname;
-      const isPublicPage = publicPaths.some((p) => currentPath === p || (p !== '/' && currentPath.startsWith(p)));
+        const isExplicitAuthFailure =
+          refreshErr?.response?.status === 401 ||
+          refreshErr?.response?.status === 403;
 
-      if (!isPublicPage) {
-        localStorage.removeItem('stayeaze_session');
-        localStorage.removeItem('stayeaze_token');
-        localStorage.removeItem('stayeaze-auth');
-        window.location.href = '/login';
+        // ONLY purge session & redirect if backend explicitly rejected the refresh token as invalid/revoked in DB
+        // Do NOT log out on network disconnect, timeout, 502/503/504, or server restarting!
+        if (isExplicitAuthFailure) {
+          localStorage.removeItem('stayeaze_refresh_token');
+
+          const publicPaths = ['/pricing', '/', '/about', '/contact', '/faq', '/terms', '/privacy', '/login', '/signup', '/onboard'];
+          const currentPath = window.location.pathname;
+          const isPublicPage = publicPaths.some((p) => currentPath === p || (p !== '/' && currentPath.startsWith(p)));
+
+          if (!isPublicPage) {
+            localStorage.removeItem('stayeaze_session');
+            localStorage.removeItem('stayeaze_token');
+            localStorage.removeItem('stayeaze-auth');
+            window.location.href = '/login';
+          }
+        }
       }
     }
 

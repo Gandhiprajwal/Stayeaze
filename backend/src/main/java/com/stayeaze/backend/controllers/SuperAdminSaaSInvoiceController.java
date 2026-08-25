@@ -162,8 +162,18 @@ public class SuperAdminSaaSInvoiceController {
     }
 
     @PostMapping("/batch-generate")
-    public ResponseEntity<?> batchGenerateInvoices() {
-        Map<String, Object> result = saasInvoiceService.runBatchMonthlyBilling();
+    public ResponseEntity<?> batchGenerateInvoices(@RequestBody(required = false) Map<String, Object> req) {
+        Integer month = (req != null && req.containsKey("billingMonth") && req.get("billingMonth") != null)
+                ? Integer.parseInt(req.get("billingMonth").toString()) : null;
+        Integer year = (req != null && req.containsKey("billingYear") && req.get("billingYear") != null)
+                ? Integer.parseInt(req.get("billingYear").toString()) : null;
+        Integer dueDays = (req != null && req.containsKey("dueDateDays") && req.get("dueDateDays") != null)
+                ? Integer.parseInt(req.get("dueDateDays").toString()) : null;
+        String status = (req != null && req.containsKey("status") && req.get("status") != null)
+                ? req.get("status").toString() : "UNPAID";
+        Boolean force = (req != null && Boolean.TRUE.equals(req.get("force")));
+
+        Map<String, Object> result = saasInvoiceService.runBatchMonthlyBilling(month, year, dueDays, status, force);
         return ResponseEntity.ok(result);
     }
 

@@ -20,6 +20,7 @@ import api from '@/lib/api';
 import type { Booking, Property, Room, Bed } from '@/lib/types';
 import { formatCurrency, formatDate, formatRoomName } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
+import { RoomSelect } from '@/components/common/RoomSelect';
 
 const ENDPOINT = '/bookings';
 const statuses = [
@@ -264,70 +265,29 @@ export default function BookingsPage() {
               {form.errors.propertyId && <p className="text-xs font-medium text-destructive">{form.errors.propertyId}</p>}
             </div>
 
-            {/* Room Number Dropdown */}
-            <div className="space-y-1.5">
-              <Label required>Room Number</Label>
-              <Select
-                value={selectedRoomId}
-                onValueChange={(roomId) => {
-                  setSelectedRoomId(roomId);
-                  const rm = roomOptions.find((r) => r.id === roomId);
-                  if (rm) {
-                    form.setValue('roomNumber', rm.number || rm.roomNumber || '');
-                    const storedRent = Number(rm.rent ?? (rm as any).baseRent ?? 0);
-                    if (storedRent > 0) {
-                      form.setValue('rent', storedRent);
-                    }
+            {/* Room & Bed Allocation with interactive hierarchical RoomSelect */}
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label required>Room &amp; Bed Allocation</Label>
+              <RoomSelect
+                rooms={roomOptions}
+                beds={bedsForRoom}
+                selectedRoomNumber={form.values.roomNumber || selectedRoomId}
+                selectedBedNumber={form.values.bedNumber}
+                onSelectRoom={(rNum, rId, rentVal) => {
+                  form.setValue('roomNumber', rNum);
+                  if (rId) {
+                    setSelectedRoomId(rId);
+                    queryClient.invalidateQueries({ queryKey: ['bookings-beds', rId] });
                   }
-                }}>
-                <SelectTrigger className={form.errors.roomNumber ? 'border-destructive' : ''}>
-                  <SelectValue placeholder="Select room" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roomOptions.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {formatRoomName(r.number || r.roomNumber)} ({r.sharing ? `${r.sharing} share` : 'Room'})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  if (rentVal && rentVal > 0) {
+                    form.setValue('rent', rentVal);
+                  }
+                  form.setValue('bedNumber', '');
+                }}
+                onSelectBed={(bNum) => form.setValue('bedNumber', bNum)}
+              />
               {form.errors.roomNumber && <p className="text-xs font-medium text-destructive">{form.errors.roomNumber}</p>}
-              {editing && !selectedRoomId && (
-                <p className="text-xs text-muted-foreground">Current: Room {form.values.roomNumber || '—'}</p>
-              )}
-            </div>
-
-            {/* Bed Number Dropdown */}
-            <div className="space-y-1.5">
-              <Label required>Bed Number</Label>
-              <Select
-                value={form.values.bedNumber}
-                onValueChange={(v) => form.setValue('bedNumber', v)}
-                disabled={!selectedRoomId}>
-                <SelectTrigger className={form.errors.bedNumber ? 'border-destructive' : ''}>
-                  <SelectValue placeholder={!selectedRoomId ? 'Select room first' : (bedsForRoom?.length === 0 ? 'No beds' : 'Select bed')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(bedsForRoom ?? []).map((b) => {
-                    const bStatusLower = String(b.status || 'available').toLowerCase();
-                    const bedNumStr = b.number || b.bedNumber || String(b.id);
-                    const isUnavailable = (bStatusLower === 'occupied' || bStatusLower === 'archived' || bStatusLower === 'maintenance' || bStatusLower === 'blocked')
-                      && (!editing || (b.number !== editing.bedNumber && b.bedNumber !== editing.bedNumber));
-                    const statusLabel = bStatusLower === 'occupied' 
-                      ? 'Occupied' 
-                      : (bStatusLower === 'archived' ? 'Archived' : (bStatusLower === 'maintenance' ? 'Maintenance' : (bStatusLower === 'blocked' ? 'Blocked' : b.status)));
-                    return (
-                      <SelectItem key={b.id} value={bedNumStr} disabled={isUnavailable}>
-                        {bedNumStr} {isUnavailable ? `(${statusLabel} - Unavailable)` : `(${b.status})`}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
               {form.errors.bedNumber && <p className="text-xs font-medium text-destructive">{form.errors.bedNumber}</p>}
-              {editing && !selectedRoomId && form.values.bedNumber && (
-                <p className="text-xs text-muted-foreground">Current: {form.values.bedNumber}</p>
-              )}
             </div>
 
             <FormInput label="Check-in Date" required type="date" id="checkInDate" value={form.values.checkInDate} onChange={(e) => form.setValue('checkInDate', e.target.value)} error={form.errors.checkInDate} />

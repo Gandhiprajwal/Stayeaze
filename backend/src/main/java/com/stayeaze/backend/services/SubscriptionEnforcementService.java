@@ -5,11 +5,14 @@ import com.stayeaze.backend.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
 @Service
 public class SubscriptionEnforcementService {
+
+    public static final int GRACE_PERIOD_DAYS = 3;
 
     @Autowired
     private OrganizationBillingProfileRepository billingProfileRepository;
@@ -48,8 +51,92 @@ public class SubscriptionEnforcementService {
         return saasPlanRepository.findByPlanKey("STARTER").orElse(null);
     }
 
+    /**
+     * Checks if the organization's subscription has ended AND the 3-day grace period has elapsed.
+     * When true, only Owners and Admins are permitted to log in for renewal.
+     */
+    public boolean isPostGraceLockout(Organization organization) {
+        if (organization == null) return false;
+        String orgStatus = organization.getStatus() != null ? organization.getStatus().toUpperCase() : "ACTIVE";
+        if ("SUSPENDED".equals(orgStatus) || "EXPIRED".equals(orgStatus)) {
+            return true;
+        }
+
+        Optional<OrganizationBillingProfile> profileOpt = billingProfileRepository.findByOrganization(organization);
+        if (profileOpt.isPresent()) {
+            OrganizationBillingProfile profile = profileOpt.get();
+            String subStatus = profile.getSubscriptionStatus() != null ? profile.getSubscriptionStatus().toUpperCase() : orgStatus;
+            if ("SUSPENDED".equals(subStatus) || "EXPIRED".equals(subStatus)) {
+                return true;
+            }
+            if (profile.getSubscriptionEndDate() != null) {
+                OffsetDateTime graceDeadline = profile.getSubscriptionEndDate().plusDays(GRACE_PERIOD_DAYS);
+                return OffsetDateTime.now().isAfter(graceDeadline);
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks if the subscription is currently in the 3-day grace period (subscriptionEndDate < now <= subscriptionEndDate + 3 days).
+     */
+    public boolean isGracePeriodActive(Organization organization) {
+        if (organization == null) return false;
+        Optional<OrganizationBillingProfile> profileOpt = billingProfileRepository.findByOrganization(organization);
+        if (profileOpt.isPresent()) {
+            OrganizationBillingProfile profile = profileOpt.get();
+            if (profile.getSubscriptionEndDate() != null) {
+                OffsetDateTime now = OffsetDateTime.now();
+                OffsetDateTime endDate = profile.getSubscriptionEndDate();
+                OffsetDateTime graceDeadline = endDate.plusDays(GRACE_PERIOD_DAYS);
+                return now.isAfter(endDate) && !now.isAfter(graceDeadline);
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Validates whether operational mutations (POST/PUT/PATCH/DELETE) are allowed for the organization.
+     * Throws IllegalStateException if the workspace is in PAYMENT_LOCKED, SUSPENDED, EXPIRED, or past its subscription end date.
+     */
+    public void validateOperationalAccess(Organization organization) {
+        if (organization == null) return;
+        String orgStatus = organization.getStatus() != null ? organization.getStatus().toUpperCase() : "ACTIVE";
+        
+        Optional<OrganizationBillingProfile> profileOpt = billingProfileRepository.findByOrganization(organization);
+        if (profileOpt.isPresent()) {
+            OrganizationBillingProfile profile = profileOpt.get();
+            String subStatus = profile.getSubscriptionStatus() != null ? profile.getSubscriptionStatus().toUpperCase() : orgStatus;
+
+            if ("PAYMENT_LOCKED".equals(subStatus) || "PAYMENT_LOCKED".equals(orgStatus)) {
+                throw new IllegalStateException("Payment Required: Your organization subscription is in Read-Only mode due to a pending payment. Please renew your subscription to perform this action.");
+            }
+            if ("SUSPENDED".equals(subStatus) || "SUSPENDED".equals(orgStatus)) {
+                throw new IllegalStateException("Access Denied: Your organization workspace is suspended. Please contact platform support.");
+            }
+            if ("EXPIRED".equals(subStatus) || "EXPIRED".equals(orgStatus) || "CANCELLED".equals(subStatus) || "CANCELLED".equals(orgStatus)) {
+                throw new IllegalStateException("Subscription Expired: Your organization subscription has ended. Please renew or reactivate your subscription to perform this action.");
+            }
+            if (profile.getSubscriptionEndDate() != null && profile.getSubscriptionEndDate().isBefore(OffsetDateTime.now())) {
+                throw new IllegalStateException("Subscription Expired: Your subscription expired on " + profile.getSubscriptionEndDate().toLocalDate() + ". Please renew your plan to continue.");
+            }
+        } else {
+            if ("PAYMENT_LOCKED".equals(orgStatus)) {
+                throw new IllegalStateException("Payment Required: Your organization subscription is in Read-Only mode due to a pending payment. Please renew your subscription to perform this action.");
+            }
+            if ("SUSPENDED".equals(orgStatus)) {
+                throw new IllegalStateException("Access Denied: Your organization workspace is suspended. Please contact platform support.");
+            }
+            if ("EXPIRED".equals(orgStatus) || "CANCELLED".equals(orgStatus)) {
+                throw new IllegalStateException("Subscription Expired: Your organization subscription has ended. Please renew or reactivate your subscription to perform this action.");
+            }
+        }
+    }
+
     public void validatePropertyCreation(Organization organization) {
         if (organization == null) return;
+        validateOperationalAccess(organization);
+
         SaaSPlan plan = getActiveSaaSPlan(organization);
         if (plan == null) return;
 
@@ -63,6 +150,8 @@ public class SubscriptionEnforcementService {
 
     public void validateBedCreation(Organization organization, int additionalBedsCount) {
         if (organization == null) return;
+        validateOperationalAccess(organization);
+
         SaaSPlan plan = getActiveSaaSPlan(organization);
         if (plan == null) return;
 
@@ -78,6 +167,8 @@ public class SubscriptionEnforcementService {
 
     public void validateStaffUserCreation(Organization organization) {
         if (organization == null) return;
+        validateOperationalAccess(organization);
+
         SaaSPlan plan = getActiveSaaSPlan(organization);
         if (plan == null) return;
 
@@ -92,6 +183,8 @@ public class SubscriptionEnforcementService {
 
     public void validateWhatsAppAccess(Organization organization) {
         if (organization == null) return;
+        validateOperationalAccess(organization);
+
         SaaSPlan plan = getActiveSaaSPlan(organization);
         if (plan != null && Boolean.FALSE.equals(plan.getAllowWhatsApp())) {
             throw new IllegalArgumentException("Feature Restricted: Automated WhatsApp notifications are only available on the Professional & Enterprise subscription plans. Please upgrade to enable automated WhatsApp alerts.");

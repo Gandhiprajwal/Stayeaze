@@ -175,8 +175,8 @@ export default function TenantBillingPage() {
         icon={Receipt}
       />
 
-      {/* Overview Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* 4 Top Financial Metric Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-xs border-slate-200 dark:border-slate-800">
           <CardHeader className="pb-2">
             <CardDescription className="text-xs font-semibold uppercase">Monthly Rent</CardDescription>
@@ -192,30 +192,44 @@ export default function TenantBillingPage() {
         <Card className="shadow-xs border-slate-200 dark:border-slate-800">
           <CardHeader className="pb-2">
             <CardDescription className="text-xs font-semibold uppercase">Security Deposit</CardDescription>
-            <CardTitle className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+            <CardTitle className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">
               {formatCurrency(Number(overview?.deposit || 10000))}
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-muted-foreground flex items-center gap-1 text-emerald-600">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Fully Deposited & Secure
+          <CardContent className="text-xs text-muted-foreground flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-medium">
+            <ShieldCheck className="h-3.5 w-3.5" /> Refundable at checkout
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-xs border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 dark:border-emerald-800">
+          <CardHeader className="pb-2">
+            <CardDescription className="text-xs font-bold uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+              <Wallet className="h-3.5 w-3.5" /> Advance Rent Credit
+            </CardDescription>
+            <CardTitle className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+              {formatCurrency(Number(overview?.advanceBalance || 0))}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs text-emerald-700 dark:text-emerald-300 font-medium">
+            {Number(overview?.advanceBalance || 0) > 0 ? 'Prepaid credit active' : 'No advance rent held'}
           </CardContent>
         </Card>
 
         <Card className="shadow-xs border-slate-200 dark:border-slate-800">
           <CardHeader className="pb-2">
-            <CardDescription className="text-xs font-semibold uppercase">Outstanding Balance</CardDescription>
+            <CardDescription className="text-xs font-semibold uppercase">Outstanding Due</CardDescription>
             <CardTitle className={`text-2xl font-extrabold ${totalPending > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
               {formatCurrency(totalPending)}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            {totalPending > 0 ? 'Due immediately' : 'No overdue balance'}
+            {totalPending > 0 ? 'Due immediately' : 'All dues cleared'}
           </CardContent>
         </Card>
       </div>
 
       {Number(overview?.advanceBalance) > 0 && (
-        <Card className="border-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/30 dark:border-emerald-800 shadow-xs">
+        <Card className="border-emerald-300 bg-emerald-50/90 dark:bg-emerald-950/50 dark:border-emerald-800 shadow-xs">
           <CardContent className="p-4 flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-xs">
@@ -223,11 +237,11 @@ export default function TenantBillingPage() {
               </div>
               <div>
                 <h4 className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
-                  Advance Rent Credit Available: {formatCurrency(Number(overview.advanceBalance))}
-                  <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 font-bold">PREPAID BALANCE</Badge>
+                  Advance Rent Credit: {formatCurrency(Number(overview.advanceBalance))}
+                  <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 font-bold">PREPAID CREDIT</Badge>
                 </h4>
-                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
-                  You have recorded advance rent payments in your account. This prepaid balance will automatically cover your upcoming monthly rental invoice.
+                <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-0.5">
+                  You have prepaid advance rent recorded in your account. This credit balance automatically covers your upcoming monthly rental bills.
                 </p>
               </div>
             </div>
@@ -482,7 +496,11 @@ export default function TenantBillingPage() {
                           {it.description}
                         </td>
                         <td className="p-2 border border-slate-300 text-center text-slate-700 font-medium">
-                          {it.description?.toLowerCase().includes('deposit') ? 'Security Deposit' : 'Room Rent'}
+                          {it.description?.toLowerCase().includes('deposit') 
+                            ? 'Security Deposit' 
+                            : it.description?.toLowerCase().includes('electricity') || it.description?.toLowerCase().includes('util')
+                            ? 'Electricity / Sub-Meter'
+                            : 'Room Rent'}
                         </td>
                         <td className="p-2 border border-slate-300 text-right font-bold tabular-nums">
                           {formatCurrency(Number(it.amount || 0))}

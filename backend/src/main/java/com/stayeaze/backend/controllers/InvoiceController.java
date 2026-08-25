@@ -196,17 +196,6 @@ public class InvoiceController {
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
     }
 
-    @RequestMapping(value = {"/invoices/auto-generate", "/invoices/generate-monthly"}, method = {RequestMethod.POST, RequestMethod.GET})
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
-    public ResponseEntity<?> autoGenerateInvoices() {
-        try {
-            java.util.Map<String, Object> result = autoBillingService.autoGenerateMonthlyInvoices();
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new MessageResponse("Error running automated anniversary billing: " + e.getMessage()));
-        }
-    }
 
     @PostMapping("/tenants/{tenantId}/invoices/generate-now")
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
@@ -901,55 +890,5 @@ public class InvoiceController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/invoices/generate-monthly")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
-    public ResponseEntity<?> generateMonthlyInvoices() {
-        try {
-            Organization organization = getLoggedUserOrg();
-            List<Tenant> tenants = organization != null ? tenantRepository.findByOrganization(organization) : tenantRepository.findAll();
-            if (tenants == null) tenants = new ArrayList<>();
-            
-            List<Invoice> allInvoices = invoiceRepository.findAll();
-            if (allInvoices == null) allInvoices = new ArrayList<>();
-            
-            int generatedCount = 0;
-            java.time.LocalDate now = java.time.LocalDate.now();
-            OrganizationBillingProfile billingProfile = getBillingProfile(organization);
-            java.time.LocalDate dueDate = now.plusDays(billingProfile.getPaymentDueDays());
 
-            for (Tenant tenant : tenants) {
-                try {
-                    if (tenant == null || tenant.getId() == null) continue;
-                    if ("INACTIVE".equalsIgnoreCase(tenant.getStatus()) || "SUSPENDED".equalsIgnoreCase(tenant.getStatus())) {
-                        continue;
-                    }
-
-                    final UUID tId = tenant.getId();
-                    boolean invoiceExistsThisMonth = allInvoices.stream()
-                            .anyMatch(inv -> inv.getTenant() != null && tId.equals(inv.getTenant().getId()) &&
-                                    (inv.getDueDate() != null && inv.getDueDate().getYear() == now.getYear() && inv.getDueDate().getMonthValue() == now.getMonthValue()));
-
-                    if (!invoiceExistsThisMonth) {
-                        java.math.BigDecimal rentAmount = tenant.getRent() != null ? tenant.getRent() : java.math.BigDecimal.valueOf(8000);
-                        String invNum = nextInvoiceNumber(tenant);
-                        Invoice invoice = new Invoice(tenant, invNum, dueDate, now, rentAmount);
-                        snapshotIssuer(invoice, organization);
-                        invoice.setStatus("UNPAID");
-                        invoiceRepository.save(invoice);
-                        generatedCount++;
-                    }
-                } catch (Exception ignored) {}
-            }
-
-            java.util.Map<String, Object> resp = new java.util.HashMap<>();
-            resp.put("message", "Successfully generated " + generatedCount + " monthly rent invoice(s).");
-            resp.put("generatedCount", generatedCount);
-            return ResponseEntity.ok(resp);
-        } catch (Exception e) {
-            java.util.Map<String, Object> resp = new java.util.HashMap<>();
-            resp.put("message", "Batch invoice generation completed.");
-            resp.put("generatedCount", 0);
-            return ResponseEntity.ok(resp);
-        }
-    }
 }

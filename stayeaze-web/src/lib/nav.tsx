@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Building2, Layers, DoorOpen, BedDouble, Users, CalendarCheck, LogIn, LogOut, Receipt,
   Wallet, MessageSquareWarning, Wrench, UserCheck, BarChart3, UserCog,
   ShieldCheck, Settings, ScrollText, Hotel, Terminal, Sparkles, CreditCard, Activity,
-  FileText, Database, ShieldAlert, Home, Headset, ConciergeBell, LifeBuoy
+  FileText, Database, ShieldAlert, Home, Headset, ConciergeBell, LifeBuoy, Zap
 } from 'lucide-react';
 import type { UserRole } from '@/lib/types';
 
@@ -106,6 +106,7 @@ export const navSections: NavSection[] = [
     title: 'Billing',
     items: [
       { label: 'Rent & Billing', to: '/billing', icon: Receipt, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER', 'ACCOUNTANT'] },
+      { label: 'Utilities & Meters', to: '/utilities', icon: Zap, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER', 'ACCOUNTANT'] },
       { label: 'Payments', to: '/payments', icon: Wallet, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER', 'ACCOUNTANT'] },
       { label: 'SaaS Subscription', to: '/subscription', icon: Sparkles, roles: ['ADMIN', 'OWNER'] },
     ],

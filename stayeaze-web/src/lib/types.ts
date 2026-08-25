@@ -321,6 +321,9 @@ export interface SubscriptionDetails {
   maxBeds: number;
   propertyLimitLabel: string;
   supportSla: string;
+  downgradeCooldownActive?: boolean;
+  downgradeEligibleAfter?: string;
+  lastDowngradedAt?: string;
 }
 
 export interface SubscriptionPlanApi {

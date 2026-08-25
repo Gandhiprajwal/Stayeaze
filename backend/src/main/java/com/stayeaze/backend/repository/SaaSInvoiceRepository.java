@@ -31,5 +31,10 @@ public interface SaaSInvoiceRepository extends JpaRepository<SaaSInvoice, UUID> 
                                      @Param("fromDate") OffsetDateTime fromDate,
                                      @Param("toDate") OffsetDateTime toDate,
                                      Pageable pageable);
-}
 
+    @Query("SELECT UPPER(i.status), COUNT(i), COALESCE(SUM(i.totalAmount), 0.0), COALESCE(SUM(i.gstAmount), 0.0) FROM SaaSInvoice i GROUP BY UPPER(i.status)")
+    List<Object[]> getStatusFinancialBreakdown();
+
+    @Query("SELECT COUNT(i) FROM SaaSInvoice i WHERE i.invoiceDate >= :startDate AND i.invoiceDate <= :endDate")
+    long countInvoicesBetween(@Param("startDate") OffsetDateTime startDate, @Param("endDate") OffsetDateTime endDate);
+}

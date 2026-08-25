@@ -6,6 +6,8 @@ public class FloorRequest {
     private UUID buildingId;
     private String name;
     private Integer floorNumber;
+    private String wifiSsid;
+    private String wifiPassword;
 
     public FloorRequest() {
     }

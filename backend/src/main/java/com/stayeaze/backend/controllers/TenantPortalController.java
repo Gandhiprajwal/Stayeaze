@@ -184,6 +184,8 @@ public class TenantPortalController {
         response.put("bedNumber", tenant.getBedNumber());
         response.put("rent", tenant.getRent());
         response.put("deposit", tenant.getDeposit());
+        response.put("advanceBalance", tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
+        response.put("advanceRentPaid", tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
         response.put("leaseStart", tenant.getLeaseStart());
         response.put("leaseEnd", tenant.getLeaseEnd());
         response.put("status", tenant.getStatus());
@@ -209,37 +211,149 @@ public class TenantPortalController {
         String resolvedWifiType = "PROPERTY WI-FI";
 
         Room tenantRoom = null;
-        if (tenant.getRoomNumber() != null && !tenant.getRoomNumber().isBlank()) {
-            try {
+        try {
+            if (tenant.getRoomNumber() != null && !tenant.getRoomNumber().isBlank()) {
                 List<Room> allRooms = roomRepository.findAll();
                 for (Room r : allRooms) {
-                    if (r != null && r.getRoomNumber() != null && r.getRoomNumber().equalsIgnoreCase(tenant.getRoomNumber().trim())) {
+                    if (r != null && r.getRoomNumber() != null && r.getRoomNumber().trim().equalsIgnoreCase(tenant.getRoomNumber().trim())) {
                         if (property == null || (r.getFloor() != null && r.getFloor().getBuilding() != null && r.getFloor().getBuilding().getProperty() != null && property.getId().equals(r.getFloor().getBuilding().getProperty().getId()))) {
                             tenantRoom = r;
                             break;
                         }
                     }
                 }
+            }
+
+            if (tenantRoom == null && tenant.getId() != null) {
+                String tidStr = tenant.getId().toString();
+                Bed bed = bedRepository.findAll().stream()
+                        .filter(b -> tidStr.equals(b.getTenantId()))
+                        .findFirst()
+                        .orElse(null);
+                if (bed != null && bed.getRoom() != null) {
+                    tenantRoom = bed.getRoom();
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // DSA Inverted Index Algorithm:
+        // Build O(1) fast lookup index maps from centralized property.wifiNetworksJson if configured
+        Map<String, Map<String, Object>> hubRoomMap = new HashMap<>();
+        Map<String, Map<String, Object>> hubFloorMap = new HashMap<>();
+        Map<String, Map<String, Object>> hubBuildingMap = new HashMap<>();
+        Map<String, Object> hubPropertyDefault = null;
+
+        if (property != null && property.getWifiNetworksJson() != null && !property.getWifiNetworksJson().isBlank()) {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                List<Map<String, Object>> hubNetworks = mapper.readValue(property.getWifiNetworksJson(), new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+                if (hubNetworks != null) {
+                    for (Map<String, Object> net : hubNetworks) {
+                        String coverageType = (String) net.getOrDefault("coverageType", "ALL_PROPERTY");
+                        if ("ROOMS".equalsIgnoreCase(coverageType) || "ROOM_WISE".equalsIgnoreCase(coverageType)) {
+                            List<String> rooms = (List<String>) net.get("coveredRoomNumbers");
+                            List<String> bldNames = (List<String>) net.get("coveredBuildingNames");
+                            String targetBld = (String) net.get("targetBuildingName");
+                            if (rooms != null) {
+                                for (String rm : rooms) {
+                                    if (rm != null) {
+                                        String rmL = rm.trim().toLowerCase();
+                                        hubRoomMap.put(rmL, net);
+                                        if (targetBld != null && !targetBld.isBlank()) {
+                                            hubRoomMap.put(targetBld.trim().toLowerCase() + ":::" + rmL, net);
+                                        }
+                                        if (bldNames != null) {
+                                            for (String bn : bldNames) {
+                                                if (bn != null) hubRoomMap.put(bn.trim().toLowerCase() + ":::" + rmL, net);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if ("FLOORS".equalsIgnoreCase(coverageType) || "FLOOR_WISE".equalsIgnoreCase(coverageType)) {
+                            List<String> floorIds = (List<String>) net.get("coveredFloorIds");
+                            if (floorIds != null) {
+                                for (String fid : floorIds) {
+                                    if (fid != null) hubFloorMap.put(fid.trim().toLowerCase(), net);
+                                }
+                            }
+                            List<String> floorNames = (List<String>) net.get("coveredFloorNames");
+                            if (floorNames != null) {
+                                for (String fn : floorNames) {
+                                    if (fn != null) hubFloorMap.put(fn.trim().toLowerCase(), net);
+                                }
+                            }
+                        } else if ("BUILDINGS".equalsIgnoreCase(coverageType) || "BUILDING_WISE".equalsIgnoreCase(coverageType)) {
+                            List<String> buildingIds = (List<String>) net.get("coveredBuildingIds");
+                            if (buildingIds != null) {
+                                for (String bid : buildingIds) {
+                                    if (bid != null) hubBuildingMap.put(bid.trim().toLowerCase(), net);
+                                }
+                            }
+                            List<String> buildingNames = (List<String>) net.get("coveredBuildingNames");
+                            if (buildingNames != null) {
+                                for (String bn : buildingNames) {
+                                    if (bn != null) hubBuildingMap.put(bn.trim().toLowerCase(), net);
+                                }
+                            }
+                        } else if (hubPropertyDefault == null) {
+                            hubPropertyDefault = net;
+                        }
+                    }
+                }
             } catch (Exception ignored) {}
         }
 
-        if (tenantRoom != null && tenantRoom.getWifiPassword() != null && !tenantRoom.getWifiPassword().isBlank()) {
-            resolvedWifiPassword = tenantRoom.getWifiPassword();
-            resolvedWifiSsid = tenantRoom.getWifiSsid() != null && !tenantRoom.getWifiSsid().isBlank()
-                    ? tenantRoom.getWifiSsid()
-                    : "Room " + tenantRoom.getRoomNumber();
-            resolvedWifiType = "ROOM " + tenantRoom.getRoomNumber() + " WI-FI";
-        } else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getWifiPassword() != null && !tenantRoom.getFloor().getWifiPassword().isBlank()) {
-            Floor floor = tenantRoom.getFloor();
-            resolvedWifiPassword = floor.getWifiPassword();
-            resolvedWifiSsid = floor.getWifiSsid() != null && !floor.getWifiSsid().isBlank()
-                    ? floor.getWifiSsid()
-                    : floor.getName() + " Wi-Fi";
-            resolvedWifiType = floor.getName().toUpperCase() + " WI-FI";
-        } else if (property != null && property.getWifiPassword() != null && !property.getWifiPassword().isBlank()) {
-            resolvedWifiPassword = property.getWifiPassword();
-            resolvedWifiSsid = property.getWifiSsid() != null && !property.getWifiSsid().isBlank()
-                    ? property.getWifiSsid()
+        // Priority 1: Hub Room-Specific Router
+        String tenantRoomNum = tenant.getRoomNumber() != null ? tenant.getRoomNumber().trim().toLowerCase() : null;
+        String tenantBldName = tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getBuilding() != null && tenantRoom.getFloor().getBuilding().getName() != null
+                ? tenantRoom.getFloor().getBuilding().getName().trim().toLowerCase() : null;
+        String bldRoomKey = (tenantBldName != null && tenantRoomNum != null) ? (tenantBldName + ":::" + tenantRoomNum) : null;
+
+        if (bldRoomKey != null && hubRoomMap.containsKey(bldRoomKey)) {
+            Map<String, Object> net = hubRoomMap.get(bldRoomKey);
+            resolvedWifiSsid = (String) net.get("ssid");
+            resolvedWifiPassword = (String) net.get("password");
+            resolvedWifiType = "ROOM " + tenant.getRoomNumber() + " WI-FI";
+        } else if (tenantRoomNum != null && hubRoomMap.containsKey(tenantRoomNum)) {
+            Map<String, Object> net = hubRoomMap.get(tenantRoomNum);
+            resolvedWifiSsid = (String) net.get("ssid");
+            resolvedWifiPassword = (String) net.get("password");
+            resolvedWifiType = "ROOM " + tenant.getRoomNumber() + " WI-FI";
+        }
+        // Priority 2: Hub Floor-Specific Router
+        else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getId() != null && hubFloorMap.containsKey(tenantRoom.getFloor().getId().toString().toLowerCase())) {
+            Map<String, Object> net = hubFloorMap.get(tenantRoom.getFloor().getId().toString().toLowerCase());
+            resolvedWifiSsid = (String) net.get("ssid");
+            resolvedWifiPassword = (String) net.get("password");
+            resolvedWifiType = tenantRoom.getFloor().getName().toUpperCase() + " WI-FI";
+        } else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getName() != null && hubFloorMap.containsKey(tenantRoom.getFloor().getName().trim().toLowerCase())) {
+            Map<String, Object> net = hubFloorMap.get(tenantRoom.getFloor().getName().trim().toLowerCase());
+            resolvedWifiSsid = (String) net.get("ssid");
+            resolvedWifiPassword = (String) net.get("password");
+            resolvedWifiType = tenantRoom.getFloor().getName().toUpperCase() + " WI-FI";
+        }
+        // Priority 3: Hub Building-Specific Router (e.g. "Tower B Building Wi-Fi")
+        else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getBuilding() != null && tenantRoom.getFloor().getBuilding().getId() != null && hubBuildingMap.containsKey(tenantRoom.getFloor().getBuilding().getId().toString().toLowerCase())) {
+            Map<String, Object> net = hubBuildingMap.get(tenantRoom.getFloor().getBuilding().getId().toString().toLowerCase());
+            resolvedWifiSsid = (String) net.get("ssid");
+            resolvedWifiPassword = (String) net.get("password");
+            resolvedWifiType = tenantRoom.getFloor().getBuilding().getName().toUpperCase() + " BUILDING WI-FI";
+        } else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getBuilding() != null && tenantRoom.getFloor().getBuilding().getName() != null && hubBuildingMap.containsKey(tenantRoom.getFloor().getBuilding().getName().trim().toLowerCase())) {
+            Map<String, Object> net = hubBuildingMap.get(tenantRoom.getFloor().getBuilding().getName().trim().toLowerCase());
+            resolvedWifiSsid = (String) net.get("ssid");
+            resolvedWifiPassword = (String) net.get("password");
+            resolvedWifiType = tenantRoom.getFloor().getBuilding().getName().toUpperCase() + " BUILDING WI-FI";
+        }
+        // Priority 4: Hub Property Default Router or Property Entity Wi-Fi or System Fallback
+        else if (hubPropertyDefault != null && hubPropertyDefault.get("password") != null) {
+            resolvedWifiSsid = (String) hubPropertyDefault.get("ssid");
+            resolvedWifiPassword = (String) hubPropertyDefault.get("password");
+            resolvedWifiType = "PROPERTY WI-FI";
+        } else if (property != null && property.getWifiPassword() != null && !property.getWifiPassword().trim().isBlank()) {
+            resolvedWifiPassword = property.getWifiPassword().trim();
+            resolvedWifiSsid = property.getWifiSsid() != null && !property.getWifiSsid().trim().isBlank()
+                    ? property.getWifiSsid().trim()
                     : property.getName().replaceAll("\\s+", "_") + "_Tenant_HighSpeed";
             resolvedWifiType = "PROPERTY WI-FI";
         } else {

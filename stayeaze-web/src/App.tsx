@@ -39,6 +39,7 @@ const BookingDetailPage = lazy(() => import('@/features/bookings/BookingDetailPa
 const CheckInsPage = lazy(() => import('@/features/check-in/CheckInsPage'));
 const CheckOutsPage = lazy(() => import('@/features/check-out/CheckOutsPage'));
 const BillingPage = lazy(() => import('@/features/billing/BillingPage'));
+const UtilitiesPage = lazy(() => import('@/features/utilities/UtilitiesPage'));
 const SubscriptionPage = lazy(() => import('@/features/subscription/SubscriptionPage'));
 const PaymentsPage = lazy(() => import('@/features/payments/PaymentsPage'));
 const ComplaintsPage = lazy(() => import('@/features/complaints/ComplaintsPage'));
@@ -175,6 +176,7 @@ export default function App() {
                 <Route path="/check-ins" element={<RequireAuth module="checkins"><CheckInsPage /></RequireAuth>} />
                 <Route path="/check-outs" element={<RequireAuth module="checkouts"><CheckOutsPage /></RequireAuth>} />
                 <Route path="/billing" element={<RequireAuth module="billing"><BillingPage /></RequireAuth>} />
+                <Route path="/utilities" element={<RequireAuth module="billing"><UtilitiesPage /></RequireAuth>} />
                 <Route path="/subscription" element={<RequireAuth module="settings"><SubscriptionPage /></RequireAuth>} />
                 <Route path="/payments" element={<RequireAuth module="billing"><PaymentsPage /></RequireAuth>} />
                 <Route path="/complaints" element={<RequireAuth module="complaints"><ComplaintsPage /></RequireAuth>} />

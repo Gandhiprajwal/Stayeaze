@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Settings as SettingsIcon, Building2, Bell, Palette, Shield, ShieldCheck, User, Sparkles, CheckCircle2, Check, ExternalLink } from 'lucide-react';
+import { Settings as SettingsIcon, Building2, Bell, Palette, Shield, ShieldCheck, User, Sparkles, CheckCircle2, Check, ExternalLink, Wifi } from 'lucide-react';
 import { useBranding } from '@/lib/branding-context';
+import WifiSettingsSection from '@/features/settings/WifiSettingsSection';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -499,6 +500,9 @@ export default function SettingsPage() {
             <TabsTrigger value="profile"><User className="mr-1.5 h-4 w-4" /> Profile</TabsTrigger>
             <TabsTrigger value="appearance"><Palette className="mr-1.5 h-4 w-4" /> Appearance</TabsTrigger>
             <TabsTrigger value="notifications"><Bell className="mr-1.5 h-4 w-4" /> Notifications</TabsTrigger>
+            {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'RECEPTIONIST') && (
+              <TabsTrigger value="wifi"><Wifi className="mr-1.5 h-4 w-4 text-cyan-500" /> Wi-Fi Hub</TabsTrigger>
+            )}
             {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'ACCOUNTANT') && (
               <TabsTrigger value="organization"><Building2 className="mr-1.5 h-4 w-4" /> Organization</TabsTrigger>
             )}
@@ -1241,6 +1245,11 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Wi-Fi Hub */}
+        <TabsContent value="wifi">
+          <WifiSettingsSection />
         </TabsContent>
       </Tabs>
     </div>

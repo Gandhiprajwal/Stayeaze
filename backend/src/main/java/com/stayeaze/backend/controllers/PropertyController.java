@@ -114,15 +114,13 @@ public class PropertyController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
     @org.springframework.cache.annotation.CacheEvict(value = "properties-minimal", allEntries = true)
     public ResponseEntity<?> createProperty(@RequestBody Map<String, Object> request) {
-        boolean isSuperAdmin = isSuperAdminUser();
-
-        Organization organization;
-        String ownerEmail = null;
-        String ownerPassword = "owner123";
-        String orgName = null;
+        Organization organization = getLoggedUserOrg();
+        if (organization == null) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: User does not belong to an active organization!"));
+        }
 
         String name = (String) request.get("name");
         String code = (String) request.get("code");
@@ -145,95 +143,8 @@ public class PropertyController {
                     .body(new MessageResponse("Error: Property Name and Address are required!"));
         }
 
-        if (isSuperAdmin) {
-            orgName = (String) request.get("orgName");
-            String orgSubdomain = (String) request.get("orgSubdomain");
-            ownerEmail = (String) request.get("ownerEmail");
-            String ownerPhone = (String) request.get("ownerPhone");
-            String passInput = (String) request.get("ownerPassword");
-            if (passInput != null && !passInput.trim().isEmpty()) {
-                ownerPassword = passInput;
-            }
-
-            if (orgName == null || orgName.trim().isEmpty() || orgSubdomain == null || orgSubdomain.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(
-                        new MessageResponse("Error: Organization Name and Subdomain are required for Super Admin!"));
-            }
-            if (ownerEmail == null || ownerEmail.trim().isEmpty()) {
-                return ResponseEntity.badRequest()
-                        .body(new MessageResponse("Error: Owner Email is required for Super Admin!"));
-            }
-
-            // 1. Find or Create Organization
-            final String finalSub = orgSubdomain.trim().toLowerCase();
-            final String finalOrgName = orgName.trim();
-            organization = organizationRepository.findAll().stream()
-                    .filter(org -> org.getSubdomain().equalsIgnoreCase(finalSub))
-                    .findFirst()
-                    .orElseGet(() -> {
-                        Organization org = new Organization(finalOrgName, finalSub);
-                        return organizationRepository.save(org);
-                    });
-
-            // 2. Find or Create Owner User
-            final String finalEmail = ownerEmail.trim().toLowerCase();
-            String phoneInput = ownerPhone != null ? ownerPhone.trim() : "";
-            if (phoneInput.isEmpty()) {
-                phoneInput = "M-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-            }
-            final String finalPhone = phoneInput;
-            final String finalPass = ownerPassword;
-            final Organization finalOrg = organization;
-
-            Optional<User> existingUser = userRepository.findByEmail(finalEmail);
-            User owner;
-            if (existingUser.isPresent()) {
-                owner = existingUser.get();
-                owner.setOrganization(finalOrg);
-                owner.setPassword(encoder.encode(finalPass));
-                if (ownerPhone != null && !ownerPhone.trim().isEmpty()) {
-                    String cleanPhone = ownerPhone.trim();
-                    if (!cleanPhone.equals(owner.getMobile()) && userRepository.existsByMobile(cleanPhone)) {
-                        return ResponseEntity.badRequest().body(
-                                new MessageResponse("Error: Mobile number is already registered to another user!"));
-                    }
-                    owner.setMobile(cleanPhone);
-                }
-                owner.setMobile(finalPhone);
-                Role ownerRole = roleRepository.findByName(ERole.OWNER)
-                        .orElseGet(() -> {
-                            Role r = new Role(ERole.OWNER, "[\"ALL\"]");
-                            return roleRepository.save(r);
-                        });
-                if (owner.getRoles() == null) {
-                    owner.setRoles(new HashSet<>());
-                }
-                owner.getRoles().add(ownerRole);
-                userRepository.save(owner);
-            } else {
-                if (userRepository.existsByMobile(finalPhone)) {
-                    return ResponseEntity.badRequest()
-                            .body(new MessageResponse("Error: Mobile number is already registered to another user!"));
-                }
-                owner = new User(finalOrg, finalEmail, encoder.encode(finalPass), finalPhone);
-                Role ownerRole = roleRepository.findByName(ERole.OWNER)
-                        .orElseGet(() -> {
-                            Role r = new Role(ERole.OWNER, "[\"ALL\"]");
-                            return roleRepository.save(r);
-                        });
-                Set<Role> roles = new HashSet<>();
-                roles.add(ownerRole);
-                owner.setRoles(roles);
-                userRepository.save(owner);
-            }
-        } else {
-            organization = getLoggedUserOrg();
-        }
-
         try {
-            if (!isSuperAdmin) {
-                enforcementService.validatePropertyCreation(organization);
-            }
+            enforcementService.validatePropertyCreation(organization);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
         }
@@ -291,75 +202,37 @@ public class PropertyController {
                 property.setSecurityDeposit(new java.math.BigDecimal(request.get("securityDeposit").toString()));
             } catch (Exception ignored) {}
         }
-        if (!isSuperAdmin) {
-            if (request.get("razorpayKeyId") != null)
-                property.setRazorpayKeyId(((String) request.get("razorpayKeyId")).trim());
-            if (request.get("razorpayKeySecret") != null && !((String) request.get("razorpayKeySecret")).isBlank() && !((String) request.get("razorpayKeySecret")).contains("•"))
-                property.setRazorpayKeySecret(((String) request.get("razorpayKeySecret")).trim());
+        if (request.get("wifiSsid") != null) {
+            property.setWifiSsid(((String) request.get("wifiSsid")).trim());
         }
+        if (request.get("wifiPassword") != null) {
+            String wp = ((String) request.get("wifiPassword")).trim();
+            if (!wp.isBlank() && wp.length() < 8) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: Wi-Fi password must be at least 8 characters long."));
+            }
+            property.setWifiPassword(wp);
+        }
+        if (request.get("razorpayKeyId") != null)
+            property.setRazorpayKeyId(((String) request.get("razorpayKeyId")).trim());
+        if (request.get("razorpayKeySecret") != null && !((String) request.get("razorpayKeySecret")).isBlank() && !((String) request.get("razorpayKeySecret")).contains("•"))
+            property.setRazorpayKeySecret(((String) request.get("razorpayKeySecret")).trim());
 
         Property saved = propertyService.saveProperty(property);
 
-        String targetUserEmail = ownerEmail != null ? ownerEmail.trim().toLowerCase() : null;
-        if (targetUserEmail == null) {
-            try {
-                UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-                targetUserEmail = userDetails.getUsername();
-            } catch (Exception ignored) {}
-        }
-        if (targetUserEmail != null) {
-            final String ownerMail = targetUserEmail;
-            userRepository.findByEmail(targetUserEmail).ifPresent(u -> {
-                List<UUID> currentIds = u.getPropertyIds() != null ? new ArrayList<>(u.getPropertyIds()) : new ArrayList<>();
-                if (!currentIds.contains(saved.getId())) {
-                    currentIds.add(saved.getId());
-                    u.setPropertyIds(currentIds);
-                    userRepository.save(u);
-                }
-            });
-
-            // 1. ALWAYS Record Super Admin Onboarding Lead First (Database Persistence)
-            try {
-                com.stayeaze.backend.models.OnboardingLead lead = new com.stayeaze.backend.models.OnboardingLead(
-                        saved.getAuthorizedSignatory() != null ? saved.getAuthorizedSignatory() : "Property Owner",
-                        ownerMail,
-                        saved.getPhone() != null ? saved.getPhone() : "N/A",
-                        saved.getName(),
-                        saved.getCode(),
-                        "PENDING_PAYMENT",
-                        "UNPAID",
-                        null
-                );
-                onboardingLeadRepository.save(lead);
-
-                // Broadcast STOMP Live Notification to Super Admin
-                Map<String, Object> leadAlert = new HashMap<>();
-                leadAlert.put("type", "PROPERTY_ONBOARDING_LEAD");
-                leadAlert.put("title", "New Property Registered (Payment Pending)");
-                leadAlert.put("message", "Property '" + saved.getName() + "' (" + saved.getCode() + ") registered by " + ownerMail + ". Awaiting onboarding payment.");
-                leadAlert.put("propertyName", saved.getName());
-                leadAlert.put("ownerEmail", ownerMail);
-                webSocketNotificationService.broadcastTopic("/topic/super-admin/onboarding", leadAlert);
-            } catch (Exception e) {
-                logger.warn("⚠️ Lead persistence warning: {}", e.getMessage());
+        try {
+            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            String targetUserEmail = userDetails.getUsername();
+            if (targetUserEmail != null) {
+                userRepository.findByEmail(targetUserEmail).ifPresent(u -> {
+                    List<UUID> currentIds = u.getPropertyIds() != null ? new ArrayList<>(u.getPropertyIds()) : new ArrayList<>();
+                    if (!currentIds.contains(saved.getId())) {
+                        currentIds.add(saved.getId());
+                        u.setPropertyIds(currentIds);
+                        userRepository.save(u);
+                    }
+                });
             }
-
-            // 2. Dispatch Onboarding Tax Invoice Email to Property Owner
-            try {
-                String invoiceNum = "INV-PROP-" + saved.getCode();
-                java.math.BigDecimal onboardingFee = new java.math.BigDecimal("2999.00");
-                String checkoutPaymentUrl = "http://localhost:5173/subscription?propertyId=" + saved.getId();
-                emailService.sendPropertyOwnerRegistrationInvoice(
-                        ownerMail,
-                        saved.getAuthorizedSignatory() != null ? saved.getAuthorizedSignatory() : "Property Owner",
-                        saved.getName(),
-                        saved.getCode(),
-                        invoiceNum,
-                        onboardingFee,
-                        checkoutPaymentUrl
-                );
-            } catch (Exception ignored) {}
-        }
+        } catch (Exception ignored) {}
 
         Map<String, Object> map = new HashMap<>();
         map.put("id", saved.getId());
@@ -384,27 +257,6 @@ public class PropertyController {
         map.put("totalRooms", saved.getTotalRooms());
         map.put("totalBeds", saved.getTotalBeds());
         map.put("occupiedBeds", saved.getOccupiedBeds());
-
-        if (isSuperAdmin) {
-            map.put("ownerEmail", ownerEmail);
-            map.put("ownerPassword", ownerPassword);
-            map.put("orgName", orgName);
-
-            if (ownerEmail != null) {
-                final String finalEmail = ownerEmail.trim().toLowerCase();
-                userRepository.findByEmail(finalEmail).ifPresent(o -> {
-                    List<UUID> propIds = o.getPropertyIds();
-                    if (propIds == null) {
-                        propIds = new ArrayList<>();
-                    }
-                    if (!propIds.contains(saved.getId())) {
-                        propIds.add(saved.getId());
-                        o.setPropertyIds(propIds);
-                        userRepository.save(o);
-                    }
-                });
-            }
-        }
 
         return new ResponseEntity<>(map, HttpStatus.CREATED);
     }
@@ -615,6 +467,19 @@ public class PropertyController {
         if (request.getSecurityDeposit() != null) {
             property.setSecurityDeposit(request.getSecurityDeposit());
         }
+        if (request.getWifiSsid() != null) {
+            property.setWifiSsid(request.getWifiSsid().trim());
+        }
+        if (request.getWifiPassword() != null) {
+            String wp = request.getWifiPassword().trim();
+            if (!wp.isBlank() && wp.length() < 8) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: Wi-Fi password must be at least 8 characters long."));
+            }
+            property.setWifiPassword(wp);
+        }
+        if (request.getWifiNetworksJson() != null) {
+            property.setWifiNetworksJson(request.getWifiNetworksJson());
+        }
         if (!isSuperAdmin) {
             if (request.getRazorpayKeyId() != null)
                 property.setRazorpayKeyId(request.getRazorpayKeyId().trim());
@@ -624,6 +489,46 @@ public class PropertyController {
 
         Property updated = propertyService.saveProperty(property);
         return ResponseEntity.ok(updated);
+    }
+
+    @PutMapping("/{id}/wifi-networks")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> updatePropertyWifiNetworks(@PathVariable UUID id, @RequestBody Map<String, Object> payload) {
+        boolean isSuperAdmin = isSuperAdminUser();
+        Property property;
+        if (isSuperAdmin) {
+            property = propertyRepository.findByIdSuperAdmin(id).orElse(null);
+        } else {
+            Organization organization = getLoggedUserOrg();
+            property = propertyRepository.findByIdAndOrganization(id, organization).orElse(null);
+            if (property == null && organization != null) {
+                property = propertyRepository.findByIdSuperAdmin(id)
+                        .filter(p -> p.getOrganization() != null && p.getOrganization().getId().equals(organization.getId()))
+                        .orElse(null);
+            }
+        }
+
+        if (property == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Error: Property not found or unauthorized."));
+        }
+
+        if (payload.containsKey("wifiSsid")) {
+            property.setWifiSsid(payload.get("wifiSsid") != null ? payload.get("wifiSsid").toString().trim() : null);
+        }
+        if (payload.containsKey("wifiPassword")) {
+            String wp = payload.get("wifiPassword") != null ? payload.get("wifiPassword").toString().trim() : "";
+            if (!wp.isBlank() && wp.length() < 8) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: Wi-Fi password must be at least 8 characters long."));
+            }
+            property.setWifiPassword(wp.isBlank() ? null : wp);
+        }
+        if (payload.containsKey("wifiNetworksJson")) {
+            property.setWifiNetworksJson(payload.get("wifiNetworksJson") != null ? payload.get("wifiNetworksJson").toString() : null);
+        }
+
+        Property updated = propertyService.saveProperty(property);
+        return ResponseEntity.ok(PropertyDTO.fromEntity(propertyService.populatePropertyStats(updated)));
     }
 
     @DeleteMapping("/{id}")

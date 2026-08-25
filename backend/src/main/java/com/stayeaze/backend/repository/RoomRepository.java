@@ -58,4 +58,35 @@ public interface RoomRepository extends JpaRepository<Room, UUID> {
             "WHERE r.room_number = :roomNumber LIMIT 1",
             nativeQuery = true)
     String findBuildingNameByRoomNumber(@Param("roomNumber") String roomNumber);
+
+    @Query("SELECT r FROM Room r " +
+           "WHERE r.floor.building.property.id = :propertyId " +
+           "AND (:buildingId IS NULL OR r.floor.building.id = :buildingId) " +
+           "AND (r.status IS NULL OR LOWER(r.status) != 'archived') " +
+           "ORDER BY r.roomNumber ASC")
+    Page<Room> findByPropertyAndBuildingPaginated(
+            @Param("propertyId") UUID propertyId,
+            @Param("buildingId") UUID buildingId,
+            Pageable pageable);
+
+    @Query("SELECT r FROM Room r " +
+           "WHERE r.floor.building.property.id = :propertyId " +
+           "AND (:buildingId IS NULL OR r.floor.building.id = :buildingId) " +
+           "AND (LOWER(r.roomNumber) LIKE :searchPattern " +
+           "     OR LOWER(r.floor.building.name) LIKE :searchPattern " +
+           "     OR LOWER(r.floor.name) LIKE :searchPattern) " +
+           "AND (r.status IS NULL OR LOWER(r.status) != 'archived') " +
+           "ORDER BY r.roomNumber ASC")
+    Page<Room> findByPropertyAndFiltersWithSearchPaginated(
+            @Param("propertyId") UUID propertyId,
+            @Param("buildingId") UUID buildingId,
+            @Param("searchPattern") String searchPattern,
+            Pageable pageable);
+
+    @Query(value = "SELECT b.property_id FROM rooms r " +
+            "JOIN floors f ON r.floor_id = f.id " +
+            "JOIN buildings b ON f.building_id = b.id " +
+            "WHERE r.id = :roomId",
+            nativeQuery = true)
+    UUID findPropertyIdByRoomId(@Param("roomId") UUID roomId);
 }

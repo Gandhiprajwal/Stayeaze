@@ -104,6 +104,9 @@ public class OrganizationBillingProfile {
     @Column(name = "subscription_order_id", length = 150)
     private String subscriptionOrderId;
 
+    @Column(name = "last_downgraded_at")
+    private OffsetDateTime lastDowngradedAt;
+
     // --- End-to-End Refund Lifecycle Fields ---
     @Column(name = "refund_id", length = 100)
     private String refundId;
@@ -292,6 +295,9 @@ public class OrganizationBillingProfile {
 
     public String getSubscriptionOrderId() { return subscriptionOrderId; }
     public void setSubscriptionOrderId(String subscriptionOrderId) { this.subscriptionOrderId = subscriptionOrderId; }
+
+    public OffsetDateTime getLastDowngradedAt() { return lastDowngradedAt; }
+    public void setLastDowngradedAt(OffsetDateTime lastDowngradedAt) { this.lastDowngradedAt = lastDowngradedAt; }
 
     public Boolean getCustomBrandingEnabled() { return customBrandingEnabled != null && customBrandingEnabled; }
     public void setCustomBrandingEnabled(Boolean customBrandingEnabled) { this.customBrandingEnabled = customBrandingEnabled; }

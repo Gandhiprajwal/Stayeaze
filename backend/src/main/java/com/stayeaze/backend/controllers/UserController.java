@@ -103,8 +103,12 @@ public class UserController {
 
         UUID effectiveOrgId = null;
         if (!isSuperAdmin) {
-            Organization organization = getLoggedUserOrg();
-            effectiveOrgId = organization != null ? organization.getId() : null;
+            if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl) {
+                effectiveOrgId = ((UserDetailsImpl) auth.getPrincipal()).getOrgId();
+            } else {
+                Organization organization = getLoggedUserOrg();
+                effectiveOrgId = organization != null ? organization.getId() : null;
+            }
         } else if (params.containsKey("orgId") && params.get("orgId") != null && !params.get("orgId").isBlank() && !"all".equalsIgnoreCase(params.get("orgId"))) {
             try {
                 effectiveOrgId = UUID.fromString(params.get("orgId").trim());

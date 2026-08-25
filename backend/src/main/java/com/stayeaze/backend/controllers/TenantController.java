@@ -80,6 +80,9 @@ public class TenantController {
     private com.stayeaze.backend.services.SmsService smsService;
 
     @Autowired
+    private com.stayeaze.backend.services.SubscriptionEnforcementService enforcementService;
+
+    @Autowired
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Autowired
@@ -197,6 +200,18 @@ public class TenantController {
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
     public ResponseEntity<?> createTenant(@Valid @RequestBody TenantRequest request) {
         Organization organization = getLoggedUserOrg();
+        try {
+            enforcementService.validateOperationalAccess(organization);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(new MessageResponse(e.getMessage()));
+        }
+
+        if (request.getPropertyId() != null) {
+            Property prop = propertyRepository.findById(request.getPropertyId()).orElse(null);
+            if (prop != null && "INACTIVE".equalsIgnoreCase(prop.getStatus())) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Operational Action Rejected: The selected property is INACTIVE and locked from operations."));
+            }
+        }
 
         // 1. Uniqueness scoped to the active organization (active/pending residents)
         if (request.getMobile() != null && !request.getMobile().isBlank()) {

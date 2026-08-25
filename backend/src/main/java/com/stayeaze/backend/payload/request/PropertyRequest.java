@@ -38,11 +38,38 @@ public class PropertyRequest {
     private String upiVpa;
     private String authorizedSignatory;
     private String gstin;
+    private String wifiSsid;
+    private String wifiPassword;
+    private String wifiNetworksJson;
     private String razorpayKeyId;
     private String razorpayKeySecret;
     private java.math.BigDecimal securityDeposit;
 
     public PropertyRequest() {
+    }
+
+    public String getWifiSsid() {
+        return wifiSsid;
+    }
+
+    public void setWifiSsid(String wifiSsid) {
+        this.wifiSsid = wifiSsid;
+    }
+
+    public String getWifiPassword() {
+        return wifiPassword;
+    }
+
+    public void setWifiPassword(String wifiPassword) {
+        this.wifiPassword = wifiPassword;
+    }
+
+    public String getWifiNetworksJson() {
+        return wifiNetworksJson;
+    }
+
+    public void setWifiNetworksJson(String wifiNetworksJson) {
+        this.wifiNetworksJson = wifiNetworksJson;
     }
 
     public java.math.BigDecimal getSecurityDeposit() {

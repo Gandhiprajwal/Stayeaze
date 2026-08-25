@@ -16,8 +16,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class SecurityRateLimitFilter extends OncePerRequestFilter {
 
-    private static final int MAX_REQUESTS_PER_MINUTE = 20;
+    private static final int MAX_REQUESTS_PER_MINUTE = 100;
     private final Map<String, RateTracker> rateLimitMap = new ConcurrentHashMap<>();
+
+    public void clearRateLimits() {
+        rateLimitMap.clear();
+    }
 
     private static class RateTracker {
         final long resetTime;

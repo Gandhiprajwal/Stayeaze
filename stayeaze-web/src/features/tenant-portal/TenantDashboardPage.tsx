@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Home, BedDouble, Wifi, Copy, Check, Clock, Phone, AlertCircle,
   Receipt, MessageSquareWarning, UserCheck, ShieldCheck, CreditCard,
-  Sparkles, ShieldAlert, ArrowRight, FileText, CheckCircle2, User
+  Sparkles, ShieldAlert, ArrowRight, FileText, CheckCircle2, User, Wallet
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -250,6 +250,14 @@ export default function TenantDashboardPage() {
               <span className="text-muted-foreground">Deposit Paid</span>
               <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(Number(overview?.deposit || 0))}</span>
             </div>
+            {Number(overview?.advanceBalance || 0) > 0 && (
+              <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-muted-foreground flex items-center gap-1 text-emerald-700 dark:text-emerald-300 font-medium">
+                  <Wallet className="h-3.5 w-3.5" /> Advance Rent Credit
+                </span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(Number(overview?.advanceBalance || 0))}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800">
               <span className="text-muted-foreground">Pending Balance</span>
               <span className={`font-bold ${pendingAmount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -271,11 +279,30 @@ export default function TenantDashboardPage() {
         {/* 3. Wi-Fi & Quick Contacts */}
         <Card className="shadow-xs border-slate-200 dark:border-slate-800">
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{overview?.wifiType || 'PROPERTY WI-FI'}</span>
-              <Wifi className="h-4 w-4 text-indigo-500" />
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{overview?.wifiType || 'PROPERTY WI-FI'}</span>
+                {overview?.wifiType?.includes('ROOM') ? (
+                  <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[9px] px-1.5 py-0 font-bold">
+                    ROOM ROUTER
+                  </Badge>
+                ) : overview?.wifiType?.includes('FLOOR') ? (
+                  <Badge className="bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300 text-[9px] px-1.5 py-0 font-bold">
+                    FLOOR WI-FI
+                  </Badge>
+                ) : overview?.wifiType?.includes('BUILDING') ? (
+                  <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 text-[9px] px-1.5 py-0 font-bold">
+                    BUILDING WI-FI
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-bold">
+                    PROPERTY DEFAULT
+                  </Badge>
+                )}
+              </div>
+              <Wifi className="h-4 w-4 text-indigo-500 shrink-0" />
             </div>
-            <CardTitle className="text-base font-bold truncate">{overview?.wifiSsid || 'StayEaze_HighSpeed'}</CardTitle>
+            <CardTitle className="text-base font-bold truncate mt-1">{overview?.wifiSsid || 'StayEaze_HighSpeed'}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-between">

@@ -7,6 +7,7 @@ import com.stayeaze.backend.repository.AuditLogRepository;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.security.services.UserDetailsImpl;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -19,10 +20,12 @@ public class AuditLogService {
     @Autowired
     private OrganizationRepository organizationRepository;
 
+    @Async
     public void log(String action, String clientIp) {
         logCurrent(action, clientIp);
     }
 
+    @Async
     public void logCurrent(String action, String clientIp) {
         try {
             org.springframework.security.core.Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -43,6 +46,7 @@ public class AuditLogService {
         } catch (Exception ignored) {}
     }
 
+    @Async
     public void logUser(User user, String action, String clientIp) {
         try {
             if (user != null) {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, RotateCcw, Sparkles } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 
@@ -11,6 +11,7 @@ import { FormDialog } from '@/components/common/FormDialog';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { FormInput } from '@/components/common/FormField';
 import { SearchableSelect } from '@/components/common/SearchableSelect';
+import { BatchSpaceGeneratorDialog } from './BatchSpaceGeneratorDialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -30,6 +31,7 @@ export default function BuildingsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Building | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Building | null>(null);
+  const [batchGenBuilding, setBatchGenBuilding] = useState<Building | null>(null);
 
   const { data: properties } = useQuery({
     queryKey: ['buildings-properties-minimal'],
@@ -123,6 +125,7 @@ export default function BuildingsPage() {
         ]}
         rowActions={(row) => (
           <RowActions items={[
+            { label: 'Generate Spaces (Floors & Beds)', icon: Sparkles, onSelect: () => setBatchGenBuilding(row) },
             { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
             ...(row.status?.toLowerCase() === 'archived' ? [{
               label: 'Unarchive Building',
@@ -164,6 +167,22 @@ export default function BuildingsPage() {
       </FormDialog>
       <ConfirmDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)} title="Delete Building" variant="destructive"
         description={`Delete "${deleteTarget?.name}"? This cannot be undone.`} confirmLabel="Delete" onConfirm={confirmDelete} loading={deleteMut.isPending} />
+
+      {batchGenBuilding && (
+        <BatchSpaceGeneratorDialog
+          open={Boolean(batchGenBuilding)}
+          onOpenChange={(open) => !open && setBatchGenBuilding(null)}
+          propertyId={batchGenBuilding.propertyId}
+          buildingId={batchGenBuilding.id}
+          buildingName={batchGenBuilding.name}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['/buildings'] });
+            queryClient.invalidateQueries({ queryKey: ['/floors'] });
+            queryClient.invalidateQueries({ queryKey: ['/rooms'] });
+            queryClient.invalidateQueries({ queryKey: ['/beds'] });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -30,6 +30,7 @@ import { useQuery } from '@tanstack/react-query';
 import { WorkspaceLockedModal } from '@/components/subscription/WorkspaceLockedModal';
 import { OrganizationSetupGuardModal } from '@/components/subscription/OrganizationSetupGuardModal';
 import { RaiseSupportTicketModal } from '@/components/support/RaiseSupportTicketModal';
+import { SubscriptionStatusBanner } from '@/components/common/SubscriptionStatusBanner';
 
 import { useBranding } from '@/lib/branding-context';
 
@@ -73,7 +74,9 @@ export function AppLayout() {
   });
 
   const isGraceExpired = subDetails?.endDate ? (new Date(subDetails.endDate).getTime() + 3 * 86400000) < Date.now() : false;
-  const isWorkspaceLocked = isGraceExpired && !isPlatformOrTenant;
+  const subStatus = (orgProfile?.subscriptionStatus || subDetails?.status || '').toUpperCase();
+  const isSubStatusLocked = subStatus === 'PAYMENT_LOCKED' || subStatus === 'SUSPENDED' || subStatus === 'EXPIRED';
+  const isWorkspaceLocked = (isGraceExpired || isSubStatusLocked) && !isPlatformOrTenant && !location.pathname.startsWith('/subscription');
 
   const sections = user ? filterNavForRole(user.role) : [];
 
@@ -250,6 +253,7 @@ export function AppLayout() {
 
       {/* Main */}
       <div className="flex flex-1 flex-col overflow-hidden">
+        <SubscriptionStatusBanner />
         {isMaintenanceMode && user?.role === 'SUPER_ADMIN' && (
           <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md shrink-0">
             <div className="flex items-center gap-2">

@@ -39,6 +39,9 @@ public class PropertyDTO implements Serializable {
     private Integer totalRooms;
     private Integer totalBeds;
     private Integer occupiedBeds;
+    private String wifiSsid;
+    private String wifiPassword;
+    private String wifiNetworksJson;
     private UUID orgId;
     private String organizationName;
     private String createdAt;
@@ -73,6 +76,9 @@ public class PropertyDTO implements Serializable {
         dto.setUpiVpa(p.getUpiVpa());
         dto.setAuthorizedSignatory(p.getAuthorizedSignatory());
         dto.setGstin(p.getGstin());
+        dto.setWifiSsid(p.getWifiSsid());
+        dto.setWifiPassword(p.getWifiPassword());
+        dto.setWifiNetworksJson(p.getWifiNetworksJson());
         dto.setRazorpayKeyId(p.getRazorpayKeyId());
         dto.setHasRazorpaySecret(p.getRazorpayKeySecret() != null && !p.getRazorpayKeySecret().isBlank());
         if (p.getRazorpayKeySecret() != null && !p.getRazorpayKeySecret().isBlank()) {
@@ -212,4 +218,13 @@ public class PropertyDTO implements Serializable {
 
     public String getGstin() { return gstin; }
     public void setGstin(String gstin) { this.gstin = gstin; }
+
+    public String getWifiSsid() { return wifiSsid; }
+    public void setWifiSsid(String wifiSsid) { this.wifiSsid = wifiSsid; }
+
+    public String getWifiPassword() { return wifiPassword; }
+    public void setWifiPassword(String wifiPassword) { this.wifiPassword = wifiPassword; }
+
+    public String getWifiNetworksJson() { return wifiNetworksJson; }
+    public void setWifiNetworksJson(String wifiNetworksJson) { this.wifiNetworksJson = wifiNetworksJson; }
 }

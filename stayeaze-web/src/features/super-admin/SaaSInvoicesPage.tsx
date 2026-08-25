@@ -94,6 +94,11 @@ export default function SaaSInvoicesPage() {
 
   // Batch Billing Modal State
   const [batchOpen, setBatchOpen] = useState(false);
+  const [batchMonth, setBatchMonth] = useState(String(new Date().getMonth() + 1));
+  const [batchYear, setBatchYear] = useState(String(new Date().getFullYear()));
+  const [batchDueDateDays, setBatchDueDateDays] = useState('15');
+  const [batchStatus, setBatchStatus] = useState('UNPAID');
+  const [batchForce, setBatchForce] = useState(false);
 
   // HTML Preview Modal State
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -168,10 +173,26 @@ export default function SaaSInvoicesPage() {
 
   // 1-Click Batch Monthly Billing Run Mutation
   const batchGenerateMutation = useMutation({
-    mutationFn: () => api.post('/super-admin/invoices/batch-generate'),
+    mutationFn: () =>
+      api.post('/super-admin/invoices/batch-generate', {
+        billingMonth: parseInt(batchMonth, 10),
+        billingYear: parseInt(batchYear, 10),
+        dueDateDays: parseInt(batchDueDateDays, 10),
+        status: batchStatus,
+        force: batchForce,
+      }),
     onSuccess: (res: any) => {
       const data = res.data || {};
-      toast.success(`Batch Billing Run complete! Generated: ${data.generatedCount || 0} invoice(s), Skipped: ${data.skippedCount || 0} (already billed).`);
+      const count = data.generatedCount ?? 0;
+      const skipped = data.skippedCount ?? 0;
+      const period = data.period || `${batchMonth}/${batchYear}`;
+      const billedStr = data.totalBilledAmount ? ` (Total: ₹${data.totalBilledAmount.toLocaleString('en-IN')})` : '';
+
+      if (count > 0) {
+        toast.success(`Batch Billing Run complete for ${period}! Generated ${count} invoice(s)${billedStr}. Skipped: ${skipped}.`);
+      } else {
+        toast.info(`Billing Run for ${period}: All ${data.totalSubscribers || 0} subscribers already invoiced (Skipped: ${skipped}). Use 'Force Re-issue' if needed.`);
+      }
       setBatchOpen(false);
       queryClient.invalidateQueries({ queryKey: ['super-admin-invoices'] });
       queryClient.invalidateQueries({ queryKey: ['super-admin-invoice-stats'] });
@@ -734,13 +755,88 @@ export default function SaaSInvoicesPage() {
               <Sparkles className="h-5 w-5 text-primary" /> Run Monthly Billing Cycle
             </DialogTitle>
             <DialogDescription>
-              Automatically scan all active SaaS subscribers and issue upcoming monthly renewal invoices for organizations that haven&apos;t been billed this month.
+              Automatically scan all active SaaS subscribers and issue upcoming monthly renewal invoices for organizations.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="p-3 bg-muted/50 rounded-lg text-xs space-y-1.5 text-muted-foreground">
-            <p>• Invoices will be generated in <strong>UNPAID</strong> status with a 15-day due date.</p>
-            <p>• Duplicate prevention is enforced: subscribers with an existing invoice for this month are automatically skipped.</p>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Target Billing Month</Label>
+                <Select value={batchMonth} onValueChange={setBatchMonth}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Select Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['1:Jan', '2:Feb', '3:Mar', '4:Apr', '5:May', '6:Jun', '7:Jul', '8:Aug', '9:Sep', '10:Oct', '11:Nov', '12:Dec'].map((m) => {
+                      const [val, label] = m.split(':');
+                      return <SelectItem key={val} value={val} className="text-xs">{label} ({val})</SelectItem>;
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Billing Year</Label>
+                <Select value={batchYear} onValueChange={setBatchYear}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Select Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['2025', '2026', '2027', '2028'].map((y) => (
+                      <SelectItem key={y} value={y} className="text-xs">{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Payment Due Window</Label>
+                <Select value={batchDueDateDays} onValueChange={setBatchDueDateDays}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5" className="text-xs">5 Days</SelectItem>
+                    <SelectItem value="10" className="text-xs">10 Days</SelectItem>
+                    <SelectItem value="15" className="text-xs">15 Days (Standard)</SelectItem>
+                    <SelectItem value="30" className="text-xs">30 Days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Initial Status</Label>
+                <Select value={batchStatus} onValueChange={setBatchStatus}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UNPAID" className="text-xs">UNPAID (Standard)</SelectItem>
+                    <SelectItem value="PAID" className="text-xs">PAID (Pre-settled)</SelectItem>
+                    <SelectItem value="PENDING" className="text-xs">PENDING</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 pt-1">
+              <Checkbox
+                id="batchForce"
+                checked={batchForce}
+                onCheckedChange={(c) => setBatchForce(!!c)}
+              />
+              <Label htmlFor="batchForce" className="text-xs font-medium cursor-pointer">
+                Force Re-issue (Allow multiple invoices for same month)
+              </Label>
+            </div>
+
+            <div className="p-3 bg-muted/50 rounded-lg text-xs space-y-1 text-muted-foreground border">
+              <p>• Invoices will be generated in <strong>{batchStatus}</strong> status with a {batchDueDateDays}-day due date.</p>
+              <p>• Duplicate prevention is {batchForce ? 'disabled (force mode)' : 'enforced (already billed subscribers are skipped)'}.</p>
+            </div>
           </div>
 
           <DialogFooter>
@@ -750,9 +846,15 @@ export default function SaaSInvoicesPage() {
             <Button
               onClick={() => batchGenerateMutation.mutate()}
               disabled={batchGenerateMutation.isPending}
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 gap-1.5"
             >
-              {batchGenerateMutation.isPending ? 'Processing Billing Run...' : 'Execute Batch Run'}
+              {batchGenerateMutation.isPending ? (
+                <>Processing Billing Run...</>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" /> Execute Batch Run
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

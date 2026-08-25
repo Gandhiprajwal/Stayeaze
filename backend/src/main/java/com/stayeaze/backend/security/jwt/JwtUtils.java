@@ -77,7 +77,7 @@ public class JwtUtils {
 
     public boolean validateJwtToken(String authToken) {
         try {
-            Jwts.parser().verifyWith(key()).build().parseSignedClaims(authToken);
+            Jwts.parser().verifyWith(key()).clockSkewSeconds(30).build().parseSignedClaims(authToken);
             return true;
         } catch (MalformedJwtException e) {
             logger.error("Invalid JWT token: {}", e.getMessage());
@@ -97,6 +97,7 @@ public class JwtUtils {
         try {
             return Jwts.parser()
                     .verifyWith(key())
+                    .clockSkewSeconds(30)
                     .build()
                     .parseSignedClaims(token)
                     .getPayload()

@@ -17,7 +17,11 @@ import java.util.UUID;
 @Repository
 public interface PropertyRepository extends JpaRepository<Property, UUID> {
     List<Property> findByOrganization(Organization organization);
+    List<Property> findByOrganizationAndStatusIgnoreCase(Organization organization, String status);
     List<Property> findByOrganizationId(UUID organizationId);
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT * FROM properties WHERE org_id = :orgId", nativeQuery = true)
+    List<Property> findAllByOrgId(@org.springframework.data.repository.query.Param("orgId") UUID orgId);
     Page<Property> findByOrganization(Organization organization, Pageable pageable);
     Page<Property> findAll(Pageable pageable);
     Optional<Property> findByIdAndOrganization(UUID id, Organization organization);

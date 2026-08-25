@@ -24,6 +24,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -156,6 +157,28 @@ public class FloorController {
         try { organization = getLoggedUserOrg(); } catch (Exception ignored) {}
         List<com.stayeaze.backend.payload.response.FloorDTO> all = floorService.getFloorsByOrg(organization);
         return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
+    }
+
+    @GetMapping("/properties/{propertyId}/all-floors")
+    public ResponseEntity<?> getAllFloorsForProperty(@PathVariable UUID propertyId) {
+        Property property = propertyRepository.findById(propertyId).orElse(null);
+        if (property == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Property not found"));
+        }
+        List<Building> buildings = buildingRepository.findByProperty(property);
+        List<FloorDTO> floorDTOs = new ArrayList<>();
+        for (Building b : buildings) {
+            List<Floor> floors = floorRepository.findByBuilding(b);
+            for (Floor f : floors) {
+                FloorDTO dto = FloorDTO.fromEntity(f);
+                dto.setPropertyId(property.getId());
+                dto.setPropertyName(property.getName());
+                dto.setBuildingId(b.getId());
+                dto.setBuildingName(b.getName());
+                floorDTOs.add(dto);
+            }
+        }
+        return ResponseEntity.ok(floorDTOs);
     }
 
     @DeleteMapping("/properties/{propertyId}/buildings/{buildingId}/floors/{id}")

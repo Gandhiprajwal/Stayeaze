@@ -17,4 +17,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
 
     @Modifying
     int deleteByUser(User user);
+
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT t FROM RefreshToken t LEFT JOIN FETCH t.user u LEFT JOIN FETCH u.organization")
+    java.util.List<RefreshToken> findAllWithUserAndOrg();
 }

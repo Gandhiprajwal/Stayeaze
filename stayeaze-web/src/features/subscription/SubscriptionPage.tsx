@@ -18,7 +18,8 @@ import { FormDialog } from '@/components/common/FormDialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { DowngradeComplianceDialog } from './DowngradeComplianceDialog';
 
 export default function SubscriptionPage() {
   const queryClient = useQueryClient();
@@ -27,6 +28,16 @@ export default function SubscriptionPage() {
   const [previewData, setPreviewData] = useState<any>(null);
   const [pendingPlan, setPendingPlan] = useState<{ planName: string; planPrice: number; cycle: string } | null>(null);
   const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
+
+  // Downgrade compliance dialog state
+  const [complianceDialogOpen, setComplianceDialogOpen] = useState(false);
+  const [complianceData, setComplianceData] = useState<{
+    targetPlanName: string;
+    targetMaxProperties: number;
+    targetMaxBeds: number;
+    properties: any[];
+    pendingVars: { planName: string; planPrice: number; cycle: string };
+  } | null>(null);
 
   // Fetch active subscription details from backend API
   const { data: subDetails, isLoading: isLoadingSub } = useQuery<SubscriptionDetails>({
@@ -75,35 +86,55 @@ export default function SubscriptionPage() {
       setPendingPlan(vars);
       setPreviewModalOpen(true);
     },
-    onError: (err: any, vars) => {
-      console.warn('Proration preview endpoint fallback:', err);
-      const currentPrice = subDetails?.planPrice || 1499;
-      const targetPrice = vars.planPrice;
-      const isUp = targetPrice >= currentPrice;
-      const unused = Math.max(0, currentPrice - 250);
-      const netPay = isUp ? Math.max(0, targetPrice - unused) : 0;
-      
-      setPreviewData({
-        currentPlanName: subDetails?.planName || 'Starter PG Plan',
-        currentPlanPrice: currentPrice,
-        targetPlanName: vars.planName,
-        targetPlanPrice: targetPrice,
-        billingCycle: vars.cycle,
-        daysUsed: 5,
-        totalCycleDays: 30,
-        usedAmount: 250,
-        unusedCredit: unused,
-        isUpgrade: isUp,
-        netPayable: netPay,
-        extraDays: isUp ? 0 : 25,
-      });
-      setPendingPlan(vars);
-      setPreviewModalOpen(true);
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Failed to calculate subscription proration preview.');
     },
   });
 
+  // Pre-flight check for plan downgrades (quota compliance & 90-day cooldown)
+  const handleInitiatePlanSwitch = async (vars: { planName: string; planPrice: number; cycle: string }) => {
+    try {
+      const eligRes = await api.get(`/subscription/check-downgrade-eligibility?targetPlanName=${encodeURIComponent(vars.planName)}&billingCycle=${vars.cycle}`);
+      const elig = eligRes.data;
+
+      if (elig.isDowngrade) {
+        if (elig.cooldownLocked) {
+          toast.error(elig.message || 'Plan Downgrade Restricted: SaaS plan downgrades are locked to once every 3 months (90 days).', {
+            duration: 6000,
+          });
+          return;
+        }
+
+        if (elig.quotaExceeded) {
+          setComplianceData({
+            targetPlanName: vars.planName,
+            targetMaxProperties: elig.targetMaxProperties,
+            targetMaxBeds: elig.targetMaxBeds,
+            properties: elig.properties || [],
+            pendingVars: vars,
+          });
+          setComplianceDialogOpen(true);
+          return;
+        }
+      }
+
+      // If eligible or upgrade, proceed to proration preview and checkout
+      previewMutation.mutate(vars);
+    } catch (err: any) {
+      previewMutation.mutate(vars);
+    }
+  };
+
   // State for tracking Razorpay payment in progress
   const [paymentInProgress, setPaymentInProgress] = useState(false);
+  const [sandboxModalOpen, setSandboxModalOpen] = useState(false);
+  const [sandboxPaymentData, setSandboxPaymentData] = useState<{
+    planName: string;
+    planPrice: number;
+    cycle: string;
+    amountFormatted: number;
+    orgName: string;
+  } | null>(null);
 
   // Mutation to confirm upgrade/switch subscription plan (called after Razorpay payment succeeds)
   const upgradePlanMut = useMutation({
@@ -126,6 +157,8 @@ export default function SubscriptionPage() {
       queryClient.invalidateQueries({ queryKey: ['my-subscription-invoices'] });
       setPreviewModalOpen(false);
       setPaymentInProgress(false);
+      setSandboxModalOpen(false);
+      setSandboxPaymentData(null);
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.message || 'Failed to update subscription plan');
@@ -138,8 +171,8 @@ export default function SubscriptionPage() {
     if (!pendingPlan) return;
     const { planName, planPrice, cycle } = pendingPlan;
 
-    // For downgrades (no payment needed), directly confirm
-    if (previewData && !previewData.isUpgrade) {
+    // For zero-rupee downgrades (no payment needed), directly confirm
+    if (previewData && previewData.netPayable <= 0 && previewData.isDowngrade) {
       upgradePlanMut.mutate({ planName, planPrice, cycle });
       return;
     }
@@ -154,11 +187,39 @@ export default function SubscriptionPage() {
       );
       const orderData = orderRes.data;
 
-      // If backend says skip payment (downgrade or zero amount)
-      if (orderData.skipPayment) {
+      // If backend says skip payment for free downgrade with netPayable = 0
+      if (orderData.skipPayment && orderData.netPayable <= 0) {
         upgradePlanMut.mutate({ planName, planPrice, cycle });
         return;
       }
+
+      // Close preview modal so Radix dialog focus-trap does not block clicks on Razorpay iframe
+      setPreviewModalOpen(false);
+
+      // Check if real Razorpay keys are configured
+      const isRealRazorpayKey = orderData.keyId 
+        && orderData.keyId.startsWith('rzp_') 
+        && !orderData.keyId.includes('NotConfigured') 
+        && !orderData.keyId.includes('MockKey');
+
+      // If keys are placeholder/unconfigured, open the Sandbox Gateway Dialog
+      if (!isRealRazorpayKey) {
+        setPaymentInProgress(false);
+        setSandboxPaymentData({
+          planName,
+          planPrice,
+          cycle,
+          amountFormatted: orderData.amountFormatted || planPrice,
+          orgName: orderData.orgName || '',
+        });
+        setSandboxModalOpen(true);
+        return;
+      }
+
+      // Clean order_id: Only pass real Razorpay server order IDs to avoid v2-entry.modern.js retry header crashes
+      const validRazorpayOrderId = (orderData.orderId && orderData.orderId.startsWith('order_') && !orderData.orderId.startsWith('order_sub_')) 
+        ? orderData.orderId 
+        : undefined;
 
       // 2. Open Razorpay Checkout modal
       const options = {
@@ -167,17 +228,23 @@ export default function SubscriptionPage() {
         currency: orderData.currency || 'INR',
         name: 'StayEaze SaaS Subscription',
         description: `Upgrade to ${planName} (${cycle.toLowerCase()})`,
-        order_id: orderData.orderId,
+        order_id: validRazorpayOrderId,
         prefill: {
           name: orderData.orgName || '',
           email: '',
           contact: '',
         },
+        retry: { enabled: true, max_count: 4 },
         theme: {
           color: '#4f46e5',
         },
         handler: async function (response: any) {
           try {
+            if (!response || !response.razorpay_payment_id) {
+              toast.error('Payment declined or cancelled.');
+              setPaymentInProgress(false);
+              return;
+            }
             // 3. Confirm upgrade with Razorpay payment details
             upgradePlanMut.mutate({
               planName,
@@ -193,19 +260,36 @@ export default function SubscriptionPage() {
           }
         },
         modal: {
+          backdropclose: true,
+          escape: true,
+          handleback: true,
           ondismiss: function () {
             setPaymentInProgress(false);
-            toast.info('Razorpay payment window closed.');
+            setPendingPlan(null);
+            setPreviewData(null);
+            toast.info('Payment checkout window closed.');
           },
         },
       };
 
-      const rzp = new (window as any).Razorpay(options);
-      rzp.on('payment.failed', function (resp: any) {
+      try {
+        setTimeout(() => {
+          try {
+            const rzp = new (window as any).Razorpay(options);
+            rzp.on('payment.failed', function (resp: any) {
+              setPaymentInProgress(false);
+              toast.error(`Payment failed: ${resp.error?.description || 'Transaction declined'}. You can retry inside the payment window or choose another method.`);
+            });
+            rzp.open();
+          } catch (openErr: any) {
+            setPaymentInProgress(false);
+            toast.error('Unable to open payment gateway. Please try again.');
+          }
+        }, 150);
+      } catch (rzpErr: any) {
         setPaymentInProgress(false);
-        toast.error(`Payment failed: ${resp.error?.description || 'Transaction declined'}`);
-      });
-      rzp.open();
+        toast.error('Unable to open payment gateway in this browser. Please try in a standard browser window.');
+      }
     } catch (err: any) {
       setPaymentInProgress(false);
       const errMsg = err?.response?.data?.message || err?.message || 'Unable to connect to Razorpay payment gateway.';
@@ -404,6 +488,20 @@ export default function SubscriptionPage() {
             <h4 className="font-extrabold text-sm">Subscription Expiring Soon ({daysRemaining} days remaining)</h4>
             <p>
               Your subscription plan will expire on <strong className="font-mono">{formatDate(expiryDate)}</strong>. Please renew or upgrade your plan below to ensure uninterrupted tenant billing and property management access.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 90-Day Downgrade Cooldown Alert Banner */}
+      {subDetails?.downgradeCooldownActive && (
+        <div className="rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 p-4 flex items-start gap-3 text-blue-900 dark:text-blue-200 shadow-xs">
+          <ShieldCheck className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1 text-xs">
+            <h4 className="font-extrabold text-sm">Plan Downgrade Policy (90-Day Cooldown Active)</h4>
+            <p>
+              SaaS plan downgrades are locked to once every 3 months (90 days). Your next downgrade eligibility unlocks on{' '}
+              <strong className="font-mono">{formatDate(subDetails?.downgradeEligibleAfter)}</strong>. Upgrades and same-plan renewals remain available anytime.
             </p>
           </div>
         </div>
@@ -626,7 +724,7 @@ export default function SubscriptionPage() {
         </div>
 
         {/* Pricing Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+        <div id="subscription-plans-grid" className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
           {availablePlans.map((plan) => {
             const price = billingCycle === 'ANNUAL' ? plan.annualPrice : plan.monthlyPrice;
 
@@ -634,11 +732,14 @@ export default function SubscriptionPage() {
             const pLower = plan.name.toLowerCase();
             const pKey = (plan.id || '').toLowerCase();
 
-            const isCurrent =
+            const isSameTier =
               curLower === pLower ||
               (curLower.includes('starter') && (pLower.includes('starter') || pKey.includes('starter'))) ||
               ((curLower.includes('pro') || curLower.includes('professional')) && (pLower.includes('pro') || pKey.includes('pro'))) ||
               (curLower.includes('enterprise') && (pLower.includes('enterprise') || pKey.includes('enterprise')));
+
+            const isCurrent = isSameTier && currentCycle === billingCycle;
+            const isSameTierDifferentCycle = isSameTier && currentCycle !== billingCycle;
 
             return (
               <div
@@ -653,7 +754,7 @@ export default function SubscriptionPage() {
               >
                 {isCurrent ? (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-[10px] font-extrabold uppercase tracking-wider px-4 py-1 rounded-full shadow flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" /> Active Plan
+                    <CheckCircle2 className="h-3 w-3" /> Active Plan ({currentCycle.toLowerCase()})
                   </div>
                 ) : plan.popular ? (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wider px-3.5 py-1 rounded-full shadow">
@@ -688,20 +789,26 @@ export default function SubscriptionPage() {
                 </div>
 
                 <Button
-                  disabled={isCurrent || previewMutation.isPending || upgradePlanMut.isPending}
-                  onClick={() => previewMutation.mutate({ planName: plan.name, planPrice: price, cycle: billingCycle })}
+                  disabled={previewMutation.isPending || upgradePlanMut.isPending}
+                  onClick={() => handleInitiatePlanSwitch({ planName: plan.name, planPrice: price, cycle: billingCycle })}
                   className={`w-full font-bold text-xs h-10 ${
                     isCurrent
-                      ? 'bg-emerald-600/10 text-emerald-600 border border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300 cursor-default font-extrabold'
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-extrabold'
                       : plan.popular
                       ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md'
                       : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900'
                   }`}
                 >
-                  {isCurrent ? (
-                    '✓ Current Active Plan'
-                  ) : (previewMutation.isPending && pendingPlan?.planName === plan.name) ? (
+                  {previewMutation.isPending && pendingPlan?.planName === plan.name ? (
                     'Calculating Proration...'
+                  ) : isCurrent ? (
+                    <>
+                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Renew Active Plan (+{billingCycle === 'ANNUAL' ? '1 Year' : '1 Month'})
+                    </>
+                  ) : isSameTierDifferentCycle ? (
+                    <>
+                      <Sparkles className="mr-1.5 h-3.5 w-3.5 text-amber-300" /> Switch to {billingCycle === 'ANNUAL' ? 'Annual Billing' : 'Monthly Billing'}
+                    </>
                   ) : (
                     <>
                       <Sparkles className="mr-1.5 h-3.5 w-3.5 text-amber-300" /> Switch to {plan.name}
@@ -757,6 +864,7 @@ export default function SubscriptionPage() {
                     <TableHead className="font-bold">Invoice #</TableHead>
                     <TableHead className="font-bold">Date</TableHead>
                     <TableHead className="font-bold">Plan</TableHead>
+                    <TableHead className="font-bold">Transaction ID</TableHead>
                     <TableHead className="font-bold">Base Rate</TableHead>
                     <TableHead className="font-bold">GST (18%)</TableHead>
                     <TableHead className="font-bold">Total Paid</TableHead>
@@ -775,6 +883,11 @@ export default function SubscriptionPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="font-semibold">{inv.planName}</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <span className="font-semibold text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800">
+                          {inv.transactionId || ('pay_' + (inv.invoiceNumber || 'txn').toLowerCase().replace(/[^a-z0-9]/g, ''))}
+                        </span>
                       </TableCell>
                       <TableCell>₹{(inv.amount || 0).toLocaleString('en-IN')}</TableCell>
                       <TableCell className="text-muted-foreground">₹{(inv.gstAmount || 0).toLocaleString('en-IN')}</TableCell>
@@ -914,6 +1027,93 @@ export default function SubscriptionPage() {
           </div>
         )}
       </FormDialog>
+      {/* Downgrade Quota Compliance Dialog */}
+      {complianceData && (
+        <DowngradeComplianceDialog
+          open={complianceDialogOpen}
+          onOpenChange={setComplianceDialogOpen}
+          targetPlanName={complianceData.targetPlanName}
+          targetMaxProperties={complianceData.targetMaxProperties}
+          targetMaxBeds={complianceData.targetMaxBeds}
+          properties={complianceData.properties}
+          onComplianceAchieved={() => {
+            queryClient.invalidateQueries({ queryKey: ['my-subscription-details'] });
+            if (complianceData.pendingVars) {
+              previewMutation.mutate(complianceData.pendingVars);
+            }
+          }}
+        />
+      )}
+      {/* Sandbox Gateway Simulation Modal (Used when live Razorpay keys are unconfigured) */}
+      <Dialog open={sandboxModalOpen} onOpenChange={(val) => { if (!val) { setSandboxModalOpen(false); setSandboxPaymentData(null); } }}>
+        <DialogContent className="sm:max-w-md p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
+          <DialogHeader className="text-center space-y-2">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+              <Sparkles className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-slate-900 dark:text-white">
+              Sandbox Payment Gateway
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+              Live Razorpay Master Keys are not configured in <strong>Super Admin &rarr; System Integrations</strong>. You can simulate a successful transaction for testing or configure keys in the admin panel.
+            </DialogDescription>
+          </DialogHeader>
+
+          {sandboxPaymentData && (
+            <div className="my-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 dark:text-slate-400">Plan Selected</span>
+                <span className="font-bold text-slate-900 dark:text-white">{sandboxPaymentData.planName} ({sandboxPaymentData.cycle.toLowerCase()})</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-500 dark:text-slate-400">Simulated Net Payable</span>
+                <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-base font-mono">
+                  {formatCurrency(sandboxPaymentData.amountFormatted)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2 pt-2">
+            <Button
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-10 shadow-md gap-2"
+              disabled={upgradePlanMut.isPending}
+              onClick={() => {
+                if (!sandboxPaymentData) return;
+                setSandboxModalOpen(false);
+                upgradePlanMut.mutate({
+                  planName: sandboxPaymentData.planName,
+                  planPrice: sandboxPaymentData.planPrice,
+                  cycle: sandboxPaymentData.cycle,
+                  razorpayPaymentId: 'pay_sandbox_' + Date.now(),
+                  razorpayOrderId: 'order_sandbox_' + Date.now(),
+                });
+              }}
+            >
+              {upgradePlanMut.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Activating Plan...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" /> Simulate Payment Success & Activate
+                </>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white h-9"
+              onClick={() => {
+                setSandboxModalOpen(false);
+                setSandboxPaymentData(null);
+                toast.info('Payment simulation cancelled.');
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

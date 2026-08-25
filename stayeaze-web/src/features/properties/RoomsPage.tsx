@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DoorOpen, Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
+import { DoorOpen, Plus, Pencil, Trash2, RotateCcw, Building2, Layers } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 
@@ -18,7 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import api from '@/lib/api';
-import type { Room, Floor } from '@/lib/types';
+import type { Room, Floor, Building } from '@/lib/types';
 import { formatCurrency, formatRoomName } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 
@@ -42,7 +42,6 @@ const allAmenities = ['AC', 'WiFi', 'Geyser', 'Wardrobe', 'Study Table', 'Balcon
 const emptyForm = {
   number: '', type: 'double' as Room['type'], sharing: 2, beds: 2, occupied: 0,
   rent: 0, status: 'available' as Room['status'], floorId: '', amenities: [] as string[],
-  wifiSsid: '', wifiPassword: '',
 };
 
 export default function RoomsPage() {
@@ -50,9 +49,18 @@ export default function RoomsPage() {
   const [editing, setEditing] = useState<Room | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Room | null>(null);
 
+  const { data: buildings } = useQuery({
+    queryKey: ['rooms-buildings'],
+    queryFn: () => api.get<Building[]>('/buildings', { params: { pageSize: 100 } }).then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload as Building[];
+      return (payload as { data: Building[] }).data ?? [];
+    }),
+  });
+
   const { data: floors } = useQuery({
     queryKey: ['rooms-floors'],
-    queryFn: () => api.get<Floor[]>('/floors', { params: { pageSize: 100 } }).then((r) => {
+    queryFn: () => api.get<Floor[]>('/floors', { params: { pageSize: 200 } }).then((r) => {
       const payload = r.data as unknown;
       if (Array.isArray(payload)) return payload as Floor[];
       return (payload as { data: Floor[] }).data ?? [];
@@ -81,8 +89,6 @@ export default function RoomsPage() {
       status: (row.status || 'available').toLowerCase() as Room['status'],
       floorId: row.floorId || '',
       amenities: row.amenities ?? [],
-      wifiSsid: row.wifiSsid || '',
-      wifiPassword: row.wifiPassword || '',
     });
     setDialogOpen(true);
   }
@@ -126,7 +132,18 @@ export default function RoomsPage() {
         </div>
       );
     }},
-    { key: 'floorId', header: 'Floor', sortable: true, cell: (r: any) => <span className="text-sm">{r.floorNumber !== undefined && r.floorNumber !== null ? `Floor ${r.floorNumber}` : (floorMap.get(r.floorId) ?? '—')}</span> },
+    { key: 'buildingName', header: 'Building / Tower', sortable: true, cell: (r: any) => (
+      <div className="flex items-center gap-1.5 font-medium text-sm">
+        <Building2 className="h-4 w-4 text-muted-foreground" />
+        <span>{r.buildingName || 'Main Building'}</span>
+      </div>
+    )},
+    { key: 'floorId', header: 'Floor', sortable: true, cell: (r: any) => (
+      <div className="flex items-center gap-1.5 text-sm">
+        <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+        <span>{r.floorName || (r.floorNumber !== undefined && r.floorNumber !== null ? `Floor ${r.floorNumber}` : (floorMap.get(r.floorId) ?? '—'))}</span>
+      </div>
+    )},
     { key: 'sharing', header: 'Sharing', sortable: true, cell: (r) => <span className="tabular-nums">{r.sharing ?? 1} share</span> },
     { key: 'beds', header: 'Beds', sortable: true, cell: (r) => {
       const total = r.beds || r.sharing || 1;
@@ -153,7 +170,8 @@ export default function RoomsPage() {
     { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
   ];
 
-  const floorFilterOptions = (floors ?? []).map((f) => ({ value: f.id, label: f.name }));
+  const buildingFilterOptions = (buildings ?? []).map((b) => ({ value: b.id, label: b.name }));
+  const floorFilterOptions = (floors ?? []).map((f) => ({ value: f.id, label: `${f.buildingName ? f.buildingName + ' • ' : ''}${f.name || 'Floor ' + f.floorNumber}` }));
 
   const queryClient = useQueryClient();
 
@@ -173,12 +191,13 @@ export default function RoomsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Rooms" description="Manage rooms, sharing types and amenities." icon={DoorOpen}
+      <PageHeader title="Rooms" description="Manage rooms, sharing types and building-floor allocations." icon={DoorOpen}
         actions={<Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" /> Add Room</Button>} />
-      <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search rooms..." exportFilename="rooms" initialSortBy="number"
+      <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search rooms, buildings, floors..." exportFilename="rooms" initialSortBy="number"
         filters={[
           { key: 'status', label: 'Status', options: statuses },
           { key: 'type', label: 'Type', options: roomTypes },
+          ...(buildingFilterOptions.length > 0 ? [{ key: 'buildingId', label: 'Building', options: buildingFilterOptions }] : []),
           ...(floorFilterOptions.length > 0 ? [{ key: 'floorId', label: 'Floor', options: floorFilterOptions }] : []),
         ]}
         rowActions={(row) => (
@@ -197,17 +216,18 @@ export default function RoomsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <FormInput label="Room Number" required id="number" value={form.values.number} onChange={(e) => form.setValue('number', e.target.value)} error={form.errors.number} />
           <div className="space-y-1.5">
-            <Label required>Floor</Label>
+            <Label required>Building & Floor</Label>
             <SearchableSelect
               options={(floors ?? []).map((f) => ({
                 value: f.id,
-                label: f.name,
-                sublabel: f.buildingName || `Level ${f.number || f.floorNumber || 1}`,
+                label: f.name || `Floor ${f.floorNumber || 1}`,
+                sublabel: f.buildingName || 'Main Building',
+                badge: f.buildingName || 'Building',
               }))}
               value={form.values.floorId}
               onChange={(v) => form.setValue('floorId', v)}
-              placeholder="Search & select floor..."
-              searchPlaceholder="Search floors..."
+              placeholder="Search & select building floor..."
+              searchPlaceholder="Search building & floor..."
             />
             {form.errors.floorId && <p className="text-xs text-destructive">{form.errors.floorId}</p>}
           </div>
@@ -215,8 +235,6 @@ export default function RoomsPage() {
           <FormInput label="Monthly Rent (₹)" type="number" id="rent" value={String(form.values.rent)} onChange={(e) => form.setValue('rent', Number(e.target.value))} />
           <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Room['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
           <FormInput label="Occupied Beds" type="number" id="occupied" value={String(form.values.occupied)} onChange={(e) => form.setValue('occupied', Number(e.target.value))} />
-          <FormInput label="Room Wi-Fi Name (SSID)" id="wifiSsid" placeholder={form.values.number ? `Room ${form.values.number}` : 'Room 101'} value={form.values.wifiSsid || ''} onChange={(e) => form.setValue('wifiSsid', e.target.value)} />
-          <FormInput label="Room Wi-Fi Password" id="wifiPassword" placeholder="e.g. Room202Pass" value={form.values.wifiPassword || ''} onChange={(e) => form.setValue('wifiPassword', e.target.value)} />
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Amenities</Label>
             <div className="flex flex-wrap gap-2 rounded-lg border p-3">

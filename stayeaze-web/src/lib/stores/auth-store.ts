@@ -55,28 +55,46 @@ export const useAuthStore = create<AuthState>()(
 
       async hydrate() {
         const token = localStorage.getItem('stayeaze_token');
+        const rawSession = localStorage.getItem('stayeaze_session');
+
+        // Optimistic recovery: render instantly from valid local storage
+        if (rawSession && token) {
+          try {
+            const parsed = JSON.parse(rawSession);
+            if (parsed.user) {
+              set({ user: parsed.user, token });
+            }
+          } catch (ignored) {}
+        }
+
         if (!token) {
-          authService.logout();
           set({ user: null, token: null });
           return;
         }
 
-        // Try to use the existing token first
-        const user = await authService.me();
-        if (user) {
-          set({ user, token });
-          return;
+        // Try to verify token and sync latest user profile
+        try {
+          const user = await authService.me();
+          if (user) {
+            set({ user, token });
+            return;
+          }
+        } catch (_meErr) {
+          // /users/me failed — attempt silent refresh
         }
 
-        // If /users/me failed (expired JWT), proactively try silent token refresh
+        // Proactively try silent token refresh via relative same-origin proxy
         try {
           const storedRefreshToken = localStorage.getItem('stayeaze_refresh_token');
           const { default: axios } = await import('axios');
+          const refreshEndpoint = (import.meta.env.VITE_API_URL || '/api/v1') + '/auth/refresh';
+
           const refreshRes = await axios.post(
-            (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1') + '/auth/refresh',
+            refreshEndpoint,
             { refreshToken: storedRefreshToken || undefined },
-            { withCredentials: true }
+            { withCredentials: true, timeout: 10000 }
           );
+
           const newAccessToken = refreshRes.data?.accessToken || refreshRes.data?.token;
           const newRefreshToken = refreshRes.data?.refreshToken;
           if (newAccessToken) {
@@ -91,13 +109,17 @@ export const useAuthStore = create<AuthState>()(
               return;
             }
           }
-        } catch (_refreshErr) {
-          // Silent refresh failed — session is truly dead
-        }
+        } catch (refreshErr: any) {
+          const isExplicitAuthFailure =
+            refreshErr?.response?.status === 401 ||
+            refreshErr?.response?.status === 403;
 
-        // Refresh also failed — clear everything
-        authService.logout();
-        set({ user: null, token: null });
+          // Only purge if backend explicitly rejected credentials as invalid
+          if (isExplicitAuthFailure) {
+            authService.logout();
+            set({ user: null, token: null });
+          }
+        }
       },
 
       logout() {
@@ -115,3 +137,20 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+// Listen to multi-tab storage updates
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'stayeaze_token' && event.newValue) {
+      const rawSession = localStorage.getItem('stayeaze_session');
+      if (rawSession) {
+        try {
+          const parsed = JSON.parse(rawSession);
+          if (parsed.user) {
+            useAuthStore.setState({ user: parsed.user, token: event.newValue });
+          }
+        } catch (ignored) {}
+      }
+    }
+  });
+}

@@ -30,6 +30,7 @@ public class SaaSInvoiceSummaryDTO implements Serializable {
     private OffsetDateTime invoiceDate;
     private OffsetDateTime dueDate;
     private OffsetDateTime createdAt;
+    private String transactionId;
 
     public SaaSInvoiceSummaryDTO() {}
 
@@ -55,8 +56,12 @@ public class SaaSInvoiceSummaryDTO implements Serializable {
         dto.setInvoiceDate(invoice.getInvoiceDate());
         dto.setDueDate(invoice.getDueDate());
         dto.setCreatedAt(invoice.getCreatedAt());
+        dto.setTransactionId(invoice.getTransactionId());
         return dto;
     }
+
+    public String getTransactionId() { return transactionId; }
+    public void setTransactionId(String transactionId) { this.transactionId = transactionId; }
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }

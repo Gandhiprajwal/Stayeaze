@@ -21,6 +21,8 @@ public class FloorDTO implements Serializable {
     private Integer number;
     private String name;
     private String status;
+    private String wifiSsid;
+    private String wifiPassword;
     private int rooms;
     private int beds;
     private int occupied;
@@ -33,7 +35,7 @@ public class FloorDTO implements Serializable {
         dto.setId(f.getId());
         dto.setFloorNumber(f.getFloorNumber());
         dto.setNumber(f.getFloorNumber());
-        dto.setName(f.getFloorNumber() != null ? "Floor " + f.getFloorNumber() : "Floor");
+        dto.setName(f.getName() != null && !f.getName().isBlank() ? f.getName() : (f.getFloorNumber() != null ? "Floor " + f.getFloorNumber() : "Floor"));
         dto.setStatus(f.getStatus() != null ? f.getStatus() : "ACTIVE");
         dto.setRooms(f.getRooms() != null ? f.getRooms() : 0);
         dto.setBeds(f.getBeds() != null ? f.getBeds() : 0);

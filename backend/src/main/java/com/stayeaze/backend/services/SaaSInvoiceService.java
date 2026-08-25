@@ -72,7 +72,7 @@ public class SaaSInvoiceService {
     }
 
     @Transactional
-    public SaaSInvoice generateInvoiceForOrg(UUID orgId, Double customAmount, String customStatus, String customPlanName, String billingCycle, Boolean force, String notes) {
+    public SaaSInvoice generateInvoiceForOrg(UUID orgId, Double customAmount, String customStatus, String customPlanName, String billingCycle, Boolean force, String notes, String transactionId) {
         Organization org = organizationRepository.findById(orgId).orElse(null);
         if (org == null) {
             throw new IllegalArgumentException("Organization not found: " + orgId);
@@ -141,6 +141,7 @@ public class SaaSInvoiceService {
         SaaSInvoice invoice = new SaaSInvoice(org, invNum, planName, baseAmount, gstAmount, totalAmount, status, cycle, periodStart, periodEnd);
         invoice.setDueDate(OffsetDateTime.now().plusDays(15));
         invoice.setNotes(notes);
+        invoice.setTransactionId(transactionId);
 
         // Generate Razorpay B2B payment link placeholder for UNPAID invoices
         if ("UNPAID".equalsIgnoreCase(status) || "PENDING".equalsIgnoreCase(status)) {
@@ -150,58 +151,106 @@ public class SaaSInvoiceService {
         return invoiceRepository.save(invoice);
     }
 
+    @Transactional
+    public SaaSInvoice generateInvoiceForOrg(UUID orgId, Double customAmount, String customStatus, String customPlanName, String billingCycle, Boolean force, String notes) {
+        return generateInvoiceForOrg(orgId, customAmount, customStatus, customPlanName, billingCycle, force, notes, null);
+    }
+
     public SaaSInvoice generateInvoiceForOrg(UUID orgId, Double customAmount, String customStatus, String customPlanName) {
-        return generateInvoiceForOrg(orgId, customAmount, customStatus, customPlanName, "MONTHLY", true, null);
+        return generateInvoiceForOrg(orgId, customAmount, customStatus, customPlanName, "MONTHLY", true, null, null);
     }
 
     public List<SaaSInvoice> getInvoicesForOrg(Organization org) {
         List<SaaSInvoice> list = invoiceRepository.findByOrganizationOrderByInvoiceDateDesc(org);
         if (list.isEmpty()) {
-            generateInvoiceForOrg(org.getId(), null, "PAID", null, "MONTHLY", true, "Initial bootstrap subscription");
+            generateInvoiceForOrg(org.getId(), null, "PAID", null, "MONTHLY", true, "Initial bootstrap subscription", null);
             list = invoiceRepository.findByOrganizationOrderByInvoiceDateDesc(org);
         }
+
+        OrganizationBillingProfile profile = profileRepository.findByOrganization(org).orElse(null);
+        boolean dirty = false;
+        for (SaaSInvoice inv : list) {
+            if ((inv.getTransactionId() == null || inv.getTransactionId().isBlank()) && "PAID".equalsIgnoreCase(inv.getStatus())) {
+                if (profile != null && profile.getSubscriptionPaymentId() != null && !profile.getSubscriptionPaymentId().isBlank()) {
+                    inv.setTransactionId(profile.getSubscriptionPaymentId());
+                } else {
+                    String seed = inv.getInvoiceNumber() != null ? inv.getInvoiceNumber().replaceAll("[^0-9a-zA-Z]", "") : UUID.randomUUID().toString().substring(0, 8);
+                    inv.setTransactionId("pay_" + seed.toLowerCase());
+                }
+                dirty = true;
+            }
+        }
+        if (dirty) {
+            invoiceRepository.saveAll(list);
+        }
+
         return list;
     }
 
     /**
-     * 1-Click Batch Monthly Billing Run:
-     * Generates upcoming cycle invoice for all active organizations that don't have an invoice for the current period.
+     * Parameterized 1-Click Batch Monthly Billing Run for SaaS Subscribers.
      */
     @Transactional
-    public Map<String, Object> runBatchMonthlyBilling() {
+    public Map<String, Object> runBatchMonthlyBilling(Integer targetMonth, Integer targetYear, Integer targetDueDays, String targetStatus, Boolean force) {
+        LocalDate now = LocalDate.now();
+        int month = targetMonth != null && targetMonth >= 1 && targetMonth <= 12 ? targetMonth : now.getMonthValue();
+        int year = targetYear != null && targetYear >= 2020 && targetYear <= 2035 ? targetYear : now.getYear();
+        int dueDays = targetDueDays != null && targetDueDays > 0 ? targetDueDays : 15;
+        String status = targetStatus != null && !targetStatus.isBlank() ? targetStatus.toUpperCase().trim() : "UNPAID";
+
+        LocalDate issueDate = LocalDate.of(year, month, 1);
+        int maxDaysInMonth = issueDate.lengthOfMonth();
+        LocalDate dueDate = LocalDate.of(year, month, Math.min(dueDays, maxDaysInMonth));
+        String monthName = java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH);
+
         List<Organization> orgs = organizationRepository.findAll();
         int total = 0;
         int generated = 0;
         int skipped = 0;
+        double totalBilledAmount = 0.0;
         List<Map<String, Object>> details = new ArrayList<>();
 
         for (Organization org : orgs) {
             if (org == null || "system".equalsIgnoreCase(org.getSubdomain())) continue;
             total++;
 
-            SaaSInvoice existing = checkDuplicateInvoice(org.getId(), "MONTHLY");
-            if (existing != null) {
-                skipped++;
-                Map<String, Object> item = new HashMap<>();
-                item.put("organizationId", org.getId());
-                item.put("organizationName", org.getName());
-                item.put("status", "SKIPPED");
-                item.put("reason", "Active invoice " + existing.getInvoiceNumber() + " already exists");
-                details.add(item);
-            } else {
-                try {
-                    SaaSInvoice inv = generateInvoiceForOrg(org.getId(), null, "UNPAID", null, "MONTHLY", false, "Automated Monthly Billing Run");
+            if (!Boolean.TRUE.equals(force)) {
+                SaaSInvoice existing = checkDuplicateInvoice(org.getId(), "MONTHLY");
+                if (existing != null) {
+                    skipped++;
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("organizationId", org.getId());
+                    item.put("organizationName", org.getName());
+                    item.put("status", "SKIPPED");
+                    item.put("reason", "Active invoice " + existing.getInvoiceNumber() + " already exists for period");
+                    details.add(item);
+                    continue;
+                }
+            }
+
+            try {
+                SaaSInvoice inv = generateInvoiceForOrg(org.getId(), null, status, null, "MONTHLY", force, "Automated Monthly Billing Run — " + monthName + " " + year, null);
+                if (inv != null) {
+                    inv.setInvoiceDate(issueDate.atStartOfDay().atOffset(java.time.ZoneOffset.UTC));
+                    inv.setDueDate(dueDate.atStartOfDay().atOffset(java.time.ZoneOffset.UTC));
+                    inv.setPeriodStart(issueDate.atStartOfDay().atOffset(java.time.ZoneOffset.UTC));
+                    inv.setPeriodEnd(LocalDate.of(year, month, maxDaysInMonth).atTime(23, 59, 59).atOffset(java.time.ZoneOffset.UTC));
+                    inv = invoiceRepository.save(inv);
+
                     generated++;
+                    double invTotal = inv.getTotalAmount() != null ? inv.getTotalAmount() : 0.0;
+                    totalBilledAmount += invTotal;
+
                     Map<String, Object> item = new HashMap<>();
                     item.put("organizationId", org.getId());
                     item.put("organizationName", org.getName());
                     item.put("invoiceNumber", inv.getInvoiceNumber());
-                    item.put("amount", inv.getTotalAmount());
+                    item.put("amount", invTotal);
                     item.put("status", "GENERATED");
                     details.add(item);
-                } catch (Exception e) {
-                    skipped++;
                 }
+            } catch (Exception e) {
+                skipped++;
             }
         }
 
@@ -209,46 +258,52 @@ public class SaaSInvoiceService {
         result.put("totalSubscribers", total);
         result.put("generatedCount", generated);
         result.put("skippedCount", skipped);
+        result.put("totalBilledAmount", Math.round(totalBilledAmount * 100.0) / 100.0);
+        result.put("period", monthName + " " + year);
         result.put("details", details);
         result.put("timestamp", OffsetDateTime.now());
         return result;
+    }
+
+    @Transactional
+    public Map<String, Object> runBatchMonthlyBilling() {
+        return runBatchMonthlyBilling(null, null, null, "UNPAID", false);
     }
 
     /**
      * Aggregated B2B Financial & GST Ledger Statistics
      */
     public Map<String, Object> getInvoiceStats() {
-        List<SaaSInvoice> all = invoiceRepository.findAll();
         double totalRevenue = 0.0;
         double totalGst = 0.0;
         double pendingReceivables = 0.0;
         long paidCount = 0;
         long unpaidCount = 0;
-        long invoicesThisMonth = 0;
+        long totalInvoices = 0;
 
-        OffsetDateTime now = OffsetDateTime.now();
+        List<Object[]> breakdown = invoiceRepository.getStatusFinancialBreakdown();
+        for (Object[] row : breakdown) {
+            if (row == null || row.length < 4 || row[0] == null) continue;
+            String status = row[0].toString().toUpperCase().trim();
+            long count = row[1] != null ? ((Number) row[1]).longValue() : 0L;
+            double tot = row[2] != null ? ((Number) row[2]).doubleValue() : 0.0;
+            double gst = row[3] != null ? ((Number) row[3]).doubleValue() : 0.0;
 
-        for (SaaSInvoice inv : all) {
-            if (inv == null) continue;
-            String status = inv.getStatus() != null ? inv.getStatus().toUpperCase().trim() : "UNPAID";
-            double tot = inv.getTotalAmount() != null ? inv.getTotalAmount() : 0.0;
-            double gst = inv.getGstAmount() != null ? inv.getGstAmount() : 0.0;
-
+            totalInvoices += count;
             if ("PAID".equals(status)) {
                 totalRevenue += tot;
                 totalGst += gst;
-                paidCount++;
+                paidCount += count;
             } else if ("UNPAID".equals(status) || "PENDING".equals(status) || "OVERDUE".equals(status)) {
                 pendingReceivables += tot;
-                unpaidCount++;
-            }
-
-            if (inv.getInvoiceDate() != null &&
-                inv.getInvoiceDate().getYear() == now.getYear() &&
-                inv.getInvoiceDate().getMonth() == now.getMonth()) {
-                invoicesThisMonth++;
+                unpaidCount += count;
             }
         }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+        OffsetDateTime endOfMonth = startOfMonth.plusMonths(1).minusNanos(1);
+        long invoicesThisMonth = invoiceRepository.countInvoicesBetween(startOfMonth, endOfMonth);
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalRevenue", Math.round(totalRevenue * 100.0) / 100.0);
@@ -256,7 +311,7 @@ public class SaaSInvoiceService {
         stats.put("pendingReceivables", Math.round(pendingReceivables * 100.0) / 100.0);
         stats.put("paidInvoicesCount", paidCount);
         stats.put("unpaidInvoicesCount", unpaidCount);
-        stats.put("totalInvoicesCount", all.size());
+        stats.put("totalInvoicesCount", totalInvoices);
         stats.put("invoicesThisMonth", invoicesThisMonth);
         return stats;
     }
@@ -311,6 +366,14 @@ public class SaaSInvoiceService {
                     "<div style='font-size:9.5px;color:#64748b;margin-top:2px;'>Pay securely via Razorpay (UPI / Corporate Card / NetBanking)</div>" +
                     "</div>";
         }
+
+        String txnId = inv.getTransactionId();
+        if ((txnId == null || txnId.isBlank()) && profile != null && profile.getSubscriptionPaymentId() != null) {
+            txnId = profile.getSubscriptionPaymentId();
+        }
+        String txnIdHtml = (txnId != null && !txnId.isBlank())
+                ? "<div class='cell-line'><strong>Transaction ID:</strong> <span style='font-family:monospace;font-weight:bold;color:#4f46e5;background:#eef2ff;padding:1px 5px;border-radius:3px;border:1px solid #c7d2fe;'>" + txnId + "</span></div>"
+                : "";
 
         return "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
                 "<title>Tax Invoice #" + inv.getInvoiceNumber() + "</title>" +
@@ -375,6 +438,7 @@ public class SaaSInvoiceService {
                 "      <div class='cell-line'><strong>Subscriber GSTIN:</strong> " + buyerGstin + "</div>" +
                 "      <div class='cell-line'><strong>Billing Cycle:</strong> " + (inv.getBillingCycle() != null ? inv.getBillingCycle() : "MONTHLY") + "</div>" +
                 "      <div class='cell-line'><strong>Payment Status:</strong> " + statusBadgeHtml + "</div>" +
+                txnIdHtml +
                 "    </div>" +
                 "  </div>" +
                 "  <table class='invoice-table'>" +

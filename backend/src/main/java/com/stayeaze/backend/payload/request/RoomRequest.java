@@ -80,20 +80,4 @@ public class RoomRequest {
     public void setAmenities(List<String> amenities) {
         this.amenities = amenities;
     }
-
-    public String getWifiSsid() {
-        return wifiSsid;
-    }
-
-    public void setWifiSsid(String wifiSsid) {
-        this.wifiSsid = wifiSsid;
-    }
-
-    public String getWifiPassword() {
-        return wifiPassword;
-    }
-
-    public void setWifiPassword(String wifiPassword) {
-        this.wifiPassword = wifiPassword;
-    }
 }

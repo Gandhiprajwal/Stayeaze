@@ -45,4 +45,10 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID> {
 
     @org.springframework.data.jpa.repository.Query("SELECT COUNT(t) FROM Tenant t WHERE t.propertyId = :propertyId AND UPPER(t.status) = UPPER(:status)")
     long countByPropertyIdAndStatus(@org.springframework.data.repository.query.Param("propertyId") UUID propertyId, @org.springframework.data.repository.query.Param("status") String status);
+
+    @org.springframework.data.jpa.repository.Query(value = "SELECT * FROM tenants WHERE property_id = :propertyId AND room_number = :roomNumber", nativeQuery = true)
+    List<Tenant> findByPropertyIdAndRoomNumberNative(@org.springframework.data.repository.query.Param("propertyId") UUID propertyId, @org.springframework.data.repository.query.Param("roomNumber") String roomNumber);
+
+    List<Tenant> findByPropertyId(UUID propertyId);
+    List<Tenant> findByPropertyIdAndRoomNumber(UUID propertyId, String roomNumber);
 }

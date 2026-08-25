@@ -81,6 +81,9 @@ public class AuthController {
     com.stayeaze.backend.repository.OrganizationBillingProfileRepository organizationBillingProfileRepository;
 
     @Autowired
+    private com.stayeaze.backend.services.SubscriptionEnforcementService subscriptionEnforcementService;
+
+    @Autowired
     com.stayeaze.backend.repository.SystemConfigRepository systemConfigRepository;
 
     @Autowired
@@ -314,6 +317,24 @@ public class AuthController {
                 if ("REJECTED".equals(orgStatus)) {
                     userJourneyAuditService.logAuth(email, org, u, "LOGIN_BLOCKED", "WARNING", Map.of("reason", "Application declined"), request);
                     return ResponseEntity.status(403).body(new MessageResponse("Your organization registration application was declined. Please contact support."));
+                }
+
+                // Stage 2: Post-Grace Period Lockdown — Only OWNER & ADMIN permitted to log in to renew
+                if (org != null) {
+                    boolean isSuperAdmin = u.getRoles() != null && u.getRoles().stream().anyMatch(r ->
+                            r.getName() != null && (r.getName().equalsIgnoreCase("SUPER_ADMIN") || r.getName().equalsIgnoreCase("ROLE_SUPER_ADMIN")));
+
+                    if (!isSuperAdmin && subscriptionEnforcementService.isPostGraceLockout(org)) {
+                        boolean isOwnerOrAdmin = u.getRoles() != null && u.getRoles().stream().anyMatch(r ->
+                                r.getName() != null && (
+                                        r.getName().equalsIgnoreCase("OWNER") || r.getName().equalsIgnoreCase("ROLE_OWNER") ||
+                                        r.getName().equalsIgnoreCase("ADMIN") || r.getName().equalsIgnoreCase("ROLE_ADMIN")));
+
+                        if (!isOwnerOrAdmin) {
+                            userJourneyAuditService.logAuth(email, org, u, "LOGIN_BLOCKED", "WARNING", Map.of("reason", "Grace period expired; non-admin login locked"), request);
+                            return ResponseEntity.status(403).body(new MessageResponse("Your organization workspace subscription has ended and the grace period has expired. Only the Workspace Administrator can log in to renew. Please contact your owner/admin."));
+                        }
+                    }
                 }
             }
 

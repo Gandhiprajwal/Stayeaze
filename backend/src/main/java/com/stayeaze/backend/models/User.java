@@ -78,6 +78,7 @@ public class User {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "user_properties", joinColumns = @JoinColumn(name = "user_id"))
     @Column(name = "property_id")
+    @org.hibernate.annotations.BatchSize(size = 50)
     @JsonIgnore
     private List<UUID> propertyIds = new ArrayList<>();
 
@@ -85,6 +86,7 @@ public class User {
     @JoinTable(name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id"))
+    @org.hibernate.annotations.BatchSize(size = 50)
     private Set<Role> roles = new HashSet<>();
 
     @JsonIgnore

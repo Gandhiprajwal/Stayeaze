@@ -58,4 +58,7 @@ public interface OrganizationRepository extends JpaRepository<Organization, UUID
 
     @Query("SELECT COUNT(o) FROM Organization o WHERE LOWER(o.subdomain) <> 'system' AND UPPER(o.status) = UPPER(:status)")
     long countNonSystemOrganizationsByStatus(@Param("status") String status);
+
+    @Query("SELECT UPPER(o.status), COUNT(o) FROM Organization o WHERE LOWER(o.subdomain) <> 'system' GROUP BY UPPER(o.status)")
+    java.util.List<Object[]> countOrganizationsByStatusGrouped();
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Plus, Pencil, Trash2, Eye, Phone, Mail, LogOut, CreditCard, Zap, Wallet, Calendar, QrCode, KeyRound, ShieldCheck, CheckCircle2, Copy, Printer, ExternalLink, Check, Archive, RotateCcw, FileSpreadsheet, UserPlus } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, Eye, Phone, Mail, LogOut, CreditCard, Zap, Wallet, Calendar, QrCode, KeyRound, ShieldCheck, CheckCircle2, Copy, Printer, ExternalLink, Check, Archive, RotateCcw, FileSpreadsheet, UserPlus, Sparkles } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
@@ -18,6 +18,7 @@ import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { RoomSelect } from '@/components/common/RoomSelect';
 import { BulkImportTenantsModal } from './BulkImportTenantsModal';
 import { QuickAddTenantModal } from './QuickAddTenantModal';
+import { Tenant360Drawer } from './Tenant360Drawer';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -68,6 +69,7 @@ export default function TenantsPage() {
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [drawerTenantId, setDrawerTenantId] = useState<string | null>(null);
 
   // Fetch properties for dropdown
   const { data: properties } = useQuery({
@@ -649,7 +651,7 @@ export default function TenantsPage() {
           { key: 'gender', label: 'Gender', options: genders },
           ...(propertyFilterOptions.length > 0 ? [{ key: 'propertyId', label: 'Property', options: propertyFilterOptions }] : []),
         ]}
-        onRowClick={(row) => navigate(`/tenants/${row.id}`)}
+        onRowClick={(row) => setDrawerTenantId(row.id)}
         rowActions={(row) => {
           const isArchived = row.status?.toLowerCase() === 'archived';
           const isPendingCheckin = row.status?.toLowerCase() === 'pending_checkin';
@@ -661,6 +663,7 @@ export default function TenantsPage() {
               className="w-64"
               items={[
                 // 1. Primary Actions
+                { label: 'Quick 360 View', icon: Sparkles, onSelect: () => setDrawerTenantId(row.id) },
                 { label: 'View Profile', icon: Eye, onSelect: () => navigate(`/tenants/${row.id}`) },
                 { label: 'Edit Details', icon: Pencil, onSelect: () => openEdit(row) },
 
@@ -1057,6 +1060,13 @@ export default function TenantsPage() {
         properties={properties || []}
         rooms={allRooms || []}
         beds={bedsForRoom || []}
+      />
+
+      {/* Instant 360 Resident Slide-Out Drawer */}
+      <Tenant360Drawer
+        tenantId={drawerTenantId}
+        open={Boolean(drawerTenantId)}
+        onOpenChange={(open) => !open && setDrawerTenantId(null)}
       />
     </div>
   );

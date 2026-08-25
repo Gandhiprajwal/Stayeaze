@@ -7,7 +7,6 @@ import { DataTable, type Column } from '@/components/common/DataTable';
 import { StatusBadge, statusTone } from '@/components/common/StatusBadge';
 import { RowActions } from '@/components/common/RowActions';
 import { FormDialog } from '@/components/common/FormDialog';
-import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { DestructiveActionModal } from '@/components/common/DestructiveActionModal';
 import { FormInput } from '@/components/common/FormField';
 import { Button } from '@/components/ui/button';
@@ -17,10 +16,9 @@ import {
 import { Label } from '@/components/ui/label';
 
 import type { Property } from '@/lib/types';
-import { formatCurrency, formatDate, occupancyRate } from '@/lib/format';
+import { occupancyRate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 import { useAuthStore } from '@/lib/stores/auth-store';
-import { toast } from 'sonner';
 import { StateCityPincodeSelector } from '@/components/common/StateCityPincodeSelector';
 
 const ENDPOINT = '/properties';
@@ -50,7 +48,7 @@ export default function PropertiesPage() {
   const [editing, setEditing] = useState<Property | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Property | null>(null);
   const currentUser = useAuthStore((s) => s.user);
-  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+  const canManage = currentUser?.role === 'OWNER' || currentUser?.role === 'ADMIN' || currentUser?.role === 'PROPERTY_MANAGER';
 
   const createMut = useCreate<Property>(ENDPOINT, 'Property');
   const updateMut = useUpdate<Property>(ENDPOINT, 'Property');
@@ -83,11 +81,6 @@ export default function PropertiesPage() {
       code: (v: any) => !v ? 'Code is required' : undefined,
       city: (v: any) => !v ? 'City is required' : undefined,
     };
-    if (!editing && isSuperAdmin) {
-      rules.orgName = (v: any) => !v ? 'Org Name is required' : undefined;
-      rules.orgSubdomain = (v: any) => !v ? 'Subdomain is required' : undefined;
-      rules.ownerEmail = (v: any) => !v ? 'Owner Email is required' : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(v)) ? 'Invalid email' : undefined;
-    }
     if (!form.validate(rules)) return;
 
     const payload = {
@@ -98,55 +91,43 @@ export default function PropertiesPage() {
       occupiedBeds: editing?.occupiedBeds ?? 0,
       createdAt: editing?.createdAt ?? new Date().toISOString(),
     };
+
     if (editing) {
-      updateMut.mutate({ id: editing.id, payload }, { onSuccess: () => setDialogOpen(false) });
+      updateMut.mutate({ id: editing.id, payload }, {
+        onSuccess: () => setDialogOpen(false),
+      });
     } else {
       createMut.mutate(payload, {
-        onSuccess: (data: any) => {
-          setDialogOpen(false);
-          if (isSuperAdmin && data.ownerEmail) {
-            alert(`🎉 Property & Owner Account Created Successfully!\n\nOwner Account Credentials:\nEmail: ${data.ownerEmail}\nPassword: ${data.ownerPassword || 'owner123'}\n\nPlease share these credentials with the owner.`);
-            toast.success(`Owner account created for ${data.ownerEmail}`);
-          }
-        }
+        onSuccess: () => setDialogOpen(false),
       });
     }
   }
 
-  function confirmDelete() {
-    if (!deleteTarget) return;
-    deleteMut.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) });
-  }
-
   const columns: Column<Property>[] = [
     { key: 'name', header: 'Property', sortable: true, cell: (r) => (
-      <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Hotel className="h-4.5 w-4.5 h-5 w-5" />
-        </div>
-        <div>
-          <p className="font-medium">{r.name}</p>
-          <p className="text-xs text-muted-foreground">{r.code || 'PROP'} · {(r.type || 'CO_LIVING').replace('_', '-')}</p>
-        </div>
-      </div>
-    )},
-    { key: 'city', header: 'Location', sortable: true, cell: (r) => (
       <div>
-        <p className="text-sm">{r.city}</p>
-        <p className="text-xs text-muted-foreground">{r.state}</p>
+        <span className="font-semibold text-foreground hover:underline cursor-pointer" onClick={() => navigate(`/properties/${r.id}`)}>
+          {r.name || 'Unnamed Property'}
+        </span>
+        {r.code && <span className="ml-2 font-mono text-xs text-muted-foreground">({r.code})</span>}
       </div>
     )},
-    { key: 'manager', header: 'Manager', cell: (r) => (
-      <div>
-        <p className="text-sm">{r.manager}</p>
-        <p className="text-xs text-muted-foreground">{r.phone}</p>
-      </div>
+    { key: 'type', header: 'Type', sortable: true, cell: (r) => (
+      <span className="text-xs uppercase font-medium">{r.type ? String(r.type).replace(/_/g, ' ') : 'PG'}</span>
     )},
-    { key: 'occupiedBeds', header: 'Occupancy', sortable: true, cell: (r) => {
+    { key: 'city', header: 'City', sortable: true, cell: (r) => r.city || r.address || '—' },
+    { key: 'totalBuildings', header: 'Buildings', sortable: true, cell: (r) => {
+      const buildings = r.totalBuildings ?? 0;
+      if (buildings === 0) {
+        return <span className="text-xs text-muted-foreground">—</span>;
+      }
+      return <span className="tabular-nums font-semibold">{buildings}</span>;
+    }},
+    { key: 'totalBeds', header: 'Occupancy', sortable: true, cell: (r) => {
       const total = r.totalBeds ?? 0;
       const occupied = r.occupiedBeds ?? 0;
       if (total === 0) {
-        return <span className="text-xs text-muted-foreground">—</span>;
+        return <span className="text-xs text-muted-foreground">No beds added</span>;
       }
       const rate = occupancyRate(occupied, total);
       return (
@@ -177,6 +158,13 @@ export default function PropertiesPage() {
         title="Properties"
         description="Manage your PG, hostel and co-living properties."
         icon={Hotel}
+        actions={
+          canManage && (
+            <Button onClick={openCreate} className="font-bold gap-2 text-xs shadow-xs">
+              <Plus className="h-4 w-4" /> Add Property
+            </Button>
+          )
+        }
       />
       <DataTable
         endpoint={ENDPOINT}
@@ -193,7 +181,7 @@ export default function PropertiesPage() {
           const items = [
             { label: 'View', icon: Eye, onSelect: () => navigate(`/properties/${row.id}`) }
           ];
-          if (isSuperAdmin) {
+          if (canManage) {
             items.push(
               { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
               { label: 'Delete', icon: Trash2, onSelect: () => setDeleteTarget(row) }
@@ -220,18 +208,31 @@ export default function PropertiesPage() {
             <Label>Property Type</Label>
             <Select value={form.values.type} onValueChange={(v) => form.setValue('type', v as Property['type'])}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{propertyTypes.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+              <SelectContent>
+                {propertyTypes.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Status</Label>
             <Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Property['status'])}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{propertyStatuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+              <SelectContent>
+                {propertyStatuses.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
-
-          <FormInput label="Address" id="address" className="sm:col-span-2" value={form.values.address} onChange={(e) => form.setValue('address', e.target.value)} />
+          <FormInput label="Manager Name" id="manager" value={form.values.manager} onChange={(e) => form.setValue('manager', e.target.value)} />
+          <FormInput label="Phone" id="phone" value={form.values.phone} onChange={(e) => form.setValue('phone', e.target.value)} />
+          <FormInput label="Email" id="email" type="email" value={form.values.email} onChange={(e) => form.setValue('email', e.target.value)} />
+          <FormInput label="Default Security Deposit (₹)" id="securityDeposit" type="number" value={form.values.securityDeposit} onChange={(e) => form.setValue('securityDeposit', Number(e.target.value))} />
+          <div className="sm:col-span-2">
+            <FormInput label="Address" id="address" value={form.values.address} onChange={(e) => form.setValue('address', e.target.value)} />
+          </div>
           <div className="sm:col-span-2">
             <StateCityPincodeSelector
               state={form.values.state}
@@ -242,89 +243,36 @@ export default function PropertiesPage() {
               onPincodeChange={(v) => form.setValue('pincode', v)}
             />
           </div>
-          <FormInput label="Manager" id="manager" value={form.values.manager} onChange={(e) => form.setValue('manager', e.target.value)} />
-          <FormInput label="Phone" id="phone" value={form.values.phone} onChange={(e) => form.setValue('phone', e.target.value)} />
-          <FormInput label="Email" type="email" id="email" value={form.values.email} onChange={(e) => form.setValue('email', e.target.value)} />
-          <FormInput
-            label="Refundable Security Deposit (₹)"
-            type="number"
-            id="securityDeposit"
-            value={form.values.securityDeposit ?? 0}
-            onChange={(e) => form.setValue('securityDeposit', Number(e.target.value))}
-            placeholder="e.g. 5000"
-          />
-          {!isSuperAdmin ? (
-            <>
-              <div className="sm:col-span-2 border-t pt-3 mt-1">
-                <h4 className="font-semibold text-xs text-primary flex items-center gap-1.5 uppercase tracking-wider">
-                  <CreditCard className="h-3.5 w-3.5 text-primary" /> Property Razorpay Gateway Credentials
-                </h4>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Enter unique Razorpay API credentials for this property. Tenant rent payments for this property will be processed using this account.
-                </p>
-              </div>
-              <FormInput
-                label="Razorpay Key ID"
-                id="razorpayKeyId"
-                value={form.values.razorpayKeyId}
-                onChange={(e) => form.setValue('razorpayKeyId', e.target.value)}
-                placeholder="rzp_live_... / rzp_test_..."
-              />
-              <FormInput
-                label="Razorpay Key Secret"
-                type="password"
-                id="razorpayKeySecret"
-                value={form.values.razorpayKeySecret}
-                onChange={(e) => form.setValue('razorpayKeySecret', e.target.value)}
-                placeholder={editing?.hasRazorpaySecret ? "•••••••• (Saved in DB - leave blank to keep)" : "Enter Razorpay Key Secret"}
-              />
-            </>
-          ) : (
-            <div className="sm:col-span-2 border-t pt-3 mt-1">
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-amber-600 dark:text-amber-400 text-xs flex items-start gap-2.5">
-                <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold block text-amber-700 dark:text-amber-300">Security & Gateway Management Policy</span>
-                  Razorpay API Key & Secret credentials cannot be updated by Super Admin. For security & compliance, credentials must be uploaded directly by the Property Owner or Property Manager from their dashboard settings.
-                </div>
-              </div>
+
+          {/* Payment gateway settings */}
+          <div className="sm:col-span-2 mt-2 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-emerald-500" />
+              <h4 className="text-sm font-bold">Property Payment Gateway (Razorpay)</h4>
             </div>
-          )}
-          {!editing && isSuperAdmin && (
-            <>
-              <div className="sm:col-span-2 border-t pt-4 my-2">
-                <h4 className="font-semibold text-sm text-primary">Owner & Organization Details</h4>
-                <p className="text-xs text-muted-foreground">Specify the details for the new tenant organization and owner credentials.</p>
-              </div>
-              <FormInput label="Organization Name" required id="orgName" value={form.values.orgName} onChange={(e) => form.setValue('orgName', e.target.value)} error={form.errors.orgName} />
-              <FormInput label="Organization Subdomain" required id="orgSubdomain" value={form.values.orgSubdomain} onChange={(e) => form.setValue('orgSubdomain', e.target.value.toLowerCase())} error={form.errors.orgSubdomain} placeholder="e.g. greenwood" />
-              <FormInput label="Owner Email" required type="email" id="ownerEmail" value={form.values.ownerEmail} onChange={(e) => form.setValue('ownerEmail', e.target.value)} error={form.errors.ownerEmail} />
-              <FormInput label="Owner Phone" id="ownerPhone" value={form.values.ownerPhone} onChange={(e) => form.setValue('ownerPhone', e.target.value)} />
-              <FormInput label="Owner Password" type="password" id="ownerPassword" value={form.values.ownerPassword} onChange={(e) => form.setValue('ownerPassword', e.target.value)} placeholder="default: owner123" />
-            </>
-          )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormInput label="Razorpay Key ID" id="razorpayKeyId" value={form.values.razorpayKeyId} onChange={(e) => form.setValue('razorpayKeyId', e.target.value)} placeholder="rzp_live_..." />
+              <FormInput label="Razorpay Key Secret" id="razorpayKeySecret" type="password" value={form.values.razorpayKeySecret} onChange={(e) => form.setValue('razorpayKeySecret', e.target.value)} />
+            </div>
+          </div>
         </div>
       </FormDialog>
 
       <DestructiveActionModal
-        open={!!deleteTarget}
-        onOpenChange={(o) => !o && setDeleteTarget(null)}
-        title="Permanently Delete Property Branch"
-        description={`You are about to irreversibly delete "${deleteTarget?.name}" (${deleteTarget?.code}). This cannot be undone.`}
-        typeToConfirm={deleteTarget?.code || deleteTarget?.name}
-        consequences={[
-          'All buildings, floors, rooms, and bed inventory configurations in this property will be permanently deleted.',
-          'Active tenant assignments and room allocations for this branch will be detached.',
-          'Rent invoice history and security deposit ledger entries for this branch will be permanently unlinked.',
-        ]}
-        confirmLabel="Permanently Delete Property"
-        variant="danger"
-        onConfirm={confirmDelete}
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deleteMut.mutateAsync(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        title="Delete Property"
+        description="Are you sure you want to delete this property? All associated buildings, floors, rooms, beds, and tenant data will be permanently removed."
+        typeToConfirm={deleteTarget?.name || ''}
+        confirmLabel="Delete Property"
         loading={deleteMut.isPending}
       />
     </div>
   );
 }
-
-void formatCurrency;
-void formatDate;

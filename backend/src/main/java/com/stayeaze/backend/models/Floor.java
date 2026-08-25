@@ -23,12 +23,6 @@ public class Floor {
     @Column(length = 100)
     private String name;
 
-    @Column(name = "wifi_ssid", length = 150)
-    private String wifiSsid;
-
-    @Column(name = "wifi_password", length = 150)
-    private String wifiPassword;
-
     @Column(length = 50)
     private String status = "ACTIVE"; // ACTIVE, MAINTENANCE
 
@@ -96,22 +90,6 @@ public class Floor {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getWifiSsid() {
-        return wifiSsid;
-    }
-
-    public void setWifiSsid(String wifiSsid) {
-        this.wifiSsid = wifiSsid;
-    }
-
-    public String getWifiPassword() {
-        return wifiPassword;
-    }
-
-    public void setWifiPassword(String wifiPassword) {
-        this.wifiPassword = wifiPassword;
     }
 
     public void setFloorNumber(Integer floorNumber) {

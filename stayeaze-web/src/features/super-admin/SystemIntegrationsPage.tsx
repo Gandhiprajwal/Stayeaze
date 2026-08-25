@@ -123,6 +123,28 @@ export default function SystemIntegrationsPage() {
     }
   }
 
+  const [testingRazorpay, setTestingRazorpay] = useState(false);
+
+  async function handleTestRazorpay() {
+    if (!form.razorpayMasterKeyId || !form.razorpayMasterKeySecret) {
+      toast.error('Please enter both Master Key ID and Key Secret before testing.');
+      return;
+    }
+    setTestingRazorpay(true);
+    toast.info('Verifying Razorpay credentials with Razorpay Gateway API...');
+    try {
+      const res = await api.post('/system-configs/test-razorpay', {
+        keyId: form.razorpayMasterKeyId,
+        keySecret: form.razorpayMasterKeySecret,
+      });
+      toast.success(res.data.message || 'Razorpay Connected & Authenticated Successfully!');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || 'Razorpay Authentication Failed');
+    } finally {
+      setTestingRazorpay(false);
+    }
+  }
+
   const saveOnboardingPolicyMut = useMutation({
     mutationFn: async (payload: { onboardingMode: string; vipInviteCodes: string }) => {
       const res = await api.put('/super-admin/settings', payload);
@@ -591,6 +613,23 @@ export default function SystemIntegrationsPage() {
                 onChange={(e) => setForm({ ...form, razorpayMasterKeySecret: e.target.value })}
                 placeholder="Enter Secret Key"
               />
+            </div>
+
+            {/* Live Razorpay Diagnostic Test Section */}
+            <div className="sm:col-span-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+              <p className="text-[11px] text-muted-foreground">
+                Click to authenticate credentials against Razorpay servers and test online order creation.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                disabled={testingRazorpay || !form.razorpayMasterKeyId || !form.razorpayMasterKeySecret}
+                onClick={handleTestRazorpay}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs h-9 shrink-0 gap-1.5 shadow-xs"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                {testingRazorpay ? 'Testing Connection...' : 'Test Razorpay Connection'}
+              </Button>
             </div>
           </CardContent>
         </Card>

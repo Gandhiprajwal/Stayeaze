@@ -29,12 +29,6 @@ public class Room {
     @Column(name = "base_rent", nullable = false, precision = 12, scale = 2)
     private BigDecimal baseRent;
 
-    @Column(name = "wifi_ssid", length = 150)
-    private String wifiSsid;
-
-    @Column(name = "wifi_password", length = 150)
-    private String wifiPassword;
-
     @Column(length = 50)
     private String status = "AVAILABLE"; // AVAILABLE, BLOCKED, MAINTENANCE
 
@@ -161,22 +155,6 @@ public class Room {
 
     public void setBaseRent(BigDecimal baseRent) {
         this.baseRent = baseRent;
-    }
-
-    public String getWifiSsid() {
-        return wifiSsid;
-    }
-
-    public void setWifiSsid(String wifiSsid) {
-        this.wifiSsid = wifiSsid;
-    }
-
-    public String getWifiPassword() {
-        return wifiPassword;
-    }
-
-    public void setWifiPassword(String wifiPassword) {
-        this.wifiPassword = wifiPassword;
     }
 
     public String getStatus() {

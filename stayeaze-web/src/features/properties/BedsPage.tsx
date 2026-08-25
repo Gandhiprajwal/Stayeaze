@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BedDouble, Plus, Pencil, Trash2, User } from 'lucide-react';
+import { BedDouble, Plus, Pencil, Trash2, User, Building2, Layers } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
 import { PageHeader } from '@/components/common/PageHeader';
@@ -53,7 +53,7 @@ export default function BedsPage() {
   function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
   function openEdit(row: Bed) {
     setEditing(row);
-    form.reset({ number: row.number, roomId: row.roomId, status: row.status, tenantId: row.tenantId ?? '' });
+    form.reset({ number: row.number || (row as any).bedNumber || 'B1', roomId: row.roomId, status: row.status, tenantId: row.tenantId ?? '' });
     setDialogOpen(true);
   }
   function submit() {
@@ -74,23 +74,37 @@ export default function BedsPage() {
     { key: 'number', header: 'Bed', sortable: true, cell: (r) => (
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><BedDouble className="h-5 w-5" /></div>
-        <span className="font-medium">{r.number}</span>
+        <span className="font-bold font-mono">{r.number || (r as any).bedNumber}</span>
       </div>
     )},
-    { key: 'roomId', header: 'Room', sortable: true, cell: (r: any) => <span className="text-sm">{formatRoomName(r.roomNumber || roomMap.get(r.roomId))}</span> },
+    { key: 'roomId', header: 'Room', sortable: true, cell: (r: any) => (
+      <span className="font-semibold text-sm">Room {formatRoomName(r.roomNumber || roomMap.get(r.roomId))}</span>
+    )},
+    { key: 'buildingName', header: 'Building & Floor', sortable: true, cell: (r: any) => (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Building2 className="h-3.5 w-3.5 text-primary" />
+        <span>{r.buildingName || 'Main Building'}</span>
+        <span>•</span>
+        <Layers className="h-3 w-3" />
+        <span>{r.floorName || (r.floorNumber != null ? `Floor ${r.floorNumber}` : 'Floor')}</span>
+      </div>
+    )},
     { key: 'tenantId', header: 'Tenant', sortable: true, cell: (r) => (r.tenantName || r.tenantId) ? (
-      <span className="inline-flex items-center gap-1.5 text-sm"><User className="h-3.5 w-3.5 text-muted-foreground" />{r.tenantName || r.tenantId}</span>
+      <span className="inline-flex items-center gap-1.5 text-sm font-medium"><User className="h-3.5 w-3.5 text-muted-foreground" />{r.tenantName || r.tenantId}</span>
     ) : <span className="text-sm text-muted-foreground">—</span> },
     { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
   ];
 
-  const roomFilterOptions = (rooms ?? []).map((r: any) => ({ value: r.id, label: formatRoomName(r.roomNumber || r.number) }));
+  const roomFilterOptions = (rooms ?? []).map((r: any) => ({
+    value: r.id,
+    label: `Room ${formatRoomName(r.roomNumber || r.number)} (${r.buildingName || 'Main Building'})`
+  }));
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Beds" description="Manage individual bed allocations and availability." icon={BedDouble}
+      <PageHeader title="Beds" description="Manage individual bed allocations, building structures and availability." icon={BedDouble}
         actions={<Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" /> Add Bed</Button>} />
-      <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search beds..." exportFilename="beds" initialSortBy="number"
+      <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search beds, rooms, buildings..." exportFilename="beds" initialSortBy="number"
         filters={[
           { key: 'status', label: 'Status', options: statuses },
           ...(roomFilterOptions.length > 0 ? [{ key: 'roomId', label: 'Room', options: roomFilterOptions }] : []),
@@ -103,29 +117,54 @@ export default function BedsPage() {
         )} />
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Bed' : 'Add Bed'} onSubmit={submit}
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label required>Room</Label>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label required>Room (Building $\to$ Floor $\to$ Room)</Label>
             <SearchableSelect
               options={(rooms ?? []).map((r: any) => ({
                 value: r.id,
-                label: `Room ${formatRoomName(r.roomNumber || r.number)}`,
-                sublabel: r.buildingName || r.type || 'Room',
-                badge: r.type,
+                label: `Room ${r.roomNumber || r.number}`,
+                sublabel: `${r.buildingName || 'Main Building'} • ${r.floorName || (r.floorNumber != null ? 'Floor ' + r.floorNumber : 'Floor')}`,
+                badge: r.buildingName || 'Building',
               }))}
               value={form.values.roomId}
               onChange={(v) => form.setValue('roomId', v)}
               placeholder="Search & select room..."
-              searchPlaceholder="Search rooms..."
+              searchPlaceholder="Search by room, building, floor..."
             />
             {form.errors.roomId && <p className="text-xs text-destructive">{form.errors.roomId}</p>}
           </div>
-          <div className="space-y-1.5"><Label>Bed Number</Label><Select value={form.values.number} onValueChange={(v) => form.setValue('number', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['B1', 'B2', 'B3', 'B4'].map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-1.5 sm:col-span-2"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Bed['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
+
+          <div className="space-y-1.5">
+            <Label required>Bed Identifier (e.g. B1, Bed A, B2)</Label>
+            <Select value={form.values.number} onValueChange={(v) => form.setValue('number', v)}>
+              <SelectTrigger><SelectValue placeholder="Select Bed" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="B1">Bed B1 (Window/Primary)</SelectItem>
+                <SelectItem value="B2">Bed B2 (Secondary)</SelectItem>
+                <SelectItem value="B3">Bed B3 (Corner)</SelectItem>
+                <SelectItem value="B4">Bed B4 (Entrance)</SelectItem>
+                <SelectItem value="Bed A">Bed A</SelectItem>
+                <SelectItem value="Bed B">Bed B</SelectItem>
+                <SelectItem value="Bed C">Bed C</SelectItem>
+                <SelectItem value="Bed D">Bed D</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Availability Status</Label>
+            <Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Bed['status'])}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </FormDialog>
       <ConfirmDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)} title="Delete Bed" variant="destructive"
-        description={`Delete bed "${deleteTarget?.number}"?`} confirmLabel="Delete" onConfirm={confirmDelete} loading={deleteMut.isPending} />
+        description={`Delete Bed ${deleteTarget?.number}?`} confirmLabel="Delete" onConfirm={confirmDelete} loading={deleteMut.isPending} />
     </div>
   );
 }

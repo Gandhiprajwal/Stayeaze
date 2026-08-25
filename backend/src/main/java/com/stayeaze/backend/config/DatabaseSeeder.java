@@ -56,6 +56,16 @@ public class DatabaseSeeder implements CommandLineRunner {
             // ignore if database is different or constraint does not exist
         }
 
+        // Drop legacy wifi columns from rooms and floors to ensure clean Centralized Hub single source of truth
+        try {
+            jdbcTemplate.execute("ALTER TABLE rooms DROP COLUMN IF EXISTS wifi_ssid");
+            jdbcTemplate.execute("ALTER TABLE rooms DROP COLUMN IF EXISTS wifi_password");
+            jdbcTemplate.execute("ALTER TABLE floors DROP COLUMN IF EXISTS wifi_ssid");
+            jdbcTemplate.execute("ALTER TABLE floors DROP COLUMN IF EXISTS wifi_password");
+        } catch (Exception e) {
+            // ignore if columns already removed
+        }
+
         /*
         // Clear all operational table data for clean manual testing
         System.out.println("==================================================");

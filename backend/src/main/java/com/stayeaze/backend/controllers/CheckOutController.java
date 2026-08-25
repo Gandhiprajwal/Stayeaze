@@ -362,4 +362,31 @@ public class CheckOutController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new MessageResponse("Refund approval failed: " + ex.getMessage()));
         }
     }
+
+    @Autowired
+    private com.stayeaze.backend.services.CheckoutSettlementService checkoutSettlementService;
+
+    @PostMapping("/settlement-preview/{tenantId}")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> getSettlementPreview(@PathVariable UUID tenantId, @RequestBody(required = false) java.util.Map<String, Object> params) {
+        try {
+            if (params == null) params = java.util.Collections.emptyMap();
+            com.stayeaze.backend.services.CheckoutSettlementService.SettlementPreview preview = checkoutSettlementService.calculatePreview(tenantId, params);
+            return ResponseEntity.ok(preview);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/execute-settlement/{tenantId}")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> executeSettlement(@PathVariable UUID tenantId, @RequestBody(required = false) java.util.Map<String, Object> params) {
+        try {
+            if (params == null) params = java.util.Collections.emptyMap();
+            java.util.Map<String, Object> result = checkoutSettlementService.executeSettlement(tenantId, params);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
 }

@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Users, Phone, Mail, MapPin, Calendar, Briefcase,
   CreditCard, ShieldCheck, Wallet, Home, FileText, Upload, CheckCircle2, XCircle, Trash2, ExternalLink, AlertCircle,
-  KeyRound, LogOut, Archive, RotateCcw, Pencil, Eye, ScrollText,
+  KeyRound, LogOut, Archive, RotateCcw, Pencil, Eye, ScrollText, Calculator
 } from 'lucide-react';
+import CheckoutSettlementModal from '@/features/check-out/CheckoutSettlementModal';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
@@ -47,6 +48,7 @@ export default function TenantDetailPage() {
 
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
+  const [checkoutSettlementOpen, setCheckoutSettlementOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [isDeletingPermanent, setIsDeletingPermanent] = useState(false);
 
@@ -303,8 +305,8 @@ export default function TenantDetailPage() {
               <KeyRound className="mr-1.5 h-4 w-4" /> Send Credentials
             </Button>
             {tenant.status !== 'checked_out' && tenant.status !== 'archived' && (
-              <Button size="sm" variant="outline" onClick={() => navigate('/check-outs')}>
-                <LogOut className="mr-1.5 h-4 w-4" /> Check-out
+              <Button size="sm" className="bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs gap-1.5" onClick={() => setCheckoutSettlementOpen(true)}>
+                <Calculator className="h-4 w-4" /> 1-Click Settle & Checkout
               </Button>
             )}
             <RowActions
@@ -795,6 +797,19 @@ export default function TenantDetailPage() {
         onConfirm={handlePermanentDelete}
         loading={isDeletingPermanent}
       />
+      {/* Checkout Settlement Modal */}
+      {tenant && (
+        <CheckoutSettlementModal
+          isOpen={checkoutSettlementOpen}
+          onClose={() => setCheckoutSettlementOpen(false)}
+          tenantId={tenant.id}
+          tenantName={tenant.name}
+          onSuccess={() => {
+            queryClient.invalidateQueries();
+            navigate('/check-outs');
+          }}
+        />
+      )}
     </div>
   );
 }

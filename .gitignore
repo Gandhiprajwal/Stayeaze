@@ -25,4 +25,8 @@ node_modules/
 .dart_tool/
 .idea/
 .vscode/
+.classpath
+.project
+.settings/
+*.tsbuildinfo
 .DS_Store

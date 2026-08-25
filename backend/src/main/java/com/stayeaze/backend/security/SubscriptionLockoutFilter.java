@@ -31,6 +31,26 @@ public class SubscriptionLockoutFilter extends OncePerRequestFilter {
     @Autowired
     private ObjectMapper objectMapper;
 
+    private static class CacheEntry {
+        final boolean isLocked;
+        final OffsetDateTime gracePeriodEnd;
+        final OffsetDateTime endDate;
+        final long cachedAtMs;
+
+        CacheEntry(boolean isLocked, OffsetDateTime gracePeriodEnd, OffsetDateTime endDate) {
+            this.isLocked = isLocked;
+            this.gracePeriodEnd = gracePeriodEnd;
+            this.endDate = endDate;
+            this.cachedAtMs = System.currentTimeMillis();
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() - cachedAtMs > 60_000L; // 60s TTL
+        }
+    }
+
+    private final java.util.concurrent.ConcurrentHashMap<UUID, CacheEntry> statusCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -69,48 +89,53 @@ public class SubscriptionLockoutFilter extends OncePerRequestFilter {
             return;
         }
 
-        Optional<OrganizationBillingProfile> profileOpt = profileRepository.findByOrganizationId(orgId);
-        if (profileOpt.isEmpty()) {
-            filterChain.doFilter(request, response);
-            return;
+        // 3. Fast L2 in-memory cache lookup (60s TTL)
+        CacheEntry entry = statusCache.get(orgId);
+        if (entry == null || entry.isExpired()) {
+            Optional<OrganizationBillingProfile> profileOpt = profileRepository.findByOrganizationId(orgId);
+            if (profileOpt.isEmpty()) {
+                entry = new CacheEntry(false, null, null);
+            } else {
+                OrganizationBillingProfile profile = profileOpt.get();
+                OffsetDateTime endDate = profile.getSubscriptionEndDate();
+                if (endDate != null) {
+                    OffsetDateTime gracePeriodEnd = endDate.plusDays(3);
+                    boolean isLocked = OffsetDateTime.now().isAfter(gracePeriodEnd);
+                    entry = new CacheEntry(isLocked, gracePeriodEnd, endDate);
+                } else {
+                    entry = new CacheEntry(false, null, null);
+                }
+            }
+            statusCache.put(orgId, entry);
         }
 
-        OrganizationBillingProfile profile = profileOpt.get();
-        OffsetDateTime endDate = profile.getSubscriptionEndDate();
-        
-        // If end date is set and has passed
-        if (endDate != null) {
-            OffsetDateTime gracePeriodEnd = endDate.plusDays(3);
-            OffsetDateTime now = OffsetDateTime.now();
+        // 4. Lockout evaluation if locked
+        if (entry.isLocked && entry.endDate != null) {
+            boolean isAdminOrOwner = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_OWNER") || a.getAuthority().equals("ROLE_ADMIN"));
 
-            // 3. Grace period has expired! (t > endDate + 3 Days)
-            if (now.isAfter(gracePeriodEnd)) {
-                boolean isAdminOrOwner = auth.getAuthorities().stream()
-                        .anyMatch(a -> a.getAuthority().equals("ROLE_OWNER") || a.getAuthority().equals("ROLE_ADMIN"));
+            // Non-admin users are 100% BLOCKED from workspace access
+            if (!isAdminOrOwner) {
+                response.setStatus(HttpStatus.FORBIDDEN.value());
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                objectMapper.writeValue(response.getOutputStream(), new MessageResponse(
+                    "Workspace Suspended: Your property workspace subscription expired on " 
+                    + entry.endDate.toLocalDate() + " and the 3-day grace period has ended. Please contact your administrator to renew."
+                ));
+                return;
+            }
 
-                // Non-admin users are 100% BLOCKED from workspace access
-                if (!isAdminOrOwner) {
-                    response.setStatus(HttpStatus.FORBIDDEN.value());
-                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                    objectMapper.writeValue(response.getOutputStream(), new MessageResponse(
-                        "Workspace Suspended: Your property workspace subscription expired on " 
-                        + endDate.toLocalDate() + " and the 3-day grace period has ended. Please contact your administrator to renew."
-                    ));
-                    return;
-                }
-
-                // Admins/Owners can ONLY perform GET (read-only) or call subscription payment APIs.
-                // Block POST, PUT, DELETE, PATCH on operational resources!
-                String method = request.getMethod().toUpperCase();
-                if ("POST".equals(method) || "PUT".equals(method) || "DELETE".equals(method) || "PATCH".equals(method)) {
-                    response.setStatus(HttpStatus.FORBIDDEN.value());
-                    response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-                    objectMapper.writeValue(response.getOutputStream(), new MessageResponse(
-                        "Workspace Access Locked: Your 3-day subscription grace period expired on " 
-                        + gracePeriodEnd.toLocalDate() + ". Operational features are locked. Please renew your subscription to resume creating or modifying property resources."
-                    ));
-                    return;
-                }
+            // Admins/Owners can ONLY perform GET (read-only) or call subscription payment APIs.
+            String method = request.getMethod().toUpperCase();
+            if ("POST".equals(method) || "PUT".equals(method) || "DELETE".equals(method) || "PATCH".equals(method)) {
+                response.setStatus(HttpStatus.FORBIDDEN.value());
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                objectMapper.writeValue(response.getOutputStream(), new MessageResponse(
+                    "Workspace Access Locked: Your 3-day subscription grace period expired on " 
+                    + (entry.gracePeriodEnd != null ? entry.gracePeriodEnd.toLocalDate() : entry.endDate.toLocalDate()) 
+                    + ". Operational features are locked. Please renew your subscription to resume creating or modifying property resources."
+                ));
+                return;
             }
         }
 

@@ -28,6 +28,30 @@ public class MeterReading {
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
+    @Column(name = "previous_reading_value", precision = 10, scale = 2)
+    private BigDecimal previousReadingValue;
+
+    @Column(name = "units_consumed", precision = 10, scale = 2)
+    private BigDecimal unitsConsumed;
+
+    @Column(name = "billing_month")
+    private Integer billingMonth;
+
+    @Column(name = "billing_year")
+    private Integer billingYear;
+
+    @Column(name = "split_mode", length = 50)
+    private String splitMode = "FAIR_PROPORTIONAL"; // FAIR_PROPORTIONAL, EQUAL_OCCUPANTS, SINGLE_OCCUPANT, CUSTOM
+
+    @Column(name = "free_allowance_units", precision = 10, scale = 2)
+    private BigDecimal freeAllowanceUnits = BigDecimal.ZERO;
+
+    @Column(name = "photo_url", length = 500)
+    private String photoUrl;
+
+    @Column(name = "tenant_split_details_json", columnDefinition = "TEXT")
+    private String tenantSplitDetailsJson;
+
     @Column(length = 50)
     private String status = "UNBILLED"; // UNBILLED, BILLED
 
@@ -74,6 +98,22 @@ public class MeterReading {
         this.readingValue = readingValue;
     }
 
+    public BigDecimal getPreviousReadingValue() {
+        return previousReadingValue;
+    }
+
+    public void setPreviousReadingValue(BigDecimal previousReadingValue) {
+        this.previousReadingValue = previousReadingValue;
+    }
+
+    public BigDecimal getUnitsConsumed() {
+        return unitsConsumed;
+    }
+
+    public void setUnitsConsumed(BigDecimal unitsConsumed) {
+        this.unitsConsumed = unitsConsumed;
+    }
+
     public BigDecimal getUnitRate() {
         return unitRate;
     }
@@ -88,6 +128,54 @@ public class MeterReading {
 
     public void setTotalAmount(BigDecimal totalAmount) {
         this.totalAmount = totalAmount;
+    }
+
+    public Integer getBillingMonth() {
+        return billingMonth;
+    }
+
+    public void setBillingMonth(Integer billingMonth) {
+        this.billingMonth = billingMonth;
+    }
+
+    public Integer getBillingYear() {
+        return billingYear;
+    }
+
+    public void setBillingYear(Integer billingYear) {
+        this.billingYear = billingYear;
+    }
+
+    public String getSplitMode() {
+        return splitMode;
+    }
+
+    public void setSplitMode(String splitMode) {
+        this.splitMode = splitMode;
+    }
+
+    public BigDecimal getFreeAllowanceUnits() {
+        return freeAllowanceUnits;
+    }
+
+    public void setFreeAllowanceUnits(BigDecimal freeAllowanceUnits) {
+        this.freeAllowanceUnits = freeAllowanceUnits;
+    }
+
+    public String getPhotoUrl() {
+        return photoUrl;
+    }
+
+    public void setPhotoUrl(String photoUrl) {
+        this.photoUrl = photoUrl;
+    }
+
+    public String getTenantSplitDetailsJson() {
+        return tenantSplitDetailsJson;
+    }
+
+    public void setTenantSplitDetailsJson(String tenantSplitDetailsJson) {
+        this.tenantSplitDetailsJson = tenantSplitDetailsJson;
     }
 
     public String getStatus() {

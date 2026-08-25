@@ -38,7 +38,7 @@ public class SuperAdminSessionController {
     public ResponseEntity<?> getActiveSessions(
             @RequestParam(defaultValue = "") String search) {
 
-        List<RefreshToken> tokens = refreshTokenRepository.findAll();
+        List<RefreshToken> tokens = refreshTokenRepository.findAllWithUserAndOrg();
         List<Map<String, Object>> result = tokens.stream()
                 .filter(t -> t.getUser() != null)
                 .map(t -> {

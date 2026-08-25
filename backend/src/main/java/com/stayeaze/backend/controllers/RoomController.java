@@ -237,10 +237,6 @@ public class RoomController {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: Room number already exists on this floor!"));
         }
 
-        if (request.getWifiPassword() != null && !request.getWifiPassword().isBlank() && request.getWifiPassword().trim().length() < 8) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Wi-Fi password must be at least 8 characters long."));
-        }
-
         room.setRoomNumber(request.getRoomNumber());
         room.setSharingType(request.getSharingType());
         room.setBaseRent(request.getBaseRent());
@@ -249,12 +245,6 @@ public class RoomController {
         }
         if (request.getAmenities() != null) {
             room.setAmenities(request.getAmenities());
-        }
-        if (request.getWifiSsid() != null) {
-            room.setWifiSsid(request.getWifiSsid());
-        }
-        if (request.getWifiPassword() != null) {
-            room.setWifiPassword(request.getWifiPassword());
         }
 
         Room updated = roomService.saveRoom(room);
@@ -457,10 +447,6 @@ public class RoomController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Room not found."));
         }
 
-        if (request.getWifiPassword() != null && !request.getWifiPassword().isBlank() && request.getWifiPassword().trim().length() < 8) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Wi-Fi password must be at least 8 characters long."));
-        }
-
         if (request.getRoomNumber() != null && !request.getRoomNumber().isBlank()) {
             room.setRoomNumber(request.getRoomNumber());
         }
@@ -468,8 +454,6 @@ public class RoomController {
         if (request.getBaseRent() != null) room.setBaseRent(request.getBaseRent());
         if (request.getStatus() != null) room.setStatus(request.getStatus());
         if (request.getAmenities() != null) room.setAmenities(request.getAmenities());
-        if (request.getWifiSsid() != null) room.setWifiSsid(request.getWifiSsid());
-        if (request.getWifiPassword() != null) room.setWifiPassword(request.getWifiPassword());
 
         Room saved = roomService.saveRoom(room);
         Room populated = populateRoomStats(saved);
@@ -517,5 +501,82 @@ public class RoomController {
 
         updatePropertyAndBuildingStats(room.getFloor());
         return ResponseEntity.ok(new MessageResponse("Room and nested beds successfully unarchived."));
+    }
+
+    @GetMapping("/properties/{propertyId}/smart-space-matcher")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> smartSpaceMatcher(
+            @PathVariable UUID propertyId,
+            @RequestParam(required = false) String sharingType,
+            @RequestParam(required = false) java.math.BigDecimal maxBudget,
+            @RequestParam(required = false) String amenity,
+            @RequestParam(required = false) Integer floorNumber) {
+        try {
+            List<Room> rooms = roomRepository.findByPropertyIdNative(propertyId);
+            List<java.util.Map<String, Object>> matches = new java.util.ArrayList<>();
+
+            for (Room r : rooms) {
+                if ("ARCHIVED".equalsIgnoreCase(r.getStatus()) || "MAINTENANCE".equalsIgnoreCase(r.getStatus())) {
+                    continue;
+                }
+                if (sharingType != null && !sharingType.isBlank() && !sharingType.equalsIgnoreCase(r.getSharingType())) {
+                    continue;
+                }
+                if (maxBudget != null && r.getBaseRent() != null && r.getBaseRent().compareTo(maxBudget) > 0) {
+                    continue;
+                }
+                if (amenity != null && !amenity.isBlank()) {
+                    boolean hasAmenity = r.getAmenities() != null && r.getAmenities().stream().anyMatch(a -> a.equalsIgnoreCase(amenity));
+                    if (!hasAmenity) continue;
+                }
+                if (floorNumber != null && r.getFloor() != null && !floorNumber.equals(r.getFloor().getFloorNumber())) {
+                    continue;
+                }
+
+                // Check available beds in room
+                List<Bed> beds = bedRepository.findByRoom(r);
+                List<Bed> availableBeds = beds.stream()
+                        .filter(b -> b.getStatus() == null || "AVAILABLE".equalsIgnoreCase(b.getStatus()))
+                        .collect(Collectors.toList());
+
+                if (availableBeds.isEmpty()) continue;
+
+                // Fetch existing roommates
+                List<Tenant> occupants = tenantRepository.findByPropertyIdAndRoomNumberNative(propertyId, r.getRoomNumber()).stream()
+                        .filter(t -> t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()))
+                        .collect(Collectors.toList());
+
+                List<java.util.Map<String, Object>> roommateList = occupants.stream().map(t -> {
+                    java.util.Map<String, Object> occ = new java.util.HashMap<>();
+                    occ.put("name", t.getFirstName() + " " + t.getLastName());
+                    occ.put("gender", t.getGender());
+                    occ.put("bedNumber", t.getBedNumber());
+                    occ.put("checkInDate", t.getLeaseStart());
+                    return occ;
+                }).collect(Collectors.toList());
+
+                for (Bed b : availableBeds) {
+                    java.util.Map<String, Object> match = new java.util.HashMap<>();
+                    match.put("bedId", b.getId());
+                    match.put("bedNumber", b.getBedNumber());
+                    match.put("roomId", r.getId());
+                    match.put("roomNumber", r.getRoomNumber());
+                    match.put("sharingType", r.getSharingType());
+                    match.put("baseRent", r.getBaseRent());
+                    match.put("amenities", r.getAmenities());
+                    match.put("floorNumber", r.getFloor() != null ? r.getFloor().getFloorNumber() : 1);
+                    match.put("floorName", r.getFloor() != null ? r.getFloor().getName() : "Floor 1");
+                    match.put("buildingName", r.getFloor() != null && r.getFloor().getBuilding() != null ? r.getFloor().getBuilding().getName() : "Main Building");
+                    match.put("totalBeds", beds.size());
+                    match.put("availableBedsCount", availableBeds.size());
+                    match.put("currentOccupants", roommateList);
+                    matches.add(match);
+                }
+            }
+
+            return ResponseEntity.ok(matches);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Smart matcher failed: " + e.getMessage()));
+        }
     }
 }

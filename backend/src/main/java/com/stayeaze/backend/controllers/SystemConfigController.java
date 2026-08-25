@@ -117,4 +117,28 @@ public class SystemConfigController {
                     .body(new com.stayeaze.backend.payload.response.MessageResponse(e.getMessage()));
         }
     }
+
+    @PostMapping("/test-razorpay")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER')")
+    public ResponseEntity<?> testRazorpay(@RequestBody java.util.Map<String, String> req) {
+        String keyId = req.get("keyId");
+        String keySecret = req.get("keySecret");
+        if (keyId == null || keyId.isBlank() || keySecret == null || keySecret.isBlank()) {
+            return ResponseEntity.badRequest().body(new com.stayeaze.backend.payload.response.MessageResponse("Both Master Key ID and Key Secret are required."));
+        }
+        try {
+            com.razorpay.RazorpayClient client = new com.razorpay.RazorpayClient(keyId.trim(), keySecret.trim());
+            org.json.JSONObject orderReq = new org.json.JSONObject();
+            orderReq.put("amount", 100);
+            orderReq.put("currency", "INR");
+            orderReq.put("receipt", "DIAG-" + (System.currentTimeMillis() % 1000000L));
+            com.razorpay.Order testOrder = client.orders.create(orderReq);
+            return ResponseEntity.ok(new com.stayeaze.backend.payload.response.MessageResponse(
+                "🟢 Razorpay Credentials Verified! Test connection authenticated successfully (Diagnostic Order: " + testOrder.get("id") + ")."
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_REQUEST)
+                    .body(new com.stayeaze.backend.payload.response.MessageResponse("🔴 Razorpay Authentication Failed: " + e.getMessage()));
+        }
+    }
 }
