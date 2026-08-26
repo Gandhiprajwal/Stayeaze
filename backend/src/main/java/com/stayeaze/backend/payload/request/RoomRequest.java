@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.UUID;
 
 public class RoomRequest {
+    private UUID propertyId;
+    private UUID buildingId;
     private UUID floorId;
 
     private String roomNumber;
@@ -25,6 +27,22 @@ public class RoomRequest {
     private String wifiPassword;
 
     public RoomRequest() {
+    }
+
+    public UUID getPropertyId() {
+        return propertyId;
+    }
+
+    public void setPropertyId(UUID propertyId) {
+        this.propertyId = propertyId;
+    }
+
+    public UUID getBuildingId() {
+        return buildingId;
+    }
+
+    public void setBuildingId(UUID buildingId) {
+        this.buildingId = buildingId;
     }
 
     public UUID getFloorId() {

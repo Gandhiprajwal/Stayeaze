@@ -45,6 +45,32 @@ public class RedisCacheService {
     }
 
     /**
+     * Evicts a single key from a named cache without flushing the entire cache region.
+     */
+    public void evictCacheKey(String cacheName, Object key) {
+        if (cacheManager == null || cacheName == null || key == null) return;
+        try {
+            Cache cache = cacheManager.getCache(cacheName);
+            if (cache != null) {
+                cache.evict(key);
+                logger.debug("Cache key evicted: [{}] key=[{}]", cacheName, key);
+            }
+        } catch (Exception e) {
+            logger.warn("Error evicting cache [{}] for key [{}]: {}", cacheName, key, e.getMessage());
+        }
+    }
+
+    /**
+     * Evicts specific keys across multiple cache regions.
+     */
+    public void evictCacheKeys(String cacheName, Object... keys) {
+        if (keys == null) return;
+        for (Object key : keys) {
+            evictCacheKey(cacheName, key);
+        }
+    }
+
+    /**
      * Flushes all active application caches in Redis and memory.
      */
     public void evictAllCaches() {
@@ -71,14 +97,14 @@ public class RedisCacheService {
      * Evicts all property and location related caches.
      */
     public void evictPropertyCaches() {
-        evictCaches("properties", "propertyDtos", "minimalProperties");
+        evictCaches("properties", "propertyDtos", "propertySummaries", "minimalProperties");
     }
 
     /**
      * Evicts all building, floor, room, and bed inventory caches.
      */
     public void evictRoomBedCaches() {
-        evictCaches("buildings", "floors", "floors_v2", "rooms", "rooms_v3", "beds", "beds_v3");
+        evictCaches("buildings", "floors", "floors_v2", "building_floors", "rooms", "rooms_v3", "beds", "beds_v3", "propertySummaries", "propertyDtos");
     }
 
     /**

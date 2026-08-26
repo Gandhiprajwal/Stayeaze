@@ -19,10 +19,11 @@ import { FormInput } from '@/components/common/FormField';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import api from '@/lib/api';
 import type { Invoice, InvoiceIssuerSnapshot, Property, Tenant } from '@/lib/types';
 import { formatCurrency, formatDate, numberToWords } from '@/lib/format';
@@ -41,14 +42,19 @@ const statuses = [
 ];
 
 const emptyForm = {
-  tenantId: '', tenantName: '', propertyId: '', period: new Date().toISOString().slice(0, 7),
-  amount: 8000, paidAmount: 0, dueDate: new Date().toISOString().slice(0, 10),
+  tenantId: '',
+  tenantName: '',
+  propertyId: '',
+  period: new Date().toISOString().slice(0, 7),
+  amount: 8000,
+  paidAmount: 0,
+  dueDate: new Date().toISOString().slice(0, 10),
   status: 'unpaid' as Invoice['status'],
 };
 
 export default function BillingPage() {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
@@ -56,6 +62,11 @@ export default function BillingPage() {
   
   // Receipt Preview State
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
+
+  // Double Confirmation States
+  const [approvingInvoice, setApprovingInvoice] = useState<{ id: string; invoiceNumber: string; amount: number; tenantName?: string; paymentRef?: string } | null>(null);
+  const [rejectingInvoice, setRejectingInvoice] = useState<{ id: string; invoiceNumber: string; amount: number; tenantName?: string } | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('');
 
   const { data: properties } = useQuery({
     queryKey: ['billing-properties-minimal'],
@@ -362,43 +373,66 @@ export default function BillingPage() {
     { key: 'amount', header: 'Amount', sortable: true, cell: (r) => <span className="font-medium tabular-nums">{formatCurrency(r.amount)}</span> },
     { key: 'paidAmount', header: 'Paid', sortable: true, cell: (r) => <span className="tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(r.paidAmount)}</span> },
     { key: 'dueDate', header: 'Due Date', sortable: true, cell: (r) => <span className="text-sm">{formatDate(r.dueDate)}</span> },
-    { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
+    { key: 'status', header: 'Status', sortable: true, cell: (r) => (
+      <div className="flex items-center gap-2">
+        <StatusBadge status={r.status} tone={statusTone(r.status)} />
+        {String(r.status || '').toLowerCase() === 'pending_approval' && (
+          <Button
+            size="sm"
+            className="h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs gap-1"
+            disabled={approveUtrMut.isPending || rejectUtrMut.isPending}
+            onClick={(e) => {
+              e.stopPropagation();
+              setApprovingInvoice({
+                id: r.id,
+                invoiceNumber: r.invoiceNumber,
+                amount: Number(r.amount || 0),
+                tenantName: r.tenantName,
+              });
+            }}
+          >
+            <Check className="h-3 w-3" /> Approve
+          </Button>
+        )}
+      </div>
+    )},
   ];
 
   const propertyFilterOptions = (properties ?? []).map((p: any) => ({ value: p.id, label: p.name }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-6">
       <PageHeader
         title="Rent & Billing"
         description="Generate invoices, process rent collections, and manage tenant billing cycles."
         icon={Receipt}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
             <Button
               variant="outline"
-              className="gap-1.5 border-amber-300 text-amber-900 bg-amber-50/50 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:bg-amber-950/30 font-semibold"
+              className="gap-1.5 border-amber-300 text-amber-900 bg-amber-50/50 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:bg-amber-950/30 font-semibold rounded-xl h-9.5 text-xs flex-1 sm:flex-none"
               onClick={() => navigate('/utilities')}
             >
-              <Zap className="mr-1.5 h-4 w-4 text-amber-600 fill-amber-500" />
+              <Zap className="mr-1.5 h-3.5 w-3.5 text-amber-600 fill-amber-500" />
               Utilities & Meters
             </Button>
             <Button
               variant="outline"
+              className="rounded-xl h-9.5 text-xs font-semibold shrink-0"
               disabled={batchGenerateMut.isPending}
               onClick={() => batchGenerateMut.mutate()}
             >
-              <RefreshCw className={`mr-1.5 h-4 w-4 ${batchGenerateMut.isPending ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${batchGenerateMut.isPending ? 'animate-spin' : ''}`} />
               Generate Monthly Invoices
             </Button>
-            <Button onClick={openCreate}>
-              <Plus className="mr-1.5 h-4 w-4" /> New Invoice
+            <Button onClick={openCreate} className="rounded-xl h-9.5 text-xs font-bold shrink-0">
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> New Invoice
             </Button>
           </div>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard label="Total Billed" value={formatCurrency(totalBilled)} icon={Receipt} accent="primary" />
         <StatCard
           label="Total Collected"
@@ -413,53 +447,62 @@ export default function BillingPage() {
 
       {/* Pending On-Desk & UTR Verifications Panel */}
       {pendingApprovals && pendingApprovals.length > 0 && (
-        <div className="p-4 rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800/60 space-y-3 shadow-xs">
+        <div className="p-4 sm:p-5 rounded-2xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800/60 space-y-3.5 shadow-xs">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
-              <h3 className="text-sm font-bold text-amber-950 dark:text-amber-200">
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              <h3 className="text-xs sm:text-sm font-bold text-amber-950 dark:text-amber-200">
                 Action Required: {pendingApprovals.length} On-Desk / UTR Payment(s) Pending Approval
               </h3>
             </div>
-            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold">
+            <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold rounded-lg px-2.5 py-0.5">
               Verification Queue
             </Badge>
           </div>
 
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {pendingApprovals.map((inv: any) => (
-              <div key={inv.id} className="p-3 rounded-lg border bg-card space-y-2 shadow-2xs">
+              <div key={inv.id} className="p-4 rounded-2xl border bg-card space-y-2.5 shadow-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-xs font-mono text-primary">{inv.invoiceNumber}</span>
-                  <span className="text-xs font-black text-slate-900 dark:text-white">{formatCurrency(Number(inv.amountDue || 0))}</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white font-mono">{formatCurrency(Number(inv.amountDue || inv.amount || 0))}</span>
                 </div>
-                <div className="text-[11px] text-muted-foreground space-y-0.5">
-                  <p>Resident: <strong>{inv.tenantName}</strong> (Room {inv.roomNumber || '—'} / Bed {inv.bedNumber || '—'})</p>
-                  <p className="font-mono text-amber-700 dark:text-amber-300 font-semibold">{inv.paymentReference || 'UTR not specified'}</p>
-                  <p className="text-[10px]">Mode: {inv.paymentMethod || 'UPI'}</p>
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>Resident: <strong className="text-foreground">{inv.tenantName}</strong> (Room {inv.roomNumber || '—'} / Bed {inv.bedNumber || '—'})</p>
+                  <p className="font-mono text-amber-700 dark:text-amber-300 font-semibold truncate">{inv.paymentReference || 'UTR not specified'}</p>
+                  <p className="text-[11px]">Mode: {inv.paymentMethod || 'UPI'}</p>
                 </div>
-                <div className="flex items-center gap-2 pt-1 border-t">
+                <div className="flex items-center gap-2 pt-2 border-t">
                   <Button
                     size="sm"
-                    className="h-7 text-[11px] flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                    className="h-8.5 rounded-xl text-xs flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                     disabled={approveUtrMut.isPending || rejectUtrMut.isPending}
-                    onClick={() => approveUtrMut.mutate(inv.id)}
+                    onClick={() => setApprovingInvoice({
+                      id: inv.id,
+                      invoiceNumber: inv.invoiceNumber,
+                      amount: Number(inv.amountDue || inv.amount || 0),
+                      tenantName: inv.tenantName,
+                      paymentRef: inv.paymentReference,
+                    })}
                   >
-                    <Check className="mr-1 h-3 w-3" /> Approve & Mark Paid
+                    <Check className="mr-1 h-3.5 w-3.5" /> Approve
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 text-[11px] text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                    className="h-8.5 rounded-xl text-xs text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                     disabled={approveUtrMut.isPending || rejectUtrMut.isPending}
                     onClick={() => {
-                      const reason = prompt('Enter rejection reason (optional):', 'UTR not matching bank statement');
-                      if (reason !== null) {
-                        rejectUtrMut.mutate({ id: inv.id, reason });
-                      }
+                      setRejectReason('');
+                      setRejectingInvoice({
+                        id: inv.id,
+                        invoiceNumber: inv.invoiceNumber,
+                        amount: Number(inv.amountDue || inv.amount || 0),
+                        tenantName: inv.tenantName,
+                      });
                     }}
                   >
-                    <X className="mr-1 h-3 w-3" /> Reject
+                    <X className="mr-1 h-3.5 w-3.5" /> Reject
                   </Button>
                 </div>
               </div>
@@ -483,7 +526,35 @@ export default function BillingPage() {
         rowActions={(row) => (
           <RowActions
             items={[
-              { label: 'Record Payment', icon: CreditCard, onSelect: () => openRecordPayment(row) },
+              ...(String(row.status || '').toLowerCase() === 'pending_approval' ? [
+                {
+                  label: 'Approve Payment (UTR)',
+                  icon: Check,
+                  onSelect: () => setApprovingInvoice({
+                    id: row.id,
+                    invoiceNumber: row.invoiceNumber,
+                    amount: Number(row.amount || 0),
+                    tenantName: row.tenantName,
+                  }),
+                },
+                {
+                  label: 'Reject Payment (UTR)',
+                  icon: X,
+                  variant: 'destructive' as const,
+                  onSelect: () => {
+                    setRejectReason('');
+                    setRejectingInvoice({
+                      id: row.id,
+                      invoiceNumber: row.invoiceNumber,
+                      amount: Number(row.amount || 0),
+                      tenantName: row.tenantName,
+                    });
+                  },
+                },
+              ] : []),
+              ...(String(row.status || '').toLowerCase() !== 'paid' && (Number(row.amount || 0) - Number(row.paidAmount || 0)) > 0 ? [
+                { label: 'Record Payment', icon: CreditCard, onSelect: () => openRecordPayment(row) },
+              ] : []),
               { label: 'View Rent Receipt', icon: Printer, onSelect: () => setViewInvoice(row) },
               { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
             ]}
@@ -594,39 +665,39 @@ export default function BillingPage() {
 
       {/* Record Payment Dialog */}
       <Dialog open={!!paymentInvoice} onOpenChange={(open) => !open && setPaymentInvoice(null)}>
-        <DialogContent className="sm:max-w-[520px] p-6 sm:p-7 gap-0 rounded-2xl">
-          <DialogHeader className="pb-4 mb-2 border-b border-slate-100 dark:border-slate-800">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[520px] max-h-[85vh] p-0 rounded-2xl flex flex-col overflow-hidden shadow-2xl border">
+          <DialogHeader className="p-4 sm:p-5 border-b shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+              <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 shrink-0">
                 <CreditCard className="h-5 w-5" />
               </div>
-              <div>
-                <DialogTitle className="text-lg font-bold text-slate-900 dark:text-slate-100">Process Rent Payment</DialogTitle>
+              <div className="min-w-0">
+                <DialogTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">Process Rent Payment</DialogTitle>
                 <p className="text-xs text-muted-foreground mt-0.5">Collect payment or trigger online checkout for tenant invoice.</p>
               </div>
             </div>
           </DialogHeader>
 
           {paymentInvoice && (
-            <div className="space-y-5 my-4">
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 max-h-[calc(85vh-130px)] flex-1">
               {/* Invoice Summary Card */}
-              <div className="rounded-xl p-4 bg-slate-50 border border-slate-200/80 dark:bg-slate-900/60 dark:border-slate-800 space-y-2.5">
+              <div className="rounded-2xl p-4 bg-slate-50 border border-slate-200/80 dark:bg-slate-900/60 dark:border-slate-800 space-y-2.5">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500 font-medium">Invoice Reference</span>
-                  <span className="font-mono font-bold text-indigo-900 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-900">{paymentInvoice.invoiceNumber}</span>
+                  <span className="font-mono font-bold text-indigo-900 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900">{paymentInvoice.invoiceNumber}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-slate-500 font-medium">Tenant Name</span>
-                  <span className="font-bold text-slate-900 dark:text-slate-100">{paymentInvoice.tenantName}</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 truncate">{paymentInvoice.tenantName}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-xs">
-                  <div className="bg-white dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200/40 dark:border-slate-700/50">
+                  <div className="bg-white dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-700/50">
                     <p className="text-[10px] uppercase font-semibold text-slate-400">Total Billed</p>
-                    <p className="font-bold text-slate-800 dark:text-slate-200 text-sm mt-0.5">{formatCurrency(paymentInvoice.amount)}</p>
+                    <p className="font-bold text-slate-800 dark:text-slate-200 text-sm mt-0.5 font-mono">{formatCurrency(paymentInvoice.amount)}</p>
                   </div>
-                  <div className="bg-white dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200/40 dark:border-slate-700/50">
+                  <div className="bg-white dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-700/50">
                     <p className="text-[10px] uppercase font-semibold text-slate-400">Remaining Balance</p>
-                    <p className="font-bold text-red-600 dark:text-red-400 text-sm mt-0.5">{formatCurrency(Math.max(0, paymentInvoice.amount - paymentInvoice.paidAmount))}</p>
+                    <p className="font-bold text-red-600 dark:text-red-400 text-sm mt-0.5 font-mono">{formatCurrency(Math.max(0, paymentInvoice.amount - paymentInvoice.paidAmount))}</p>
                   </div>
                 </div>
               </div>
@@ -637,7 +708,7 @@ export default function BillingPage() {
                 id="recordPaymentAmount"
                 type="number"
                 placeholder="Enter amount"
-                className="h-11 font-medium"
+                className="h-10 rounded-xl text-xs sm:text-sm font-medium"
                 value={String(paymentAmount)}
                 onChange={(e) => setPaymentAmount(Number(e.target.value))}
               />
@@ -646,31 +717,31 @@ export default function BillingPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Select Payment Mode</Label>
                 <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                  <SelectTrigger className="h-11">
+                  <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CASH">
+                    <SelectItem value="CASH" className="text-xs">
                       <div className="flex items-center gap-2 font-medium">
-                        <Banknote className="h-4 w-4 text-emerald-600" />
+                        <Banknote className="h-4 w-4 text-emerald-600 shrink-0" />
                         <span>Cash Payment (In Person / Counter)</span>
                       </div>
                     </SelectItem>
-                    <SelectItem value="RAZORPAY">
+                    <SelectItem value="RAZORPAY" className="text-xs">
                       <div className="flex items-center gap-2 font-medium">
-                        <CreditCard className="h-4 w-4 text-indigo-600" />
+                        <CreditCard className="h-4 w-4 text-indigo-600 shrink-0" />
                         <span>Razorpay Online Gateway (Cards, UPI, NetBanking)</span>
                       </div>
                     </SelectItem>
-                    <SelectItem value="UPI">
+                    <SelectItem value="UPI" className="text-xs">
                       <div className="flex items-center gap-2 font-medium">
-                        <QrCode className="h-4 w-4 text-violet-600" />
+                        <QrCode className="h-4 w-4 text-violet-600 shrink-0" />
                         <span>Direct UPI (GPay / PhonePe / Paytm)</span>
                       </div>
                     </SelectItem>
-                    <SelectItem value="BANK_TRANSFER">
+                    <SelectItem value="BANK_TRANSFER" className="text-xs">
                       <div className="flex items-center gap-2 font-medium">
-                        <Building2 className="h-4 w-4 text-blue-600" />
+                        <Building2 className="h-4 w-4 text-blue-600 shrink-0" />
                         <span>Direct Bank Transfer / NEFT / IMPS</span>
                       </div>
                     </SelectItem>
@@ -685,18 +756,18 @@ export default function BillingPage() {
                     label="Cash Receipt / Voucher Ref (Optional)"
                     id="cashRef"
                     placeholder="e.g. CASH-REC-0012"
-                    className="h-10"
+                    className="h-10 rounded-xl text-xs sm:text-sm"
                     value={paymentRef}
                     onChange={(e) => setPaymentRef(e.target.value)}
                   />
-                  <p className="text-[11px] text-muted-foreground mt-1">Optional physical cash collection receipt or serial voucher number.</p>
+                  <p className="text-[11px] text-muted-foreground">Optional physical cash collection receipt or serial voucher number.</p>
                 </div>
               )}
 
               {paymentMethod === 'RAZORPAY' && (
-                <div className="rounded-xl bg-indigo-50/80 border border-indigo-200/80 p-4 dark:bg-indigo-950/40 dark:border-indigo-800/60 space-y-1.5 my-2">
+                <div className="rounded-2xl bg-indigo-50/80 border border-indigo-200/80 p-3.5 dark:bg-indigo-950/40 dark:border-indigo-800/60 space-y-1.5 my-2">
                   <div className="flex items-center gap-2 text-indigo-950 dark:text-indigo-300 font-bold text-xs">
-                    <ShieldCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    <ShieldCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                     <span>Razorpay Instant Payment Checkout</span>
                   </div>
                   <p className="text-[11px] text-indigo-800 dark:text-indigo-300/80 leading-relaxed">
@@ -711,7 +782,7 @@ export default function BillingPage() {
                     label="UTR / Transaction Reference No"
                     id="transRef"
                     placeholder="e.g. UTR 421098765432"
-                    className="h-10"
+                    className="h-10 rounded-xl text-xs sm:text-sm"
                     value={paymentRef}
                     onChange={(e) => setPaymentRef(e.target.value)}
                   />
@@ -720,14 +791,14 @@ export default function BillingPage() {
             </div>
           )}
 
-          <DialogFooter className="pt-4 gap-3 sm:gap-2 flex items-center justify-end border-t border-slate-100 dark:border-slate-800 mt-2">
-            <Button variant="outline" className="h-10 px-5 rounded-lg font-medium" onClick={() => setPaymentInvoice(null)}>
+          <DialogFooter className="p-4 border-t bg-muted/20 flex flex-col-reverse sm:flex-row gap-2 shrink-0">
+            <Button variant="outline" className="h-10 rounded-xl font-medium w-full sm:w-auto" onClick={() => setPaymentInvoice(null)}>
               Cancel
             </Button>
 
             {paymentMethod === 'RAZORPAY' ? (
               <Button
-                className="h-10 px-5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm flex items-center gap-2"
+                className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-xs flex items-center justify-center gap-2 w-full sm:w-auto"
                 disabled={isRazorpayProcessing || !paymentInvoice}
                 onClick={() => {
                   if (paymentInvoice) handleRazorpayCheckout(paymentInvoice);
@@ -747,7 +818,7 @@ export default function BillingPage() {
               </Button>
             ) : (
               <Button
-                className="h-10 px-5 rounded-lg font-semibold shadow-sm flex items-center gap-2"
+                className="h-10 rounded-xl font-semibold shadow-xs flex items-center justify-center gap-2 w-full sm:w-auto"
                 disabled={recordPaymentMut.isPending || paymentAmount <= 0}
                 onClick={() => {
                   if (paymentInvoice) {
@@ -779,14 +850,14 @@ export default function BillingPage() {
 
       {/* Official Rent Receipt Printable Modal */}
       <Dialog open={!!viewInvoice} onOpenChange={(open) => !open && setViewInvoice(null)}>
-        <DialogContent className="sm:max-w-[780px] p-0 overflow-hidden max-h-[92vh] overflow-y-auto">
-          <DialogHeader className="p-4 bg-muted/40 border-b flex flex-row items-center justify-between print:hidden">
-            <DialogTitle className="text-base font-semibold flex items-center gap-2">
-              <Receipt className="h-5 w-5 text-primary" /> Official Rent Receipt & HRA Voucher
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[780px] p-0 overflow-hidden max-h-[92vh] flex flex-col rounded-2xl shadow-2xl border">
+          <DialogHeader className="p-4 bg-muted/40 border-b flex flex-row items-center justify-between print:hidden shrink-0">
+            <DialogTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+              <Receipt className="h-4.5 w-4.5 text-primary shrink-0" /> Official Rent Receipt
             </DialogTitle>
             <div className="flex items-center gap-2">
-              <Button size="sm" onClick={handlePrintInvoice} className="bg-primary text-primary-foreground hover:bg-primary/90">
-                <Printer className="mr-1.5 h-4 w-4" /> Print / Save PDF
+              <Button size="sm" onClick={handlePrintInvoice} className="h-8.5 rounded-xl text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-xs">
+                <Printer className="mr-1.5 h-3.5 w-3.5" /> Print / Save PDF
               </Button>
             </div>
           </DialogHeader>
@@ -801,193 +872,329 @@ export default function BillingPage() {
             const remainingDue = Math.max(0, viewInvoice.amount - viewInvoice.paidAmount);
 
             return (
-              <div id="printable-gst-invoice" className="printable-receipt-card p-8 bg-white text-slate-900 font-sans text-xs leading-normal">
-                {/* Header Banner */}
-                <div className="border-b-2 border-slate-800 pb-4 mb-4 flex justify-between items-start">
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-9 w-9 rounded-lg bg-indigo-700 text-white font-extrabold flex items-center justify-center text-lg shadow-sm">SE</div>
-                      <div>
-                        <h1 className="font-extrabold text-lg tracking-tight text-slate-900 uppercase">{issuerName}</h1>
-                        <p className="text-[11px] font-semibold text-indigo-900">{prop?.name || 'Executive PG & Student Residence'}</p>
+              <div className="overflow-y-auto max-h-[calc(92vh-80px)] flex-1 p-3 sm:p-6 bg-white">
+                <div id="printable-gst-invoice" className="printable-receipt-card p-4 sm:p-8 bg-white text-slate-900 font-sans text-xs leading-normal">
+                  {/* Header Banner */}
+                  <div className="border-b-2 border-slate-800 pb-4 mb-4 flex flex-col sm:flex-row justify-between items-start gap-4">
+                    <div>
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-9 w-9 rounded-lg bg-indigo-700 text-white font-extrabold flex items-center justify-center text-lg shadow-sm shrink-0">SE</div>
+                        <div>
+                          <h1 className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 uppercase">{issuerName}</h1>
+                          <p className="text-[11px] font-semibold text-indigo-900">{prop?.name || 'Executive PG & Student Residence'}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-[11px] text-slate-600 leading-snug">
+                        <p className="font-medium">{issuerAddress}</p>
+                        {issuerCityState && <p className="font-medium">{issuerCityState}, India</p>}
+                        {(issuer?.pan || issuer?.gstin || issuer?.registrationNumber) && <p className="mt-0.5">{issuer?.pan && <><span className="font-bold text-slate-800">PAN:</span> {issuer.pan} &nbsp;</>}{issuer?.gstin && <><span className="font-bold text-slate-800">GSTIN:</span> {issuer.gstin} &nbsp;</>}{issuer?.registrationNumber && <><span className="font-bold text-slate-800">License No:</span> {issuer.registrationNumber}</>}</p>}
+                        {(issuer?.supportEmail || issuer?.supportPhone) && <p>{issuer?.supportEmail && <><span className="font-bold text-slate-800">Email:</span> {issuer.supportEmail} </>}{issuer?.supportPhone && <>&nbsp;|&nbsp; <span className="font-bold text-slate-800">Helpline:</span> {issuer.supportPhone}</>}</p>}
                       </div>
                     </div>
-                    <div className="mt-2 text-[11px] text-slate-600 leading-snug">
-                      <p className="font-medium">{issuerAddress}</p>
-                      {issuerCityState && <p className="font-medium">{issuerCityState}, India</p>}
-                      {(issuer?.pan || issuer?.gstin || issuer?.registrationNumber) && <p className="mt-0.5">{issuer?.pan && <><span className="font-bold text-slate-800">PAN:</span> {issuer.pan} &nbsp;</>}{issuer?.gstin && <><span className="font-bold text-slate-800">GSTIN:</span> {issuer.gstin} &nbsp;</>}{issuer?.registrationNumber && <><span className="font-bold text-slate-800">License No:</span> {issuer.registrationNumber}</>}</p>}
-                      {(issuer?.supportEmail || issuer?.supportPhone) && <p>{issuer?.supportEmail && <><span className="font-bold text-slate-800">Email:</span> {issuer.supportEmail} </>}{issuer?.supportPhone && <>&nbsp;|&nbsp; <span className="font-bold text-slate-800">Helpline:</span> {issuer.supportPhone}</>}</p>}
+
+                    <div className="sm:text-right">
+                      <div className="inline-block bg-slate-900 text-white px-3 py-1 text-xs font-bold uppercase tracking-wider rounded mb-2 shadow-sm">
+                        OFFICIAL RENT RECEIPT
+                      </div>
+                      <p className="font-mono text-sm font-bold text-indigo-950">RCP-{viewInvoice.invoiceNumber.replace(/^INV-/, '')}</p>
+                      <p className="text-[11px] text-slate-600 mt-1"><span className="font-semibold text-slate-800">Receipt Date:</span> {formatDate(viewInvoice.issueDate || viewInvoice.createdAt)}</p>
+                      <p className="text-[11px] text-slate-600"><span className="font-semibold text-slate-800">Due Date:</span> {formatDate(viewInvoice.dueDate)}</p>
+                      <p className="text-[11px] text-slate-600"><span className="font-semibold text-slate-800">Rent Month:</span> {viewInvoice.period || 'August 2026'}</p>
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <div className="inline-block bg-slate-900 text-white px-3 py-1 text-xs font-bold uppercase tracking-wider rounded mb-2 shadow-sm">
-                      OFFICIAL RENT RECEIPT
+                  {/* Tenant / Rent Summary */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border border-slate-300 rounded-xl p-3 mb-4 bg-slate-50/70">
+                    <div>
+                      <p className="font-bold text-[11px] text-indigo-950 uppercase tracking-wider border-b border-slate-200 pb-1 mb-1.5">Tenant Details (Received From)</p>
+                      <p className="font-bold text-sm text-slate-900">{viewInvoice.tenantName}</p>
+                      {tenant && <p className="text-slate-600">Contact: <span className="font-semibold text-slate-800">{tenant.phone || tenant.email || 'N/A'}</span></p>}
+                      {tenant?.roomNumber && <p className="text-slate-600">Occupied Premises: <span className="font-semibold text-slate-800">Room {tenant.roomNumber} {tenant.bedNumber ? `(Bed ${tenant.bedNumber})` : ''}</span></p>}
+                      <p className="text-slate-600">Property Location: <span className="font-semibold text-slate-800">{prop?.name || 'StayEaze Residence'}, Noida</span></p>
                     </div>
-                    <p className="font-mono text-sm font-bold text-indigo-950">RCP-{viewInvoice.invoiceNumber.replace(/^INV-/, '')}</p>
-                    <p className="text-[11px] text-slate-600 mt-1"><span className="font-semibold text-slate-800">Receipt Date:</span> {formatDate(viewInvoice.issueDate || viewInvoice.createdAt)}</p>
-                    <p className="text-[11px] text-slate-600"><span className="font-semibold text-slate-800">Due Date:</span> {formatDate(viewInvoice.dueDate)}</p>
-                    <p className="text-[11px] text-slate-600"><span className="font-semibold text-slate-800">Rent Month:</span> {viewInvoice.period || 'August 2026'}</p>
-                  </div>
-                </div>
-
-                {/* Tenant / Rent Summary */}
-                <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded p-3 mb-4 bg-slate-50/70">
-                  <div>
-                    <p className="font-bold text-[11px] text-indigo-950 uppercase tracking-wider border-b border-slate-200 pb-1 mb-1.5">Tenant Details (Received From)</p>
-                    <p className="font-bold text-sm text-slate-900">{viewInvoice.tenantName}</p>
-                    {tenant && <p className="text-slate-600">Contact: <span className="font-semibold text-slate-800">{tenant.phone || tenant.email || 'N/A'}</span></p>}
-                    {tenant?.roomNumber && <p className="text-slate-600">Occupied Premises: <span className="font-semibold text-slate-800">Room {tenant.roomNumber} {tenant.bedNumber ? `(Bed ${tenant.bedNumber})` : ''}</span></p>}
-                    <p className="text-slate-600">Property Location: <span className="font-semibold text-slate-800">{prop?.name || 'StayEaze Residence'}, Noida</span></p>
-                  </div>
-                  <div>
-                    <p className="font-bold text-[11px] text-indigo-950 uppercase tracking-wider border-b border-slate-200 pb-1 mb-1.5">Payment Summary & Status</p>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-slate-700">Receipt Status:</span>
-                      <StatusBadge status={viewInvoice.status} tone={statusTone(viewInvoice.status)} />
+                    <div>
+                      <p className="font-bold text-[11px] text-indigo-950 uppercase tracking-wider border-b border-slate-200 pb-1 mb-1.5">Payment Summary & Status</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-slate-700">Receipt Status:</span>
+                        <StatusBadge status={viewInvoice.status} tone={statusTone(viewInvoice.status)} />
+                      </div>
+                      <p className="text-slate-600">Total Monthly Rent: <span className="font-bold text-slate-900">{formatCurrency(viewInvoice.amount)}</span></p>
+                      <p className="text-slate-600">Amount Received: <span className="font-bold text-emerald-700">{formatCurrency(viewInvoice.paidAmount)}</span></p>
+                      <p className="text-slate-600">Paid By (Method): <span className="font-bold text-indigo-900 uppercase">{(viewInvoice.paymentMethod || 'CASH / ONLINE GATEWAY').replace('_', ' ')}</span></p>
+                      <p className="text-slate-600 truncate">Transaction Ref ID: <span className="font-mono font-bold text-slate-800">{viewInvoice.paymentReference || ('TXN-' + viewInvoice.invoiceNumber.replace(/^INV-/, ''))}</span></p>
+                      <p className="text-slate-600">Balance Outstanding: <span className={`font-bold ${remainingDue > 0 ? 'text-red-600' : 'text-slate-700'}`}>{formatCurrency(remainingDue)}</span></p>
                     </div>
-                    <p className="text-slate-600">Total Monthly Rent: <span className="font-bold text-slate-900">{formatCurrency(viewInvoice.amount)}</span></p>
-                    <p className="text-slate-600">Amount Received: <span className="font-bold text-emerald-700">{formatCurrency(viewInvoice.paidAmount)}</span></p>
-                    <p className="text-slate-600">Paid By (Method): <span className="font-bold text-indigo-900 uppercase">{(viewInvoice.paymentMethod || 'CASH / ONLINE GATEWAY').replace('_', ' ')}</span></p>
-                    <p className="text-slate-600">Transaction Ref ID: <span className="font-mono font-bold text-slate-800">{viewInvoice.paymentReference || ('TXN-' + viewInvoice.invoiceNumber.replace(/^INV-/, ''))}</span></p>
-                    <p className="text-slate-600">Balance Outstanding: <span className={`font-bold ${remainingDue > 0 ? 'text-red-600' : 'text-slate-700'}`}>{formatCurrency(remainingDue)}</span></p>
                   </div>
-                </div>
 
-                {/* Particulars Itemized Table */}
-                {(() => {
-                  const items = (viewInvoice as any).items && (viewInvoice as any).items.length > 0
-                    ? (viewInvoice as any).items
-                    : (() => {
-                        const total = viewInvoice.amount || 0;
-                        const tenantRent = Number(tenant?.rent || 0);
-                        const tenantDeposit = Number(tenant?.deposit || 0);
+                  {/* Particulars Itemized Table */}
+                  {(() => {
+                    const items = (viewInvoice as any).items && (viewInvoice as any).items.length > 0
+                      ? (viewInvoice as any).items
+                      : (() => {
+                          const total = viewInvoice.amount || 0;
+                          const tenantRent = Number(tenant?.rent || 0);
+                          const tenantDeposit = Number(tenant?.deposit || 0);
 
-                        if (tenantDeposit > 0 && tenantRent > 0 && total === (tenantRent + tenantDeposit)) {
+                          if (tenantDeposit > 0 && tenantRent > 0 && total === (tenantRent + tenantDeposit)) {
+                            return [
+                              { description: 'First Month Room Accommodation Rent', amount: tenantRent, category: 'Room Rent' },
+                              { description: 'Refundable Security Deposit', amount: tenantDeposit, category: 'Security Deposit' },
+                            ];
+                          } else if (tenantDeposit > 0 && total === tenantDeposit) {
+                            return [
+                              { description: 'Refundable Security Deposit', amount: tenantDeposit, category: 'Security Deposit' },
+                            ];
+                          }
                           return [
-                            { description: 'First Month Room Accommodation Rent', amount: tenantRent, category: 'Room Rent' },
-                            { description: 'Refundable Security Deposit', amount: tenantDeposit, category: 'Security Deposit' },
+                            { description: `Monthly Room Rent & Accommodation (${viewInvoice.period || 'Current Cycle'})`, amount: total, category: 'Room Rent' },
                           ];
-                        } else if (tenantDeposit > 0 && total === tenantDeposit) {
-                          return [
-                            { description: 'Refundable Security Deposit', amount: tenantDeposit, category: 'Security Deposit' },
-                          ];
-                        }
-                        return [
-                          { description: `Monthly Room Rent & Accommodation (${viewInvoice.period || 'Current Cycle'})`, amount: total, category: 'Room Rent' },
-                        ];
-                      })();
+                        })();
 
-                  return (
-                    <>
-                      <table className="w-full border-collapse border border-slate-300 mb-4 text-[11px]">
-                        <thead>
-                          <tr className="bg-slate-900 text-white text-left font-bold">
-                            <th className="p-2 border border-slate-700 w-10 text-center">#</th>
-                            <th className="p-2 border border-slate-700">Rent Particulars / Description</th>
-                            <th className="p-2 border border-slate-700 w-32 text-center">Category</th>
-                            <th className="p-2 border border-slate-700 w-28 text-right">Amount (₹)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.map((it: any, idx: number) => (
-                            <tr key={idx} className="border-b border-slate-300">
-                              <td className="p-2 border border-slate-300 text-center font-medium">{idx + 1}</td>
-                              <td className="p-2 border border-slate-300 font-semibold">
-                                {it.description}
-                              </td>
-                              <td className="p-2 border border-slate-300 text-center text-slate-700 font-medium">
-                                {it.description?.toLowerCase().includes('deposit') ? 'Security Deposit' : 'Room Rent'}
-                              </td>
-                              <td className="p-2 border border-slate-300 text-right font-bold tabular-nums">
-                                {formatCurrency(Number(it.amount || 0))}
-                              </td>
+                    return (
+                      <div className="overflow-x-auto mb-4">
+                        <table className="w-full border-collapse border border-slate-300 text-[11px] min-w-[340px]">
+                          <thead>
+                            <tr className="bg-slate-900 text-white text-left font-bold">
+                              <th className="p-2 border border-slate-700 w-10 text-center">#</th>
+                              <th className="p-2 border border-slate-700">Rent Particulars / Description</th>
+                              <th className="p-2 border border-slate-700 w-28 sm:w-32 text-center">Category</th>
+                              <th className="p-2 border border-slate-700 w-24 sm:w-28 text-right">Amount (₹)</th>
                             </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-slate-900 text-white font-bold text-xs">
-                            <td colSpan={3} className="p-2.5 border border-slate-900 text-right uppercase">Net Total Amount Received:</td>
-                            <td className="p-2.5 border border-slate-900 text-right font-extrabold text-sm tabular-nums">{formatCurrency(viewInvoice.amount)}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {items.map((it: any, idx: number) => (
+                              <tr key={idx} className="border-b border-slate-300">
+                                <td className="p-2 border border-slate-300 text-center font-medium">{idx + 1}</td>
+                                <td className="p-2 border border-slate-300 font-semibold">
+                                  {it.description}
+                                </td>
+                                <td className="p-2 border border-slate-300 text-center text-slate-700 font-medium">
+                                  {it.description?.toLowerCase().includes('deposit') ? 'Security Deposit' : 'Room Rent'}
+                                </td>
+                                <td className="p-2 border border-slate-300 text-right font-bold tabular-nums">
+                                  {formatCurrency(Number(it.amount || 0))}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-slate-900 text-white font-bold text-xs">
+                              <td colSpan={3} className="p-2.5 border border-slate-900 text-right uppercase">Net Total Amount Received:</td>
+                              <td className="p-2.5 border border-slate-900 text-right font-extrabold text-sm tabular-nums">{formatCurrency(viewInvoice.amount)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
 
-                      {/* Amount in Words */}
-                      <div className="border border-slate-300 rounded p-2.5 mb-4 bg-slate-50 flex items-center justify-between">
-                        <span className="font-semibold text-slate-700">Amount in Words:</span>
-                        <span className="font-bold text-indigo-950 italic">{numberToWords(viewInvoice.amount)}</span>
+                        {/* Amount in Words */}
+                        <div className="border border-slate-300 rounded-xl p-2.5 mt-3 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <span className="font-semibold text-slate-700">Amount in Words:</span>
+                          <span className="font-bold text-indigo-950 italic">{numberToWords(viewInvoice.amount)}</span>
+                        </div>
                       </div>
-                    </>
-                  );
-                })()}
+                    );
+                  })()}
 
-                {/* HRA Tax Declaration & Verification QR Box */}
-                <div className="grid grid-cols-12 gap-3 border border-indigo-200 rounded p-3 mb-4 bg-indigo-50/40">
-                  <div className="col-span-3 flex flex-col items-center justify-center border-r border-indigo-200 pr-2 text-center">
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://stayeaze.com/verify-receipt?rcp=${viewInvoice.invoiceNumber}%26tenant=${encodeURIComponent(viewInvoice.tenantName)}%26amount=${viewInvoice.amount}`}
-                      alt="Receipt Verification QR Code"
-                      className="h-20 w-20 border border-slate-300 rounded p-0.5 bg-white shadow-sm"
-                    />
-                    <span className="text-[9px] font-mono font-bold text-indigo-950 mt-1 uppercase">Scan to Verify</span>
-                  </div>
-                  <div className="col-span-9 text-[10px] text-slate-700 leading-tight space-y-1">
-                    <p className="font-bold text-slate-900 uppercase tracking-wider text-[11px] border-b border-indigo-200 pb-1">House Rent Allowance (HRA) Tax Declaration</p>
-                    <p className="italic text-slate-800">
-                      "Received with thanks from <span className="font-bold">{viewInvoice.tenantName}</span> a sum of <span className="font-bold">{formatCurrency(viewInvoice.amount)}</span> ({numberToWords(viewInvoice.amount)}) towards room rent for the month of <span className="font-bold">{viewInvoice.period || 'August 2026'}</span>."
-                    </p>
-                    <p><span className="font-semibold text-slate-900">HRA Tax Compliance:</span> Valid rent receipt for claiming HRA tax exemption under Section 10(13A) of Income Tax Act 1961.</p>
-                    <p><span className="font-semibold text-slate-900">Landlord PAN:</span> <span className="font-mono font-bold text-indigo-950">{issuer?.pan || 'Not provided'}</span> &nbsp;|&nbsp; <span className="font-semibold text-slate-900">Verification Hash:</span> <span className="font-mono text-indigo-900">RCP-SHA256:{viewInvoice.invoiceNumber.replace(/[^A-Z0-9]/gi, '')}</span></p>
-                  </div>
-                </div>
-
-                {/* Bank Details & Terms */}
-                <div className="grid grid-cols-2 gap-4 border-t border-slate-300 pt-3 mb-6">
-                  <div>
-                    <p className="font-bold text-[11px] text-slate-900 uppercase tracking-wider mb-1">Bank Payment Details</p>
-                    <div className="text-[10px] text-slate-600 space-y-0.5 leading-tight font-mono">
-                      {issuer?.bankAccountName && <p><span className="font-semibold text-slate-700">Account Name:</span> {issuer.bankAccountName}</p>}
-                      {issuer?.bankName && <p><span className="font-semibold text-slate-700">Bank Name:</span> {issuer.bankName}</p>}
-                      {issuer?.bankAccountNumber && <p><span className="font-semibold text-slate-700">Account No:</span> {issuer.bankAccountNumber}</p>}
-                      {issuer?.bankIfsc && <p><span className="font-semibold text-slate-700">IFSC Code:</span> {issuer.bankIfsc}</p>}
-                      {issuer?.upiVpa && <p><span className="font-semibold text-slate-700">UPI VPA:</span> {issuer.upiVpa}</p>}
-                      {!issuer?.bankAccountName && !issuer?.bankName && !issuer?.upiVpa && <p>Payment details not configured.</p>}
+                  {/* HRA Tax Declaration & Verification QR Box */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 border border-indigo-200 rounded-xl p-3 mb-4 bg-indigo-50/40">
+                    <div className="sm:col-span-3 flex flex-col items-center justify-center sm:border-r border-indigo-200 sm:pr-2 text-center pb-2 sm:pb-0 border-b sm:border-b-0">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://stayeaze.com/verify-receipt?rcp=${viewInvoice.invoiceNumber}%26tenant=${encodeURIComponent(viewInvoice.tenantName)}%26amount=${viewInvoice.amount}`}
+                        alt="Receipt Verification QR Code"
+                        className="h-20 w-20 border border-slate-300 rounded-lg p-0.5 bg-white shadow-sm"
+                      />
+                      <span className="text-[9px] font-mono font-bold text-indigo-950 mt-1 uppercase">Scan to Verify</span>
+                    </div>
+                    <div className="sm:col-span-9 text-[10px] text-slate-700 leading-tight space-y-1">
+                      <p className="font-bold text-slate-900 uppercase tracking-wider text-[11px] border-b border-indigo-200 pb-1">House Rent Allowance (HRA) Tax Declaration</p>
+                      <p className="italic text-slate-800">
+                        "Received with thanks from <span className="font-bold">{viewInvoice.tenantName}</span> a sum of <span className="font-bold">{formatCurrency(viewInvoice.amount)}</span> ({numberToWords(viewInvoice.amount)}) towards room rent for the month of <span className="font-bold">{viewInvoice.period || 'August 2026'}</span>."
+                      </p>
+                      <p><span className="font-semibold text-slate-900">HRA Tax Compliance:</span> Valid rent receipt for claiming HRA tax exemption under Section 10(13A) of Income Tax Act 1961.</p>
+                      <p><span className="font-semibold text-slate-900">Landlord PAN:</span> <span className="font-mono font-bold text-indigo-950">{issuer?.pan || 'Not provided'}</span> &nbsp;|&nbsp; <span className="font-semibold text-slate-900">Verification Hash:</span> <span className="font-mono text-indigo-900">RCP-SHA256:{viewInvoice.invoiceNumber.replace(/[^A-Z0-9]/gi, '')}</span></p>
                     </div>
                   </div>
 
-                  <div>
-                    <p className="font-bold text-[11px] text-slate-900 uppercase tracking-wider mb-1">Receipt Terms & Rules</p>
-                    <div className="text-[10px] text-slate-600 whitespace-pre-line leading-tight">{issuer?.invoiceTerms || 'Rent is payable on or before the due date. This computer-generated receipt is valid for tenant records.'}</div>
-                    {issuer?.lateFeeNote && <p className="mt-2 text-[10px] text-slate-700"><span className="font-semibold">Late fee:</span> {issuer.lateFeeNote}</p>}
-                  </div>
-                </div>
-
-                {/* Signature & Seal Area */}
-                <div className="flex justify-between items-end border-t-2 border-slate-300 pt-4 mt-6">
-                  <div className="text-[10px] text-slate-500 space-y-0.5">
-                    <p className="font-bold text-slate-800">Official Computer Generated Rent Receipt</p>
-                    <p>Verified & Secured by StayEaze PMS System</p>
-                    <p className="font-mono text-[9px] text-slate-400">Ref ID: {viewInvoice.id}</p>
-                  </div>
-
-                  <div className="text-center">
-                    <div className="h-14 flex items-center justify-center mb-1">
-                      <div className="border-2 border-indigo-700 rounded-full px-3 py-1 bg-indigo-50 text-[10px] font-bold text-indigo-900 rotate-[-3deg] shadow-sm flex items-center gap-1.5">
-                        <svg className="h-4 w-4 text-indigo-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>{issuer?.authorizedSignatory || issuerName}<br />AUTHORIZED SIGNATORY</span>
+                  {/* Bank Details & Terms */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-300 pt-3 mb-6">
+                    <div>
+                      <p className="font-bold text-[11px] text-slate-900 uppercase tracking-wider mb-1">Bank Payment Details</p>
+                      <div className="text-[10px] text-slate-600 space-y-0.5 leading-tight font-mono">
+                        {issuer?.bankAccountName && <p><span className="font-semibold text-slate-700">Account Name:</span> {issuer.bankAccountName}</p>}
+                        {issuer?.bankName && <p><span className="font-semibold text-slate-700">Bank Name:</span> {issuer.bankName}</p>}
+                        {issuer?.bankAccountNumber && <p><span className="font-semibold text-slate-700">Account No:</span> {issuer.bankAccountNumber}</p>}
+                        {issuer?.bankIfsc && <p><span className="font-semibold text-slate-700">IFSC Code:</span> {issuer.bankIfsc}</p>}
+                        {issuer?.upiVpa && <p><span className="font-semibold text-slate-700">UPI VPA:</span> {issuer.upiVpa}</p>}
+                        {!issuer?.bankAccountName && !issuer?.bankName && !issuer?.upiVpa && <p>Payment details not configured.</p>}
                       </div>
                     </div>
-                    <div className="border-t border-slate-800 w-48 pt-1 font-bold text-[11px] text-slate-900">
-                      Landlord / Property Owner Signature
+
+                    <div>
+                      <p className="font-bold text-[11px] text-slate-900 uppercase tracking-wider mb-1">Receipt Terms & Rules</p>
+                      <div className="text-[10px] text-slate-600 whitespace-pre-line leading-tight">{issuer?.invoiceTerms || 'Rent is payable on or before the due date. This computer-generated receipt is valid for tenant records.'}</div>
+                      {issuer?.lateFeeNote && <p className="mt-2 text-[10px] text-slate-700"><span className="font-semibold">Late fee:</span> {issuer.lateFeeNote}</p>}
+                    </div>
+                  </div>
+
+                  {/* Signature & Seal Area */}
+                  <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end border-t-2 border-slate-800 pt-4 mt-6 gap-4">
+                    <div className="text-[10px] text-slate-500 space-y-0.5 text-center sm:text-left">
+                      <p className="font-bold text-slate-800">Official Computer Generated Rent Receipt</p>
+                      <p>Verified & Secured by StayEaze PMS System</p>
+                      <p className="font-mono text-[9px] text-slate-400">Ref ID: {viewInvoice.id}</p>
+                    </div>
+
+                    <div className="text-center">
+                      <div className="h-14 flex items-center justify-center mb-1">
+                        <div className="border-2 border-indigo-700 rounded-full px-3 py-1 bg-indigo-50 text-[10px] font-bold text-indigo-900 rotate-[-3deg] shadow-sm flex items-center gap-1.5">
+                          <svg className="h-4 w-4 text-indigo-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>{issuer?.authorizedSignatory || issuerName}<br />AUTHORIZED SIGNATORY</span>
+                        </div>
+                      </div>
+                      <div className="border-t border-slate-800 w-48 pt-1 font-bold text-[11px] text-slate-900">
+                        Landlord / Property Owner Signature
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Double Confirmation Dialog for Approving Offline/UTR Payments */}
+      <Dialog open={!!approvingInvoice} onOpenChange={(open) => !open && setApprovingInvoice(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl p-5 sm:p-6 shadow-2xl border">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 shrink-0">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-base sm:text-lg">Verify & Approve Payment?</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+              Please double check your bank statement or UPI app to ensure funds have been credited before approving.
+            </DialogDescription>
+          </DialogHeader>
+
+          {approvingInvoice && (
+            <div className="space-y-3 py-2">
+              <div className="p-3.5 rounded-2xl border bg-slate-50 dark:bg-slate-900/50 space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Invoice Number:</span>
+                  <span className="font-mono font-bold text-primary">{approvingInvoice.invoiceNumber}</span>
+                </div>
+                {approvingInvoice.tenantName && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Resident / Tenant:</span>
+                    <span className="font-semibold text-foreground truncate">{approvingInvoice.tenantName}</span>
+                  </div>
+                )}
+                {approvingInvoice.paymentRef && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Payment Proof / UTR:</span>
+                    <span className="font-mono font-bold text-amber-700 dark:text-amber-300 truncate">{approvingInvoice.paymentRef}</span>
+                  </div>
+                )}
+                <div className="flex justify-between pt-1 border-t">
+                  <span className="text-muted-foreground font-semibold">Total Amount to Mark Paid:</span>
+                  <span className="font-black text-sm text-emerald-600 dark:text-emerald-400 font-mono">{formatCurrency(approvingInvoice.amount)}</span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800/60 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+                <AlertCircle className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold">⚠️ Action Cannot Be Undone</p>
+                  <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+                    Approving will permanently mark this invoice as <strong>PAID</strong> in the organization ledger and generate a stamped digital rent receipt.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+            <Button
+              variant="outline"
+              className="rounded-xl h-10 w-full sm:w-auto font-medium"
+              disabled={approveUtrMut.isPending}
+              onClick={() => setApprovingInvoice(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="rounded-xl h-10 w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 shadow-xs"
+              disabled={approveUtrMut.isPending}
+              onClick={() => {
+                if (approvingInvoice) {
+                  approveUtrMut.mutate(approvingInvoice.id, {
+                    onSettled: () => setApprovingInvoice(null),
+                  });
+                }
+              }}
+            >
+              {approveUtrMut.isPending ? 'Verifying...' : 'Yes, Confirm & Mark Paid'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejection Confirmation Dialog */}
+      <Dialog open={!!rejectingInvoice} onOpenChange={(open) => !open && setRejectingInvoice(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl p-5 sm:p-6 shadow-2xl border">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-950/60 shrink-0">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-base sm:text-lg">Reject Payment Proof?</DialogTitle>
+            </div>
+            <DialogDescription className="pt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+              The invoice will be reverted back to <strong>UNPAID</strong> and the resident will be notified.
+            </DialogDescription>
+          </DialogHeader>
+
+          {rejectingInvoice && (
+            <div className="space-y-3 py-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Rejection Reason (Visible to Resident):</Label>
+                <Input
+                  className="rounded-xl h-10 text-xs sm:text-sm"
+                  placeholder="e.g. UTR reference not matching bank account statement"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+            <Button
+              variant="outline"
+              className="rounded-xl h-10 w-full sm:w-auto font-medium"
+              disabled={rejectUtrMut.isPending}
+              onClick={() => setRejectingInvoice(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl h-10 w-full sm:w-auto font-bold shadow-xs"
+              disabled={rejectUtrMut.isPending}
+              onClick={() => {
+                if (rejectingInvoice) {
+                  rejectUtrMut.mutate({ id: rejectingInvoice.id, reason: rejectReason || 'UTR not found in bank statement' }, {
+                    onSettled: () => setRejectingInvoice(null),
+                  });
+                }
+              }}
+            >
+              {rejectUtrMut.isPending ? 'Rejecting...' : 'Reject Payment'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

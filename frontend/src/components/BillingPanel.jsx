@@ -237,7 +237,7 @@ export default function BillingPanel({ token, tenants, billingPlans, fetchBillin
       <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', textAlign: 'left' }}>
         <div style={{ flex: '1', minWidth: '320px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div className="card">
-            <h3>⚙️ Monthly Billing Templates</h3>
+            <h3>Monthly Billing Templates</h3>
             <form onSubmit={handleSaveBillingPlan} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '15px' }}>
               <input type="text" className="form-control" placeholder="Plan name" required value={planName} onChange={e => setPlanName(e.target.value)} />
               <input type="number" className="form-control" placeholder="Base Monthly Rent" required value={planBaseRent} onChange={e => setPlanBaseRent(e.target.value)} />
@@ -260,12 +260,16 @@ export default function BillingPanel({ token, tenants, billingPlans, fetchBillin
 
         <div style={{ flex: '2', minWidth: '400px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div className="card">
-            <h3>💳 Statement Operations</h3>
+            <h3>Statement Operations</h3>
             <div className="form-group" style={{ marginTop: '15px' }}>
               <label className="form-label">Select Tenant / Resident</label>
               <select className="form-control" value={billingTenantId} onChange={e => setBillingTenantId(e.target.value)}>
                 <option value="">-- Choose Resident --</option>
-                {tenants.map(t => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
+                {tenants.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.firstName} {t.lastName} {t.roomNumber ? `[Room ${t.roomNumber}${t.propertyName ? ` • ${t.propertyName}` : ''}]` : ''}
+                  </option>
+                ))}
               </select>
             </div>
 

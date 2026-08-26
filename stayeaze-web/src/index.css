@@ -178,7 +178,6 @@
     color: #0f172a !important;
     padding: 32px !important;
     border-radius: 20px !important;
-    margin: 0 auto !important;
   }
 
   #reception-qr-print-poster button.no-print,
@@ -191,3 +190,15 @@
     print-color-adjust: exact !important;
   }
 }
+
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+}
+
+

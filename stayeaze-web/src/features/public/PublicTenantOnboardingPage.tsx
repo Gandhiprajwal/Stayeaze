@@ -160,7 +160,7 @@ export default function PublicTenantOnboardingPage() {
           key: orderData.keyId,
           amount: orderData.amount,
           currency: orderData.currency || 'INR',
-          name: propertyName || 'StayEaze Residency',
+          name: orderData.businessName || orderData.propertyName || propertyName || 'StayEaze Residency',
           description: `Initial Onboarding Payment (Rent + Deposit)`,
           order_id: orderData.orderId,
           handler: async function (response: any) {
@@ -229,13 +229,13 @@ export default function PublicTenantOnboardingPage() {
   // Invalid link — no property ID in URL
   if (!propertyIdFromUrl) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 transition-colors duration-300">
-        <Card className="max-w-md w-full border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/90 backdrop-blur-xl text-center space-y-4 p-6 shadow-xl dark:shadow-2xl">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-            <ShieldCheck className="h-10 w-10" />
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 sm:p-6 transition-colors duration-300">
+        <Card className="max-w-md w-full border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/90 backdrop-blur-xl text-center space-y-4 p-6 sm:p-8 rounded-2xl shadow-xl dark:shadow-2xl">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+            <ShieldCheck className="h-9 w-9" />
           </div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">Invalid Onboarding Link</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
             This onboarding link is missing a valid property identifier. Please scan the QR code provided at your property's reception desk.
           </p>
         </Card>
@@ -245,15 +245,15 @@ export default function PublicTenantOnboardingPage() {
 
   if (onboardSuccess) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 transition-colors duration-300">
-        <Card className="max-w-md w-full border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/90 backdrop-blur-xl text-center space-y-6 p-6 shadow-xl dark:shadow-2xl">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-            <CheckCircle2 className="h-10 w-10 animate-bounce" />
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-4 sm:p-6 transition-colors duration-300">
+        <Card className="max-w-md w-full border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/90 backdrop-blur-xl text-center space-y-5 p-6 sm:p-8 rounded-2xl shadow-xl dark:shadow-2xl">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+            <CheckCircle2 className="h-9 w-9 animate-bounce" />
           </div>
 
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Welcome to {propertyName || 'StayEaze'}!</h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+          <div className="space-y-1.5">
+            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">Welcome to {propertyName || 'StayEaze'}!</h2>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
               {onboardSuccess.paidOnline
                 ? 'Your initial payment has been received and your resident profile is active.'
                 : 'Your registration is submitted. Please pay your initial dues at reception to activate room access.'}
@@ -261,48 +261,57 @@ export default function PublicTenantOnboardingPage() {
           </div>
 
           {/* Payment Summary Box */}
-          <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-left text-xs space-y-1.5">
+          <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-left text-xs space-y-2">
             <div className="flex justify-between font-medium text-slate-600 dark:text-slate-400">
               <span>1st Month Advance Rent:</span>
-              <span className="font-semibold text-slate-900 dark:text-slate-200">{formatCurrency(Number(formData.rent || 0))}</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-200 font-mono">{formatCurrency(Number(formData.rent || 0))}</span>
             </div>
             <div className="flex justify-between font-medium text-slate-600 dark:text-slate-400">
               <span>Refundable Security Deposit:</span>
-              <span className="font-semibold text-slate-900 dark:text-slate-200">{formatCurrency(Number(formData.deposit || 0))}</span>
+              <span className="font-semibold text-slate-900 dark:text-slate-200 font-mono">{formatCurrency(Number(formData.deposit || 0))}</span>
             </div>
-            <div className="border-t pt-1.5 flex justify-between font-bold text-slate-900 dark:text-white">
+            <div className="border-t pt-2 flex justify-between font-bold text-slate-900 dark:text-white">
               <span>{onboardSuccess.paidOnline ? 'Total Paid (Online):' : 'Total Due at Desk:'}</span>
-              <span className="text-indigo-600 dark:text-indigo-400 font-mono text-sm">{formatCurrency(totalInitialAmount)}</span>
+              <span className="text-indigo-600 dark:text-indigo-400 font-mono text-sm sm:text-base">{formatCurrency(totalInitialAmount)}</span>
             </div>
           </div>
 
           {!onboardSuccess.paidOnline && (
-            <div className="p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/30 text-left text-xs space-y-1">
+            <div className="p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/30 text-left text-xs space-y-1">
               <div className="font-bold text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
-                <Clock className="h-4 w-4" /> Desk Payment Approval Pending
+                <Clock className="h-4 w-4 shrink-0" /> Desk Payment Approval Pending
               </div>
-              <p className="text-slate-600 dark:text-slate-400 text-[11px]">
+              <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed">
                 Please hand over <strong>{formatCurrency(totalInitialAmount)}</strong> (Cash/UPI) to the receptionist or property manager. They will verify and approve your payment in the system.
               </p>
             </div>
           )}
 
-          <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/40 p-4 text-left space-y-3">
+          <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/40 p-4 text-left space-y-2.5">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-              <Sparkles className="h-4 w-4" />
+              <Sparkles className="h-4 w-4 shrink-0" />
               <span>Your Login Credentials</span>
             </div>
-            <div className="text-sm font-mono space-y-1 text-slate-800 dark:text-slate-200">
-              <div>Email: <strong className="text-indigo-600 dark:text-cyan-400">{onboardSuccess.email || formData.email}</strong></div>
-              <div>Temp Password: <strong className="text-indigo-600 dark:text-cyan-400">tenant123</strong></div>
+            <div className="text-xs sm:text-sm font-mono space-y-1.5 text-slate-800 dark:text-slate-200">
+              <div>Email: <strong className="text-indigo-600 dark:text-cyan-400 font-bold">{onboardSuccess.email || formData.email}</strong></div>
+              <div>
+                Temp Password:{' '}
+                {onboardSuccess.tempPassword ? (
+                  <strong className="text-indigo-600 dark:text-cyan-400 font-bold bg-indigo-100/60 dark:bg-indigo-900/40 px-2 py-0.5 rounded">{onboardSuccess.tempPassword}</strong>
+                ) : (
+                  <span className="text-xs font-sans text-emerald-600 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
+                    ✓ Dispatched securely via Email & SMS
+                  </span>
+                )}
+              </div>
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              * A copy of your credentials has been sent via Email & SMS.
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+              * A copy of your credentials has been sent via Email & SMS. You will be prompted to set your personal password upon first login.
             </p>
           </div>
 
           <div className="space-y-3 pt-2">
-            <Button asChild className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md">
+            <Button asChild className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md text-xs sm:text-sm">
               <Link to="/login">
                 Proceed to Tenant Login <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
@@ -314,7 +323,7 @@ export default function PublicTenantOnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4 py-12 transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 py-8 sm:py-12 transition-colors duration-300">
       {/* Theme Toggle Button */}
       <div className="fixed top-4 right-4 z-50">
         <Button
@@ -328,22 +337,22 @@ export default function PublicTenantOnboardingPage() {
         </Button>
       </div>
 
-      <div className="max-w-xl w-full space-y-6">
-        <div className="text-center space-y-2">
+      <div className="max-w-xl w-full space-y-5 sm:space-y-6">
+        <div className="text-center space-y-2 px-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-semibold">
-            <Hotel className="h-4 w-4" />
+            <Hotel className="h-3.5 w-3.5" />
             <span>Digital Express Check-In & Onboarding</span>
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white">Resident Registration & Payment</h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400">Complete your profile and pay initial deposit + rent to activate your stay</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Resident Registration & Payment</h1>
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">Complete your profile and pay initial deposit + rent to activate your stay</p>
         </div>
 
-        <Card className="border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl shadow-xl dark:shadow-2xl">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg text-slate-900 dark:text-white">Personal & Accommodation Details</CardTitle>
+        <Card className="border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl shadow-xl dark:shadow-2xl rounded-2xl overflow-hidden">
+          <CardHeader className="p-4 sm:p-6 pb-3 border-b">
+            <CardTitle className="text-base sm:text-lg text-slate-900 dark:text-white">Personal & Accommodation Details</CardTitle>
             <CardDescription className="text-xs text-slate-500 dark:text-slate-400">Step 1 of 2: Fill personal information</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6 space-y-4">
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Property — locked read-only from QR */}
               <div className="space-y-1.5">
@@ -351,24 +360,24 @@ export default function PublicTenantOnboardingPage() {
                   <Building2 className="h-3.5 w-3.5" /> Allocated Property
                   <Lock className="h-3 w-3 text-slate-400 dark:text-slate-500" />
                 </Label>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 font-medium text-sm cursor-not-allowed select-none">
+                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 font-medium text-xs sm:text-sm cursor-not-allowed select-none">
                   <Building2 className="h-4 w-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
                   {propertyLoading ? (
                     <span className="text-slate-400 dark:text-slate-500 animate-pulse">Loading property...</span>
                   ) : (
-                    <span>{propertyName}{propertyCity ? ` — ${propertyCity}` : ''}</span>
+                    <span className="truncate">{propertyName}{propertyCity ? ` — ${propertyCity}` : ''}</span>
                   )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-slate-700 dark:text-slate-300 font-medium text-xs">First Name *</Label>
                   <Input
                     required
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                    className="h-9 bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200"
+                    className="h-10 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200"
                     placeholder="John"
                   />
                 </div>
@@ -378,13 +387,13 @@ export default function PublicTenantOnboardingPage() {
                     required
                     value={formData.lastName}
                     onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                    className="h-9 bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200"
+                    className="h-10 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200"
                     placeholder="Doe"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-slate-700 dark:text-slate-300 font-medium text-xs">Email Address *</Label>
                   <Input
@@ -392,7 +401,7 @@ export default function PublicTenantOnboardingPage() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="h-9 bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200"
+                    className="h-10 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200"
                     placeholder="tenant@gmail.com"
                   />
                 </div>
@@ -402,7 +411,7 @@ export default function PublicTenantOnboardingPage() {
                     required
                     value={formData.mobile}
                     onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                    className="h-9 bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200"
+                    className="h-10 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200"
                     placeholder="9876543210"
                   />
                 </div>
@@ -423,7 +432,7 @@ export default function PublicTenantOnboardingPage() {
                       bedNumber: '',
                     }));
                     if (rId) {
-                      axios.get(`${PUBLIC_API_BASE}/rooms/${rId}/beds`)
+                      axios.get(`${PUBLIC_API_BASE}/beds`, { params: { roomId: rId } })
                         .then((r) => setBeds(Array.isArray(r.data) ? r.data : (r.data as any).data || []))
                         .catch(() => {});
                     }
@@ -433,22 +442,22 @@ export default function PublicTenantOnboardingPage() {
               </div>
 
               {/* Initial Payment Dues Breakdown Card */}
-              <div className="p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/40 dark:bg-indigo-950/30 space-y-3">
+              <div className="p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/40 dark:bg-indigo-950/30 space-y-3">
                 <div className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400 flex items-center justify-between">
                   <span>Initial Onboarding Dues</span>
-                  <span className="font-mono text-base font-extrabold text-indigo-600 dark:text-indigo-300">{formatCurrency(totalInitialAmount)}</span>
+                  <span className="font-mono text-sm sm:text-base font-black text-indigo-600 dark:text-indigo-300">{formatCurrency(totalInitialAmount)}</span>
                 </div>
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600 dark:text-slate-400">
                     <span>1st Month Rent (Advance):</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(Number(formData.rent || 0))}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{formatCurrency(Number(formData.rent || 0))}</span>
                   </div>
                   <div className="flex justify-between text-slate-600 dark:text-slate-400">
                     <span>Refundable Security Deposit:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(Number(formData.deposit || 0))}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{formatCurrency(Number(formData.deposit || 0))}</span>
                   </div>
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 italic">
                   * Next recurring monthly rent will be billed automatically from month 2 onwards.
                 </div>
               </div>
@@ -456,37 +465,37 @@ export default function PublicTenantOnboardingPage() {
               {/* Payment Method Selector */}
               <div className="space-y-2 pt-1">
                 <Label className="text-slate-700 dark:text-slate-300 font-bold text-xs uppercase tracking-wider">Select Payment Method</Label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div
                     onClick={() => setFormData({ ...formData, paymentMethod: 'RAZORPAY' })}
-                    className={`cursor-pointer p-3 rounded-xl border-2 transition-all flex flex-col justify-between ${
+                    className={`cursor-pointer p-3.5 rounded-2xl border-2 transition-all flex flex-col justify-between ${
                       formData.paymentMethod === 'RAZORPAY'
                         ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 dark:border-indigo-500 shadow-sm'
                         : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <CreditCard className={`h-4 w-4 ${formData.paymentMethod === 'RAZORPAY' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Instant</span>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <CreditCard className={`h-4.5 w-4.5 ${formData.paymentMethod === 'RAZORPAY' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">Instant</span>
                     </div>
-                    <div className="text-xs font-bold text-slate-900 dark:text-white">Razorpay Online</div>
-                    <div className="text-[10px] text-slate-500">UPI, Cards, Netbanking</div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">Razorpay Online Gateway</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">UPI, Debit/Credit Cards, Netbanking</div>
                   </div>
 
                   <div
                     onClick={() => setFormData({ ...formData, paymentMethod: 'CASH' })}
-                    className={`cursor-pointer p-3 rounded-xl border-2 transition-all flex flex-col justify-between ${
+                    className={`cursor-pointer p-3.5 rounded-2xl border-2 transition-all flex flex-col justify-between ${
                       formData.paymentMethod === 'CASH'
                         ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 dark:border-indigo-500 shadow-sm'
                         : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <Wallet className={`h-4 w-4 ${formData.paymentMethod === 'CASH' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Desk Handover</span>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <Wallet className={`h-4.5 w-4.5 ${formData.paymentMethod === 'CASH' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800">Desk Handover</span>
                     </div>
                     <div className="text-xs font-bold text-slate-900 dark:text-white">Pay at Reception Desk</div>
-                    <div className="text-[10px] text-slate-500">Requires Staff Approval</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5">Requires Staff Payment Approval</div>
                   </div>
                 </div>
               </div>
@@ -495,7 +504,7 @@ export default function PublicTenantOnboardingPage() {
                 <Button
                   type="submit"
                   disabled={loading || propertyLoading}
-                  className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md text-sm"
+                  className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md text-xs sm:text-sm"
                 >
                   {loading
                     ? 'Processing...'

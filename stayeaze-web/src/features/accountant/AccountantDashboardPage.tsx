@@ -96,18 +96,18 @@ export default function AccountantDashboardPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-6">
       <PageHeader
         title="Property Accountant Portal"
         description="Property-isolated accounting ledger, GST compliance, and cash flow reconciliation."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
             <Select value={selectedPropertyId} onValueChange={setSelectedPropertyId}>
-              <SelectTrigger className="w-[200px]">
-                <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
+              <SelectTrigger className="w-full sm:w-[180px] h-10 rounded-xl border-border/80 bg-card text-xs sm:text-sm shadow-xs">
+                <Building2 className="h-4 w-4 mr-2 text-muted-foreground shrink-0" />
                 <SelectValue placeholder="All Properties" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl border-border/80 bg-popover/95 backdrop-blur-xl text-xs sm:text-sm">
                 <SelectItem value="ALL">All Properties</SelectItem>
                 {(properties || []).map((p: any) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -117,30 +117,32 @@ export default function AccountantDashboardPage() {
 
             <Dialog open={openExpenseModal} onOpenChange={setOpenExpenseModal}>
               <DialogTrigger asChild>
-                <Button><Plus className="mr-1.5 h-4 w-4" /> Record Expense</Button>
+                <Button className="rounded-xl h-10 text-xs sm:text-sm font-semibold shrink-0 gap-1.5 shadow-xs">
+                  <Plus className="h-4 w-4" /> Record Expense
+                </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl p-5 sm:p-6">
                 <DialogHeader>
-                  <DialogTitle>Record Property Expense</DialogTitle>
-                  <DialogDescription>Add a new debit entry to the property cashbook ledger.</DialogDescription>
+                  <DialogTitle className="text-base sm:text-lg font-bold">Record Property Expense</DialogTitle>
+                  <DialogDescription className="text-xs">Add a new debit entry to the property cashbook ledger.</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleAddExpense} className="space-y-4 py-2">
-                  <div className="space-y-2">
-                    <Label>Target Property</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Target Property</Label>
                     <Select value={expensePropertyId} onValueChange={setExpensePropertyId}>
-                      <SelectTrigger><SelectValue placeholder="Select property (optional)" /></SelectTrigger>
-                      <SelectContent>
+                      <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm"><SelectValue placeholder="Select property (optional)" /></SelectTrigger>
+                      <SelectContent className="rounded-xl">
                         {(properties || []).map((p: any) => (
                           <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Expense Category</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Expense Category</Label>
                     <Select value={category} onValueChange={setCategory}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                      <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent className="rounded-xl">
                         <SelectItem value="Electricity">Electricity & Power Utility</SelectItem>
                         <SelectItem value="Internet">Wi-Fi & Broadband</SelectItem>
                         <SelectItem value="Maintenance">General Maintenance & Repairs</SelectItem>
@@ -151,16 +153,16 @@ export default function AccountantDashboardPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Amount (₹)</Label>
-                      <Input type="number" placeholder="5000" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Amount (₹) *</Label>
+                      <Input type="number" placeholder="5000" value={amount} onChange={(e) => setAmount(e.target.value)} required className="h-10 rounded-xl text-xs sm:text-sm font-mono" />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Payment Method</Label>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Payment Method</Label>
                       <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
+                        <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent className="rounded-xl">
                           <SelectItem value="CASH">Cash</SelectItem>
                           <SelectItem value="BANK_TRANSFER">Bank Transfer / NEFT</SelectItem>
                           <SelectItem value="UPI">UPI / GPay / PhonePe</SelectItem>
@@ -169,17 +171,17 @@ export default function AccountantDashboardPage() {
                       </Select>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Vendor / Payee Name</Label>
-                    <Input placeholder="BESCOM Electric Power / Apex Repairs" value={vendorName} onChange={(e) => setVendorName(e.target.value)} />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Vendor / Payee Name</Label>
+                    <Input placeholder="BESCOM Electric Power / Apex Repairs" value={vendorName} onChange={(e) => setVendorName(e.target.value)} className="h-10 rounded-xl text-xs sm:text-sm" />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Description / Note</Label>
-                    <Input placeholder="Monthly property power bill settlement" value={description} onChange={(e) => setDescription(e.target.value)} />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Description / Note</Label>
+                    <Input placeholder="Monthly property power bill settlement" value={description} onChange={(e) => setDescription(e.target.value)} className="h-10 rounded-xl text-xs sm:text-sm" />
                   </div>
-                  <DialogFooter className="mt-4">
-                    <Button type="button" variant="outline" onClick={() => setOpenExpenseModal(false)}>Cancel</Button>
-                    <Button type="submit" disabled={createExpenseMutation.isPending}>
+                  <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+                    <Button type="button" variant="outline" className="rounded-xl h-10 w-full sm:w-auto text-xs" onClick={() => setOpenExpenseModal(false)}>Cancel</Button>
+                    <Button type="submit" className="rounded-xl h-10 w-full sm:w-auto text-xs font-bold shadow-xs" disabled={createExpenseMutation.isPending}>
                       {createExpenseMutation.isPending ? 'Recording...' : 'Record Debit Entry'}
                     </Button>
                   </DialogFooter>
@@ -191,27 +193,27 @@ export default function AccountantDashboardPage() {
       />
 
       {/* Financial Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Revenue Collections" value={formatCurrency(overview?.totalCollections ?? 0)} icon={TrendingUp} accent="success" hint="Gross rent & fee collections" />
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard label="Total Collections" value={formatCurrency(overview?.totalCollections ?? 0)} icon={TrendingUp} accent="success" hint="Gross rent & fee collections" />
         <StatCard label="Property Expenses" value={formatCurrency(overview?.totalExpenses ?? 0)} icon={TrendingDown} accent="destructive" hint="Operational costs & vendor debits" />
         <StatCard label="Net Cash Flow" value={formatCurrency(overview?.netCashFlow ?? 0)} icon={Wallet} accent="primary" hint="Net operating cash balance" />
         <StatCard
-          label={overview?.gstEnabled ? `Est. GST Liability (${overview.defaultGstRate || 18}%)` : "GST Status"}
-          value={overview?.gstEnabled ? formatCurrency(overview?.estimatedGstLiability ?? 0) : "Disabled (Exempt)"}
+          label={overview?.gstEnabled ? `Est. GST (${overview.defaultGstRate || 18}%)` : "GST Status"}
+          value={overview?.gstEnabled ? formatCurrency(overview?.estimatedGstLiability ?? 0) : "Exempt"}
           icon={FileText}
           accent={overview?.gstEnabled ? "warning" : "primary"}
-          hint={overview?.gstEnabled ? `GSTIN: ${overview.gstin || 'Active'}` : "Residential hostel GST exemption active"}
+          hint={overview?.gstEnabled ? `GSTIN: ${overview.gstin || 'Active'}` : "Hostel exemption active"}
         />
       </div>
 
       {/* Financial Overview Chart & Cashbook Feed */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Income vs Expense Cash Flow</CardTitle>
-            <CardDescription>Monthly collections vs operational debits</CardDescription>
+        <Card className="lg:col-span-2 rounded-2xl shadow-xs overflow-hidden">
+          <CardHeader className="p-4 sm:p-6 pb-3 border-b">
+            <CardTitle className="text-base sm:text-lg font-bold">Income vs Expense Cash Flow</CardTitle>
+            <CardDescription className="text-xs">Monthly collections vs operational debits</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6 pt-4">
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={chartData} margin={{ left: -10, right: 10 }}>
                 <defs>
@@ -227,7 +229,7 @@ export default function AccountantDashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
                 <YAxis tickLine={false} axisLine={false} fontSize={12} tickFormatter={(v) => `₹${v / 1000}k`} />
-                <Tooltip formatter={(val: number) => formatCurrency(val)} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+                <Tooltip formatter={(val: number) => formatCurrency(val)} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12 }} />
                 <Area type="monotone" dataKey="revenue" stroke="hsl(var(--success))" strokeWidth={2} fill="url(#incGrad)" name="Collections" />
                 <Area type="monotone" dataKey="expenses" stroke="hsl(var(--destructive))" strokeWidth={2} fill="url(#expGrad)" name="Expenses" />
               </AreaChart>
@@ -235,30 +237,30 @@ export default function AccountantDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent General Ledger Entries</CardTitle>
-            <CardDescription>Latest double-entry transactions</CardDescription>
+        <Card className="rounded-2xl shadow-xs overflow-hidden">
+          <CardHeader className="p-4 sm:p-6 pb-3 border-b">
+            <CardTitle className="text-base sm:text-lg font-bold">Recent General Ledger</CardTitle>
+            <CardDescription className="text-xs">Latest double-entry transactions</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="p-4 sm:p-6 space-y-3">
             {isLoading ? (
-              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full rounded-xl" />
             ) : ledger && ledger.length > 0 ? (
               ledger.slice(0, 5).map((entry, idx) => (
-                <div key={idx} className="flex items-center justify-between border-b pb-2.5 last:border-0">
-                  <div className="flex items-center gap-2.5 min-w-0">
+                <div key={idx} className="flex items-center justify-between gap-2 border-b border-border/50 pb-2.5 last:border-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
                       entry.type === 'CREDIT' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'
                     }`}>
                       {entry.type === 'CREDIT' ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{entry.category}</p>
+                      <p className="text-sm font-semibold truncate">{entry.category}</p>
                       <p className="text-xs text-muted-foreground truncate">{entry.description}</p>
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className={`text-sm font-bold ${entry.type === 'CREDIT' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  <div className="text-right shrink-0 pl-2">
+                    <p className={`text-sm font-bold font-mono ${entry.type === 'CREDIT' ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {entry.type === 'CREDIT' ? '+' : '-'}{formatCurrency(entry.amount)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{entry.date}</p>

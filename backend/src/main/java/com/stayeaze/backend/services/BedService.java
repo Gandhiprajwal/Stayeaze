@@ -30,132 +30,230 @@ public class BedService {
     @Autowired
     private com.stayeaze.backend.repository.BookingRepository bookingRepository;
 
-    private Bed populateBedDetails(Bed bed, Organization organization) {
-        if (bed == null) return bed;
-        String roomNum = null;
+    @Cacheable(value = "beds_v4", key = "#organization != null ? #organization.id : 'all'")
+    @Transactional(readOnly = true)
+    public List<BedDTO> getBedsByOrg(Organization organization) {
+        List<Bed> list = organization == null ? bedRepository.findAllSuperAdmin()
+                : bedRepository.findByOrganizationId(organization.getId());
+        if (list == null || list.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
+        // 1. Batch preload all tenants for this organization in 1 single query
+        List<com.stayeaze.backend.models.Tenant> allTenants = java.util.Collections.emptyList();
         try {
-            if (bed.getRoom() != null) {
-                roomNum = bed.getRoom().getRoomNumber();
-            }
+            allTenants = organization != null ? tenantRepository.findByOrganization(organization) : tenantRepository.findAll();
         } catch (Exception ignored) {}
+        if (allTenants == null) allTenants = java.util.Collections.emptyList();
 
-        try {
-            // Fast path: if bed has a stored tenantId, look up that tenant directly
-            if (bed.getTenantId() != null && !bed.getTenantId().isBlank()) {
-                try {
-                    java.util.UUID tenantUUID = java.util.UUID.fromString(bed.getTenantId());
-                    com.stayeaze.backend.models.Tenant directTenant = tenantRepository.findById(tenantUUID).orElse(null);
-                    if (directTenant != null) {
-                        String ts = directTenant.getStatus();
-                        boolean checkedOut = "CHECKED_OUT".equalsIgnoreCase(ts);
-                        if (!checkedOut) {
-                            bed.setTenantName(directTenant.getName());
-                            bed.setTenantId(directTenant.getId().toString());
-                            bed.setStatus("OCCUPIED");
-                            return bed;
-                        }
-                    }
-                } catch (Exception ignored) {}
-            }
+        java.util.Map<UUID, com.stayeaze.backend.models.Tenant> tenantById = new java.util.HashMap<>();
+        java.util.Map<String, com.stayeaze.backend.models.Tenant> tenantByLocationKey = new java.util.HashMap<>();
+        java.util.Map<String, com.stayeaze.backend.models.Tenant> tenantByRoomAndBed = new java.util.HashMap<>();
 
-            // Scan active tenants for room+bed match
-            List<com.stayeaze.backend.models.Tenant> activeTenants = organization != null
-                    ? tenantRepository.findByOrganization(organization)
-                    : tenantRepository.findAll();
-            for (com.stayeaze.backend.models.Tenant t : activeTenants) {
-                String ts = t.getStatus();
-                boolean isCheckedOut = "CHECKED_OUT".equalsIgnoreCase(ts);
-                if (isCheckedOut) continue;
-                boolean roomMatch = roomNum != null && roomNum.equalsIgnoreCase(t.getRoomNumber());
-                boolean bedMatch = bed.getBedNumber() != null && bed.getBedNumber().equalsIgnoreCase(t.getBedNumber());
-                if (roomMatch && bedMatch) {
-                    bed.setStatus("OCCUPIED");
-                    bed.setTenantId(t.getId().toString());
-                    bed.setTenantName(t.getName());
-                    return bed;
+        for (com.stayeaze.backend.models.Tenant t : allTenants) {
+            if (t == null) continue;
+            if (t.getId() != null) tenantById.put(t.getId(), t);
+            String ts = t.getStatus();
+            boolean isCheckedOut = "CHECKED_OUT".equalsIgnoreCase(ts) || "ARCHIVED".equalsIgnoreCase(ts);
+            if (!isCheckedOut && t.getRoomNumber() != null && t.getBedNumber() != null) {
+                String rClean = clean(t.getRoomNumber());
+                String bClean = clean(t.getBedNumber());
+                
+                tenantByRoomAndBed.put(rClean + "_" + bClean, t);
+                if (t.getPropertyId() != null) {
+                    tenantByLocationKey.put(t.getPropertyId() + "_" + rClean + "_" + bClean, t);
                 }
             }
+        }
 
-            // Scan bookings for reserved/checked-in bed
-            List<com.stayeaze.backend.models.Booking> activeBookings = organization != null
-                    ? bookingRepository.findByOrganizationId(organization.getId())
-                    : bookingRepository.findAll();
-            for (com.stayeaze.backend.models.Booking b : activeBookings) {
+        // 2. Batch preload all bookings for this organization in 1 single query
+        List<com.stayeaze.backend.models.Booking> activeBookings = java.util.Collections.emptyList();
+        try {
+            activeBookings = organization != null ? bookingRepository.findByOrganizationId(organization.getId()) : bookingRepository.findAll();
+        } catch (Exception ignored) {}
+        if (activeBookings == null) activeBookings = java.util.Collections.emptyList();
+
+        java.util.Map<UUID, com.stayeaze.backend.models.Booking> bookingByBedId = new java.util.HashMap<>();
+        java.util.Map<String, com.stayeaze.backend.models.Booking> bookingByRoomAndBed = new java.util.HashMap<>();
+        for (com.stayeaze.backend.models.Booking b : activeBookings) {
+            if (b == null) continue;
+            try {
                 boolean statusOk = b.getStatus() == null
                         || "CONFIRMED".equalsIgnoreCase(b.getStatus())
                         || "CHECKED_IN".equalsIgnoreCase(b.getStatus())
                         || "PENDING".equalsIgnoreCase(b.getStatus());
                 if (statusOk) {
-                    boolean roomMatch = roomNum != null && roomNum.equalsIgnoreCase(b.getRoomNumber());
-                    boolean bedMatch = bed.getBedNumber() != null && bed.getBedNumber().equalsIgnoreCase(b.getBedNumber());
-                    boolean directBedMatch = b.getBed() != null && b.getBed().getId().equals(bed.getId());
-                    if (directBedMatch || (roomMatch && bedMatch)) {
-                        if ("CHECKED_IN".equalsIgnoreCase(b.getStatus())) {
-                            bed.setStatus("OCCUPIED");
-                        } else {
-                            bed.setStatus("RESERVED");
-                        }
-                        if (b.getTenant() != null) {
-                            bed.setTenantId(b.getTenant().getId().toString());
-                            bed.setTenantName(b.getTenant().getName());
-                        } else if (b.getTenantName() != null) {
-                            bed.setTenantName(b.getTenantName());
-                        }
-                        return bed;
+                    if (b.getBed() != null && b.getBed().getId() != null) {
+                        bookingByBedId.put(b.getBed().getId(), b);
+                    }
+                    if (b.getRoomNumber() != null && b.getBedNumber() != null) {
+                        String rClean = clean(b.getRoomNumber());
+                        String bClean = clean(b.getBedNumber());
+                        bookingByRoomAndBed.put(rClean + "_" + bClean, b);
                     }
                 }
-            }
+            } catch (Exception ignored) {}
+        }
 
-            // No active tenant or booking found — if bed is stale "OCCUPIED", reset to available
-            if ("OCCUPIED".equalsIgnoreCase(bed.getStatus()) || "RESERVED".equalsIgnoreCase(bed.getStatus())) {
-                bed.setStatus("available");
-                bed.setTenantId(null);
-                bed.setTenantName(null);
-            }
-        } catch (Exception ignored) {}
-        return bed;
-    }
-
-    @Transactional
-    public List<BedDTO> getBedsByOrg(Organization organization) {
-        try {
-            List<com.stayeaze.backend.models.Room> rooms = organization == null
-                    ? roomRepository.findAll()
-                    : roomRepository.findByOrganizationId(organization.getId());
-            if (rooms != null) {
-                for (com.stayeaze.backend.models.Room r : rooms) {
-                    List<Bed> existing = bedRepository.findByRoomId(r.getId());
-                    if (existing == null || existing.isEmpty()) {
-                        int max = r.getSharing() != null && r.getSharing() > 0 ? r.getSharing() : 1;
-                        for (int i = 1; i <= max; i++) {
-                            String bedNo = "B" + i;
-                            if (!Boolean.TRUE.equals(bedRepository.existsByRoomAndBedNumber(r, bedNo))) {
-                                Bed b = new Bed(r, bedNo);
-                                b.setStatus("AVAILABLE");
-                                try { bedRepository.save(b); } catch (Exception ignored) {}
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
-
-        List<Bed> list = organization == null ? bedRepository.findAllSuperAdmin()
-                : bedRepository.findByOrganizationId(organization.getId(), org.springframework.data.domain.Pageable.unpaged()).getContent();
+        // 3. Populate bed details in-memory with 0 database roundtrips
         return list.stream()
-                .map(b -> BedDTO.fromEntity(populateBedDetails(b, organization)))
+                .map(b -> BedDTO.fromEntity(populateBedDetailsFast(b, tenantById, tenantByLocationKey, tenantByRoomAndBed, bookingByBedId, bookingByRoomAndBed)))
                 .collect(Collectors.toList());
     }
 
+    private String clean(String str) {
+        if (str == null) return "";
+        return str.toLowerCase().replaceAll("[^a-z0-9]", "");
+    }
+
+    private Bed populateBedDetailsFast(
+            Bed bed,
+            java.util.Map<UUID, com.stayeaze.backend.models.Tenant> tenantById,
+            java.util.Map<String, com.stayeaze.backend.models.Tenant> tenantByLocationKey,
+            java.util.Map<String, com.stayeaze.backend.models.Tenant> tenantByRoomAndBed,
+            java.util.Map<UUID, com.stayeaze.backend.models.Booking> bookingByBedId,
+            java.util.Map<String, com.stayeaze.backend.models.Booking> bookingByRoomAndBed) {
+        if (bed == null) return bed;
+        String roomNum = null;
+        UUID propId = null;
+        try {
+            if (bed.getRoom() != null) {
+                roomNum = bed.getRoom().getRoomNumber();
+                if (bed.getRoom().getFloor() != null && bed.getRoom().getFloor().getBuilding() != null && bed.getRoom().getFloor().getBuilding().getProperty() != null) {
+                    propId = bed.getRoom().getFloor().getBuilding().getProperty().getId();
+                }
+            }
+        } catch (Exception ignored) {}
+
+        String rClean = clean(roomNum);
+        String bClean = clean(bed.getBedNumber());
+
+        // Fast path 1: Match by direct Bed ID in active bookings
+        com.stayeaze.backend.models.Booking directBooking = bed.getId() != null ? bookingByBedId.get(bed.getId()) : null;
+        if (directBooking != null) {
+            if ("CHECKED_IN".equalsIgnoreCase(directBooking.getStatus())) {
+                bed.setStatus("OCCUPIED");
+            } else {
+                bed.setStatus("RESERVED");
+            }
+            try {
+                if (directBooking.getTenant() != null) {
+                    com.stayeaze.backend.models.Tenant t = tenantById.get(directBooking.getTenant().getId());
+                    if (t != null) {
+                        bed.setTenantId(t.getId().toString());
+                        bed.setTenantName(t.getName());
+                        return bed;
+                    }
+                }
+            } catch (Exception ignored) {}
+            if (directBooking.getTenantName() != null && !directBooking.getTenantName().isBlank()) {
+                bed.setTenantName(directBooking.getTenantName());
+                return bed;
+            }
+        }
+
+        // Fast path 2: if bed has a stored tenantId, look up that tenant directly
+        if (bed.getTenantId() != null && !bed.getTenantId().isBlank()) {
+            try {
+                UUID tenantUUID = UUID.fromString(bed.getTenantId());
+                com.stayeaze.backend.models.Tenant directTenant = tenantById.get(tenantUUID);
+                if (directTenant != null) {
+                    String ts = directTenant.getStatus();
+                    boolean checkedOut = "CHECKED_OUT".equalsIgnoreCase(ts) || "ARCHIVED".equalsIgnoreCase(ts);
+                    if (!checkedOut) {
+                        bed.setTenantName(directTenant.getName());
+                        bed.setTenantId(directTenant.getId().toString());
+                        bed.setStatus("OCCUPIED");
+                        return bed;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // Fast path 3: Match active tenant by (property + room + bed) key
+        if (propId != null && !rClean.isEmpty() && !bClean.isEmpty()) {
+            com.stayeaze.backend.models.Tenant matchedTenant = tenantByLocationKey.get(propId + "_" + rClean + "_" + bClean);
+            if (matchedTenant != null) {
+                bed.setStatus("OCCUPIED");
+                bed.setTenantId(matchedTenant.getId().toString());
+                bed.setTenantName(matchedTenant.getName());
+                return bed;
+            }
+        }
+
+        // Fast path 4: Match active tenant by (room + bed) key
+        if (!rClean.isEmpty() && !bClean.isEmpty()) {
+            com.stayeaze.backend.models.Tenant matchedTenant = tenantByRoomAndBed.get(rClean + "_" + bClean);
+            if (matchedTenant != null) {
+                bed.setStatus("OCCUPIED");
+                bed.setTenantId(matchedTenant.getId().toString());
+                bed.setTenantName(matchedTenant.getName());
+                return bed;
+            }
+        }
+
+        // Fast path 5: Match booking by room + bed key
+        if (!rClean.isEmpty() && !bClean.isEmpty()) {
+            com.stayeaze.backend.models.Booking b = bookingByRoomAndBed.get(rClean + "_" + bClean);
+            if (b != null) {
+                if ("CHECKED_IN".equalsIgnoreCase(b.getStatus())) {
+                    bed.setStatus("OCCUPIED");
+                } else {
+                    bed.setStatus("RESERVED");
+                }
+                try {
+                    if (b.getTenant() != null) {
+                        com.stayeaze.backend.models.Tenant t = tenantById.get(b.getTenant().getId());
+                        if (t != null) {
+                            bed.setTenantId(t.getId().toString());
+                            bed.setTenantName(t.getName());
+                            return bed;
+                        }
+                    }
+                } catch (Exception ignored) {}
+                if (b.getTenantName() != null && !b.getTenantName().isBlank()) {
+                    bed.setTenantName(b.getTenantName());
+                }
+                return bed;
+            }
+        }
+
+        // No active tenant or booking found — if bed is stale "OCCUPIED" or "RESERVED", reset to available
+        if ("OCCUPIED".equalsIgnoreCase(bed.getStatus()) || "RESERVED".equalsIgnoreCase(bed.getStatus())) {
+            bed.setStatus("AVAILABLE");
+            bed.setTenantId(null);
+            bed.setTenantName(null);
+        }
+        return bed;
+    }
+
+    public Bed populateBedDetails(Bed bed, Organization organization) {
+        return populateBedDetailsFast(bed, java.util.Collections.emptyMap(), java.util.Collections.emptyMap(), java.util.Collections.emptyMap(), java.util.Collections.emptyMap(), java.util.Collections.emptyMap());
+    }
+
     @Caching(evict = {
-        @CacheEvict(value = "beds_v3", allEntries = true)
+        @CacheEvict(value = "beds_v4", allEntries = true),
+        @CacheEvict(value = "beds_v3", allEntries = true),
+        @CacheEvict(value = "rooms_v4", allEntries = true),
+        @CacheEvict(value = "rooms_v3", allEntries = true),
+        @CacheEvict(value = "floors_v2", allEntries = true),
+        @CacheEvict(value = "building_floors", allEntries = true),
+        @CacheEvict(value = "propertySummaries", allEntries = true),
+        @CacheEvict(value = "propertyDtos", allEntries = true)
     })
     public Bed saveBed(Bed bed) {
         return bedRepository.save(bed);
     }
 
     @Caching(evict = {
-        @CacheEvict(value = "beds_v3", allEntries = true)
+        @CacheEvict(value = "beds_v4", allEntries = true),
+        @CacheEvict(value = "beds_v3", allEntries = true),
+        @CacheEvict(value = "rooms_v4", allEntries = true),
+        @CacheEvict(value = "rooms_v3", allEntries = true),
+        @CacheEvict(value = "floors_v2", allEntries = true),
+        @CacheEvict(value = "building_floors", allEntries = true),
+        @CacheEvict(value = "propertySummaries", allEntries = true),
+        @CacheEvict(value = "propertyDtos", allEntries = true)
     })
     public void deleteBed(UUID id) {
         bedRepository.deleteById(id);

@@ -57,6 +57,9 @@ public class Booking {
     @Column(name = "razorpay_signature", length = 255)
     private String razorpaySignature;
 
+    @Version
+    private Long version = 0L;
+
     @Transient
     private String bookingCode;
 
@@ -256,4 +259,7 @@ public class Booking {
 
     public String getRazorpaySignature() { return razorpaySignature; }
     public void setRazorpaySignature(String razorpaySignature) { this.razorpaySignature = razorpaySignature; }
+
+    public Long getVersion() { return version; }
+    public void setVersion(Long version) { this.version = version; }
 }

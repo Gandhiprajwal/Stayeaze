@@ -66,9 +66,9 @@ export const fetchFloors = createAsyncThunk(
 
 export const addFloor = createAsyncThunk(
   'property/addFloor',
-  async ({ token, propertyId, buildingId, floorNumber }, { dispatch, rejectWithValue }) => {
+  async ({ token, propertyId, buildingId, floorNumber, name }, { dispatch, rejectWithValue }) => {
     try {
-      const data = await api.createFloor(token, propertyId, buildingId, floorNumber);
+      const data = await api.createFloor(token, propertyId, buildingId, floorNumber, name);
       dispatch(fetchFloors({ token, propertyId, buildingId }));
       return data;
     } catch (err) {
@@ -129,6 +129,32 @@ export const addBed = createAsyncThunk(
   }
 );
 
+export const fetchAllBedsFlat = createAsyncThunk(
+  'property/fetchAllBedsFlat',
+  async (token, { rejectWithValue }) => {
+    try {
+      const res = await api.getAllBedsFlat(token, 1, 500);
+      const items = res?.content || res || [];
+      return items.filter(b => b.status !== 'ARCHIVED');
+    } catch (err) {
+      return rejectWithValue(err.message || 'Failed to fetch all beds.');
+    }
+  }
+);
+
+export const fetchAllRoomsFlat = createAsyncThunk(
+  'property/fetchAllRoomsFlat',
+  async (token, { rejectWithValue }) => {
+    try {
+      const res = await api.getAllRoomsFlat(token, 1, 500);
+      const items = res?.content || res || [];
+      return items.filter(r => r.status !== 'ARCHIVED');
+    } catch (err) {
+      return rejectWithValue(err.message || 'Failed to fetch all rooms.');
+    }
+  }
+);
+
 const initialState = {
   properties: [],
   selectedProperty: null,
@@ -136,6 +162,8 @@ const initialState = {
   floors: [],
   rooms: [],
   beds: [],
+  allBedsFlat: [],
+  allRoomsFlat: [],
   loading: false
 };
 
@@ -178,6 +206,12 @@ const propertySlice = createSlice({
       })
       .addCase(fetchBeds.fulfilled, (state, action) => {
         state.beds = action.payload;
+      })
+      .addCase(fetchAllBedsFlat.fulfilled, (state, action) => {
+        state.allBedsFlat = action.payload;
+      })
+      .addCase(fetchAllRoomsFlat.fulfilled, (state, action) => {
+        state.allRoomsFlat = action.payload;
       });
   }
 });

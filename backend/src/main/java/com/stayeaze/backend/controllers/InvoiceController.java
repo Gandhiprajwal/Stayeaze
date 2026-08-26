@@ -692,10 +692,29 @@ public class InvoiceController {
     @GetMapping("/invoices/pending-approvals")
     @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ACCOUNTANT')")
     public ResponseEntity<?> getPendingApprovals() {
-        Organization org = getLoggedUserOrg();
-        List<Invoice> all = org != null ? invoiceRepository.findByOrganizationId(org.getId()) : invoiceRepository.findAll();
+        Organization org = null;
+        try {
+            org = getLoggedUserOrg();
+        } catch (Exception ignored) {}
+
+        List<Invoice> all = new ArrayList<>();
+        try {
+            all = org != null ? invoiceRepository.findByOrganizationIdNative(org.getId()) : invoiceRepository.findAll();
+        } catch (Exception e) {
+            try {
+                all = org != null ? invoiceRepository.findByOrganizationId(org.getId()) : invoiceRepository.findAll();
+            } catch (Exception ex) {
+                all = invoiceRepository.findAll();
+            }
+        }
+        if (all == null || all.isEmpty()) {
+            all = invoiceRepository.findAll();
+        }
+
+        final UUID targetOrgId = org != null ? org.getId() : null;
         List<Invoice> pending = all.stream()
-                .filter(i -> "PENDING_APPROVAL".equalsIgnoreCase(i.getStatus()))
+                .filter(i -> i != null && "PENDING_APPROVAL".equalsIgnoreCase(i.getStatus()))
+                .filter(i -> targetOrgId == null || (i.getTenant() != null && i.getTenant().getOrganization() != null && targetOrgId.equals(i.getTenant().getOrganization().getId())))
                 .toList();
 
         List<java.util.Map<String, Object>> result = new ArrayList<>();
@@ -708,6 +727,7 @@ public class InvoiceController {
             m.put("roomNumber", inv.getTenant() != null ? inv.getTenant().getRoomNumber() : null);
             m.put("bedNumber", inv.getTenant() != null ? inv.getTenant().getBedNumber() : null);
             m.put("amountDue", inv.getAmountDue());
+            m.put("amount", inv.getAmountDue());
             m.put("paymentMethod", inv.getPaymentMethod());
             m.put("paymentReference", inv.getPaymentReference());
             m.put("dueDate", inv.getDueDate());

@@ -261,27 +261,34 @@ export default function SaaSInvoicesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-6">
       {/* Top Header & Quick Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <FileText className="h-6 w-6 text-primary" /> Automated SaaS Tax Invoices &amp; B2B Billing
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <FileText className="h-6 w-6 text-primary shrink-0" /> Automated SaaS Tax Invoices
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Generate, manage, and download official 18% GST tax invoices with duplicate guards and batch automation.
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Generate, manage, and download official 18% GST tax invoices with duplicate guards.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
           <Button
             variant="outline"
             onClick={() => setBatchOpen(true)}
-            className="border-primary/30 text-primary hover:bg-primary/10"
+            className="border-primary/30 text-primary hover:bg-primary/10 rounded-xl h-10 text-xs sm:text-sm font-semibold"
           >
-            <Sparkles className="mr-2 h-4 w-4 text-primary" /> Run Monthly Billing Cycle
+            <Sparkles className="mr-1.5 h-4 w-4 text-primary shrink-0" />
+            <span className="hidden sm:inline">Run Monthly Billing Cycle</span>
+            <span className="sm:hidden">Billing Cycle</span>
           </Button>
-          <Button onClick={() => setGenerateOpen(true)} className="bg-primary hover:bg-primary/90">
-            <Plus className="mr-2 h-4 w-4" /> Generate SaaS Invoice
+          <Button
+            onClick={() => setGenerateOpen(true)}
+            className="bg-primary hover:bg-primary/90 rounded-xl h-10 text-xs sm:text-sm font-semibold shadow-xs"
+          >
+            <Plus className="mr-1.5 h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline">Generate SaaS Invoice</span>
+            <span className="sm:hidden">New Invoice</span>
           </Button>
         </div>
       </div>
@@ -360,22 +367,22 @@ export default function SaaSInvoicesPage() {
       </div>
 
       {/* Main Invoices Table Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-3">
+      <Card className="rounded-2xl border shadow-xs overflow-hidden">
+        <CardHeader className="p-4 sm:p-6 pb-3">
+          <div className="flex flex-col gap-3.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <div className="relative flex-1 w-full sm:max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by invoice #, organization, plan..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9"
+                  className="pl-9 rounded-xl h-10 w-full text-xs sm:text-sm"
                 />
               </div>
-              <div className="flex items-center flex-wrap gap-2">
+              <div className="flex items-center flex-wrap gap-2.5 w-full sm:w-auto">
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[140px]">
+                  <SelectTrigger className="w-full sm:w-[150px] rounded-xl h-10 text-xs sm:text-sm">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -391,6 +398,7 @@ export default function SaaSInvoicesPage() {
                 <Button
                   variant="outline"
                   size="icon"
+                  className="rounded-xl h-10 w-10 shrink-0"
                   title="Refresh Invoices"
                   onClick={() => {
                     refetch();
@@ -407,19 +415,19 @@ export default function SaaSInvoicesPage() {
               <span className="flex items-center gap-1 font-medium text-foreground">
                 <Calendar className="h-3.5 w-3.5 text-primary" /> Invoice Date:
               </span>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
                 <Input
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="h-8 text-xs w-[130px]"
+                  className="h-8.5 text-xs w-[130px] rounded-lg"
                 />
                 <span>to</span>
                 <Input
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="h-8 text-xs w-[130px]"
+                  className="h-8.5 text-xs w-[130px] rounded-lg"
                 />
               </div>
               {(fromDate || toDate) && (
@@ -430,7 +438,7 @@ export default function SaaSInvoicesPage() {
                     setFromDate('');
                     setToDate('');
                   }}
-                  className="h-8 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10"
+                  className="h-8.5 text-xs px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded-lg"
                 >
                   <X className="h-3.5 w-3.5 mr-1" /> Clear Dates
                 </Button>
@@ -438,7 +446,7 @@ export default function SaaSInvoicesPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6 pt-0">
           {isLoading ? (
             <div className="py-12 text-center text-muted-foreground">Loading platform invoices...</div>
           ) : invoices.length === 0 ? (
@@ -446,105 +454,200 @@ export default function SaaSInvoicesPage() {
               No SaaS invoices found matching the selected filters. Click &quot;Generate SaaS Invoice&quot; to create one.
             </div>
           ) : (
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice #</TableHead>
-                    <TableHead>Organization</TableHead>
-                    <TableHead>Plan &amp; Cycle</TableHead>
-                    <TableHead>Taxable Base</TableHead>
-                    <TableHead>18% GST</TableHead>
-                    <TableHead>Grand Total</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoices.map((inv) => (
-                    <TableRow key={inv.id} className="hover:bg-muted/40">
-                      <TableCell className="font-medium text-xs font-mono">{inv.invoiceNumber}</TableCell>
-                      <TableCell className="font-semibold">{inv.organization?.name || 'N/A'}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <Badge variant="outline" className="font-medium">
-                            {inv.planName}
-                          </Badge>
-                          {inv.billingCycle && (
-                            <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-wider">
-                              {inv.billingCycle}
+            <>
+              {/* Mobile View: High-Density Breakdown Cards */}
+              <div className="block md:hidden space-y-3.5">
+                {invoices.map((inv) => {
+                  const s = (inv.status || '').toUpperCase().trim();
+                  return (
+                    <div key={inv.id} className="p-4 rounded-2xl border bg-card shadow-xs space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="font-mono text-xs font-bold text-foreground block">{inv.invoiceNumber}</span>
+                          <span className="font-semibold text-sm text-foreground mt-0.5 block">{inv.organization?.name || 'N/A'}</span>
+                        </div>
+                        <div>
+                          {s === 'PAID' ? (
+                            <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold text-[10px] uppercase">
+                              <CheckCircle2 className="mr-1 h-3 w-3 text-emerald-500" /> PAID
+                            </Badge>
+                          ) : s === 'UNPAID' || s === 'PENDING' ? (
+                            <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-semibold text-[10px] uppercase">
+                              <Clock className="mr-1 h-3 w-3 text-amber-500" /> {s}
+                            </Badge>
+                          ) : s === 'OVERDUE' || s === 'FAILED' ? (
+                            <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 font-semibold text-[10px] uppercase">
+                              <AlertCircle className="mr-1 h-3 w-3 text-rose-500" /> {s}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] uppercase">
+                              {inv.status || 'N/A'}
                             </Badge>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell>₹{(inv.amount || 0).toLocaleString('en-IN')}</TableCell>
-                      <TableCell className="text-muted-foreground">₹{(inv.gstAmount || 0).toLocaleString('en-IN')}</TableCell>
-                      <TableCell className="font-bold text-foreground">₹{(inv.totalAmount || 0).toLocaleString('en-IN')}</TableCell>
-                      <TableCell>
-                        {(() => {
-                          const s = (inv.status || '').toUpperCase().trim();
-                          if (s === 'PAID') {
-                            return (
-                              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 font-semibold uppercase tracking-wider text-[11px]">
-                                <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-emerald-500" /> PAID
-                              </Badge>
-                            );
-                          }
-                          if (s === 'UNPAID' || s === 'PENDING') {
-                            return (
-                              <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 font-semibold uppercase tracking-wider text-[11px]">
-                                <Clock className="mr-1 h-3.5 w-3.5 text-amber-500" /> {s}
-                              </Badge>
-                            );
-                          }
-                          if (s === 'OVERDUE' || s === 'FAILED') {
-                            return (
-                              <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 hover:bg-rose-500/25 border border-rose-500/30 font-semibold uppercase tracking-wider text-[11px]">
-                                <AlertCircle className="mr-1 h-3.5 w-3.5 text-rose-500" /> {s}
-                              </Badge>
-                            );
-                          }
-                          return (
-                            <Badge variant="outline" className="bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 font-medium uppercase text-[11px]">
-                              <Ban className="mr-1 h-3.5 w-3.5" /> {inv.status || 'N/A'}
-                            </Badge>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell className="text-right space-x-1">
-                        {inv.paymentLink && (inv.status || '').toUpperCase().trim() !== 'PAID' && (
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-xs font-medium bg-muted/40">
+                          {inv.planName}
+                        </Badge>
+                        {inv.billingCycle && (
+                          <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-wider">
+                            {inv.billingCycle}
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-muted/40 grid grid-cols-3 gap-2 text-center text-xs">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold">Taxable Base</p>
+                          <p className="font-bold text-foreground mt-0.5">₹{(inv.amount || 0).toLocaleString('en-IN')}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold">18% GST</p>
+                          <p className="font-bold text-foreground mt-0.5">₹{(inv.gstAmount || 0).toLocaleString('en-IN')}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-muted-foreground uppercase font-semibold">Grand Total</p>
+                          <p className="font-black text-indigo-600 dark:text-indigo-400 mt-0.5">₹{(inv.totalAmount || 0).toLocaleString('en-IN')}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60 flex-wrap">
+                        {inv.paymentLink && s !== 'PAID' && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            title="Copy Razorpay Payment Link"
+                            title="Copy Payment Link"
                             onClick={() => handleCopyLink(inv.paymentLink)}
-                            className="text-primary hover:text-primary hover:bg-primary/10"
+                            className="h-8.5 px-2.5 text-xs text-primary rounded-xl"
                           >
-                            <LinkIcon className="h-3.5 w-3.5" />
+                            <LinkIcon className="h-3.5 w-3.5 mr-1" /> Link
                           </Button>
                         )}
-                        <Button variant="ghost" size="sm" onClick={() => handlePreview(inv.id)}>
-                          View HTML
+                        <Button variant="ghost" size="sm" onClick={() => handlePreview(inv.id)} className="h-8.5 px-3 text-xs rounded-xl font-medium">
+                          Preview
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => handlePrint(inv.id)}>
+                        <Button variant="outline" size="sm" onClick={() => handlePrint(inv.id)} className="h-8.5 px-3 text-xs rounded-xl font-semibold">
                           <Printer className="h-3.5 w-3.5 mr-1" /> Print
                         </Button>
-                        {(inv.status || '').toUpperCase().trim() !== 'PAID' && (
+                        {s !== 'PAID' && (
                           <Button
                             variant="secondary"
                             size="sm"
-                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 h-8.5 px-3 text-xs rounded-xl font-bold"
                             onClick={() => updateStatusMutation.mutate({ id: inv.id, status: 'PAID' })}
                           >
                             Mark Paid
                           </Button>
                         )}
-                      </TableCell>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop View: Full 8-Column Tabular View */}
+              <div className="hidden md:block rounded-xl border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice #</TableHead>
+                      <TableHead>Organization</TableHead>
+                      <TableHead>Plan &amp; Cycle</TableHead>
+                      <TableHead>Taxable Base</TableHead>
+                      <TableHead>18% GST</TableHead>
+                      <TableHead>Grand Total</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {invoices.map((inv) => (
+                      <TableRow key={inv.id} className="hover:bg-muted/40">
+                        <TableCell className="font-medium text-xs font-mono">{inv.invoiceNumber}</TableCell>
+                        <TableCell className="font-semibold">{inv.organization?.name || 'N/A'}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="outline" className="font-medium">
+                              {inv.planName}
+                            </Badge>
+                            {inv.billingCycle && (
+                              <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-wider">
+                                {inv.billingCycle}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>₹{(inv.amount || 0).toLocaleString('en-IN')}</TableCell>
+                        <TableCell className="text-muted-foreground">₹{(inv.gstAmount || 0).toLocaleString('en-IN')}</TableCell>
+                        <TableCell className="font-bold text-foreground">₹{(inv.totalAmount || 0).toLocaleString('en-IN')}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const s = (inv.status || '').toUpperCase().trim();
+                            if (s === 'PAID') {
+                              return (
+                                <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 font-semibold uppercase tracking-wider text-[11px]">
+                                  <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-emerald-500" /> PAID
+                                </Badge>
+                              );
+                            }
+                            if (s === 'UNPAID' || s === 'PENDING') {
+                              return (
+                                <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 font-semibold uppercase tracking-wider text-[11px]">
+                                  <Clock className="mr-1 h-3.5 w-3.5 text-amber-500" /> {s}
+                                </Badge>
+                              );
+                            }
+                            if (s === 'OVERDUE' || s === 'FAILED') {
+                              return (
+                                <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 hover:bg-rose-500/25 border border-rose-500/30 font-semibold uppercase tracking-wider text-[11px]">
+                                  <AlertCircle className="mr-1 h-3.5 w-3.5 text-rose-500" /> {s}
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Badge variant="outline" className="bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 font-medium uppercase text-[11px]">
+                                <Ban className="mr-1 h-3.5 w-3.5" /> {inv.status || 'N/A'}
+                              </Badge>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell className="text-right space-x-1">
+                          {inv.paymentLink && (inv.status || '').toUpperCase().trim() !== 'PAID' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Copy Razorpay Payment Link"
+                              onClick={() => handleCopyLink(inv.paymentLink)}
+                              className="text-primary hover:text-primary hover:bg-primary/10"
+                            >
+                              <LinkIcon className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" onClick={() => handlePreview(inv.id)}>
+                            View HTML
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => handlePrint(inv.id)}>
+                            <Printer className="h-3.5 w-3.5 mr-1" /> Print
+                          </Button>
+                          {(inv.status || '').toUpperCase().trim() !== 'PAID' && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
+                              onClick={() => updateStatusMutation.mutate({ id: inv.id, status: 'PAID' })}
+                            >
+                              Mark Paid
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
 
           {/* Server-Side Pagination Controls */}

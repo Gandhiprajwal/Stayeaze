@@ -81,24 +81,28 @@ export default function MaintenancePanel({ token, tenants, allComplaints, fetchM
 
       <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', textAlign: 'left' }}>
         <div style={{ flex: '1', minWidth: '320px' }} className="card">
-          <h3>📝 Lodge Complaint / Task</h3>
+          <h3>Lodge Support Ticket / Task</h3>
           <form onSubmit={handleSaveComplaint} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '15px' }}>
             <div className="form-group">
               <label className="form-label">Resident / Tenant</label>
               <select className="form-control" required value={compTenantId} onChange={e => setCompTenantId(e.target.value)}>
                 <option value="">-- Choose Resident --</option>
-                {tenants.map(t => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
+                {tenants.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.firstName} {t.lastName} {t.roomNumber ? `• Room ${t.roomNumber}` : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="form-group">
               <label className="form-label">Category</label>
               <select className="form-control" value={compCategory} onChange={e => setCompCategory(e.target.value)}>
-                <option value="PLUMBING">🚰 Plumbing Issues</option>
-                <option value="ELECTRICAL">⚡ Electrical Breakdown</option>
-                <option value="WIFI">📶 Wi-Fi / Connectivity</option>
-                <option value="HOUSEKEEPING">🧹 Housekeeping / Cleaning</option>
-                <option value="OTHER">📁 Miscellaneous Support</option>
+                <option value="PLUMBING">Plumbing Issues</option>
+                <option value="ELECTRICAL">Electrical Breakdown</option>
+                <option value="WIFI">Wi-Fi &amp; Internet</option>
+                <option value="HOUSEKEEPING">Housekeeping &amp; Cleaning</option>
+                <option value="OTHER">Miscellaneous Maintenance</option>
               </select>
             </div>
 
@@ -112,7 +116,7 @@ export default function MaintenancePanel({ token, tenants, allComplaints, fetchM
         </div>
 
         <div style={{ flex: '2', minWidth: '400px', display: 'flex', flexDirection: 'column', gap: '15px' }} className="card">
-          <h3>🔧 Support queries pipeline</h3>
+          <h3>Support queries pipeline</h3>
           {allComplaints.length === 0 ? <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>No active maintenance queries.</p> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               {allComplaints.map(comp => (
@@ -125,9 +129,14 @@ export default function MaintenancePanel({ token, tenants, allComplaints, fetchM
                   </div>
 
                   <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>{comp.description}</p>
-                  <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Logged by: <strong>{comp.tenantName}</strong> {comp.room ? `| Room: ${comp.room.roomNumber}` : ''}
-                  </p>
+                  <div style={{ margin: '0 0 12px 0', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span>Logged by: <strong>{comp.tenantName}</strong></span>
+                    {comp.room && (
+                      <span>
+                        | <strong>Room {comp.room.roomNumber}</strong> {comp.room.propertyName ? `(${comp.room.propertyName} › ${comp.room.buildingName || ''})` : ''}
+                      </span>
+                    )}
+                  </div>
 
                   {comp.assignedStaff && (
                     <p style={{ margin: '0 0 12px 0', fontSize: '12px' }}>Assigned Staff: <strong>{comp.assignedStaff}</strong></p>

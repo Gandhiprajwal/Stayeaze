@@ -24,7 +24,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, resolveFileUrl } from '@/lib/format';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import api from '@/lib/api';
 import type { Building as BuildingType } from '@/lib/types';
@@ -58,6 +58,9 @@ interface RoomSheetItem {
   splitMode?: string;
   isRollover?: boolean;
   photoUrl?: string;
+  isDirty?: boolean;
+  hasSavedDraft?: boolean;
+  status?: string;
   calculatedUnits?: number;
   calculatedAmount?: number;
   tenantSplits?: any[];
@@ -151,7 +154,7 @@ export default function UtilitiesPage() {
     enabled: !!selectedPropertyId,
   });
 
-  // Hydrate local table state on server response
+  // Hydrate local table state on server response without erasing unsaved in-flight edits
   useEffect(() => {
     const rawList = Array.isArray(paginatedMeterSheet?.content)
       ? paginatedMeterSheet.content
@@ -159,75 +162,94 @@ export default function UtilitiesPage() {
       ? paginatedMeterSheet
       : [];
 
-    const items: RoomSheetItem[] = rawList.map((item: any) => {
-      const hasSavedReading = item.currentReadingValue !== undefined && item.currentReadingValue !== null;
-      const currentVal = hasSavedReading ? item.currentReadingValue : item.lastReadingValue;
-      const allowanceVal = item.freeAllowanceUnits !== undefined && item.freeAllowanceUnits !== null ? item.freeAllowanceUnits : defaultFreeAllowance;
-      const unitsVal = item.unitsConsumed !== undefined && item.unitsConsumed !== null ? item.unitsConsumed : 0;
-      const amountVal = item.totalAmount !== undefined && item.totalAmount !== null ? item.totalAmount : 0;
+    setSheetItems((prev) => {
+      const prevMap = new Map(prev.map(p => [p.roomId, p]));
+      return rawList.map((item: any) => {
+        const existing = prevMap.get(item.roomId);
+        if (existing && existing.isDirty) {
+          return existing;
+        }
+        const hasSavedReading = item.currentReadingValue !== undefined && item.currentReadingValue !== null;
+        const currentVal = hasSavedReading ? item.currentReadingValue : (item.lastReadingValue ?? 0);
+        const allowanceVal = item.freeAllowanceUnits !== undefined && item.freeAllowanceUnits !== null ? item.freeAllowanceUnits : defaultFreeAllowance;
+        const unitsVal = item.unitsConsumed !== undefined && item.unitsConsumed !== null ? item.unitsConsumed : 0;
+        const amountVal = item.totalAmount !== undefined && item.totalAmount !== null ? item.totalAmount : 0;
+        const hasSavedDraft = Boolean(item.hasSavedDraft || (item.status === 'UNBILLED' && (unitsVal > 0 || item.photoUrl)));
 
-      return {
-        ...item,
-        occupants: Array.isArray(item.occupants) ? item.occupants : [],
-        currentReading: currentVal,
-        unitRate: item.defaultUnitRate || defaultRate,
-        freeAllowanceUnits: allowanceVal,
-        splitMode: item.defaultSplitMode || 'FAIR_PROPORTIONAL',
-        isRollover: false,
-        photoUrl: item.photoUrl || '',
-        calculatedUnits: unitsVal,
-        calculatedAmount: amountVal,
-        tenantSplits: Array.isArray(item.tenantSplits) ? item.tenantSplits : []
-      };
+        return {
+          ...item,
+          occupants: Array.isArray(item.occupants) ? item.occupants : [],
+          currentReading: currentVal,
+          unitRate: item.defaultUnitRate || defaultRate,
+          freeAllowanceUnits: allowanceVal,
+          splitMode: item.defaultSplitMode || 'FAIR_PROPORTIONAL',
+          isRollover: false,
+          photoUrl: item.photoUrl || '',
+          isDirty: false,
+          hasSavedDraft,
+          status: item.status || 'UNBILLED',
+          calculatedUnits: unitsVal,
+          calculatedAmount: amountVal,
+          tenantSplits: Array.isArray(item.tenantSplits) ? item.tenantSplits : []
+        };
+      });
     });
-
-    setSheetItems(items);
-  }, [paginatedMeterSheet, defaultRate, defaultFreeAllowance]);
+  }, [paginatedMeterSheet]);
 
   const handleReadingChange = (index: number, currVal: number) => {
-    const updated = [...sheetItems];
-    const item = updated[index];
-    item.currentReading = currVal;
-    
-    let gross = 0;
-    const prev = item.lastReadingValue || 0;
-    if (item.isRollover && currVal < prev) {
-      gross = (10000 - prev) + currVal;
-    } else {
-      gross = Math.max(0, currVal - prev);
-    }
-    const netUnits = Math.max(0, gross - (item.freeAllowanceUnits || 0));
-    const rate = item.unitRate || defaultRate;
-    item.calculatedUnits = netUnits;
-    item.calculatedAmount = Math.round(netUnits * rate * 100) / 100;
+    setSheetItems((prev) => {
+      const updated = [...prev];
+      if (!updated[index]) return prev;
+      const item = { ...updated[index] };
+      item.currentReading = currVal;
+      item.isDirty = true;
+      
+      let gross = 0;
+      const prevR = item.lastReadingValue || 0;
+      if (item.isRollover && currVal < prevR) {
+        gross = (10000 - prevR) + currVal;
+      } else {
+        gross = Math.max(0, currVal - prevR);
+      }
+      const netUnits = Math.max(0, gross - (item.freeAllowanceUnits || 0));
+      const rate = item.unitRate || defaultRate;
+      item.calculatedUnits = netUnits;
+      item.calculatedAmount = Math.round(netUnits * rate * 100) / 100;
 
-    triggerRoomPreview(index, item);
-    setSheetItems(updated);
+      updated[index] = item;
+      triggerRoomPreview(item.roomId, item);
+      return updated;
+    });
   };
 
   const handleAllowanceChange = (index: number, allowance: number) => {
-    const updated = [...sheetItems];
-    const item = updated[index];
-    item.freeAllowanceUnits = allowance;
-    
-    let gross = 0;
-    const prev = item.lastReadingValue || 0;
-    const curr = item.currentReading || prev;
-    if (item.isRollover && curr < prev) {
-      gross = (10000 - prev) + curr;
-    } else {
-      gross = Math.max(0, curr - prev);
-    }
-    const netUnits = Math.max(0, gross - allowance);
-    const rate = item.unitRate || defaultRate;
-    item.calculatedUnits = netUnits;
-    item.calculatedAmount = Math.round(netUnits * rate * 100) / 100;
+    setSheetItems((prev) => {
+      const updated = [...prev];
+      if (!updated[index]) return prev;
+      const item = { ...updated[index] };
+      item.freeAllowanceUnits = allowance;
+      item.isDirty = true;
+      
+      let gross = 0;
+      const prevR = item.lastReadingValue || 0;
+      const curr = item.currentReading || prevR;
+      if (item.isRollover && curr < prevR) {
+        gross = (10000 - prevR) + curr;
+      } else {
+        gross = Math.max(0, curr - prevR);
+      }
+      const netUnits = Math.max(0, gross - allowance);
+      const rate = item.unitRate || defaultRate;
+      item.calculatedUnits = netUnits;
+      item.calculatedAmount = Math.round(netUnits * rate * 100) / 100;
 
-    triggerRoomPreview(index, item);
-    setSheetItems(updated);
+      updated[index] = item;
+      triggerRoomPreview(item.roomId, item);
+      return updated;
+    });
   };
 
-  const triggerRoomPreview = async (index: number, item: RoomSheetItem) => {
+  const triggerRoomPreview = async (roomId: string, item: RoomSheetItem) => {
     try {
       const res = await api.post('/utilities/calculate-preview', {
         roomId: item.roomId,
@@ -240,64 +262,91 @@ export default function UtilitiesPage() {
         splitMode: item.splitMode,
         isRollover: item.isRollover
       });
-      const updated = [...sheetItems];
-      updated[index].tenantSplits = res.data.tenantSplits || [];
-      updated[index].calculatedAmount = res.data.totalAmount;
-      updated[index].calculatedUnits = res.data.unitsConsumed;
-      setSheetItems(updated);
+      setSheetItems((prev) =>
+        prev.map((r) =>
+          r.roomId === roomId
+            ? {
+                ...r,
+                tenantSplits: res.data.tenantSplits || [],
+                calculatedAmount: res.data.totalAmount,
+                calculatedUnits: res.data.unitsConsumed,
+              }
+            : r
+        )
+      );
     } catch (ignored) {}
   };
 
   const handleSplitModeChange = (index: number, mode: string) => {
-    const updated = [...sheetItems];
-    updated[index].splitMode = mode;
-    triggerRoomPreview(index, updated[index]);
-    setSheetItems(updated);
+    setSheetItems((prev) => {
+      const updated = [...prev];
+      if (!updated[index]) return prev;
+      const item = { ...updated[index], splitMode: mode, isDirty: true };
+      updated[index] = item;
+      triggerRoomPreview(item.roomId, item);
+      return updated;
+    });
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || activePhotoUploadIndex === null) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Meter photo size must be less than 5MB');
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Meter photo size must be less than 10MB');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      const updated = [...sheetItems];
-      updated[activePhotoUploadIndex].photoUrl = base64;
-      setSheetItems(updated);
-      if (activePreviewRoom && activePreviewRoom.roomId === updated[activePhotoUploadIndex].roomId) {
-        setActivePreviewRoom({ ...updated[activePhotoUploadIndex] });
+    const targetIdx = activePhotoUploadIndex;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', 'meters');
+
+    const toastId = toast.loading(`Uploading meter photo for Room ${sheetItems[targetIdx]?.roomNumber}...`);
+    try {
+      const res = await api.post('/files/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const fileUrl = res.data?.fileUrl;
+      if (fileUrl) {
+        const updated = [...sheetItems];
+        updated[targetIdx].photoUrl = fileUrl;
+        updated[targetIdx].isDirty = true;
+        setSheetItems(updated);
+        if (activePreviewRoom && activePreviewRoom.roomId === updated[targetIdx].roomId) {
+          setActivePreviewRoom({ ...updated[targetIdx] });
+        }
+        toast.success(`📸 Attached meter dial photo for Room ${updated[targetIdx].roomNumber}`, { id: toastId });
+      } else {
+        toast.error('Failed to get uploaded file URL', { id: toastId });
       }
-      toast.success(`📸 Attached meter dial photo for Room ${updated[activePhotoUploadIndex].roomNumber}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to upload meter photo. Please try again.', { id: toastId });
+    } finally {
       setActivePhotoUploadIndex(null);
-    };
-    reader.readAsDataURL(file);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const bulkSubmitMutation = useMutation({
     mutationFn: (appendToRentInvoices: boolean) => {
       const payloadReadings = sheetItems
-        .filter(item => (item.currentReading || 0) >= (item.lastReadingValue || 0) || item.isRollover)
+        .filter(item => item.roomId && item.currentReading !== undefined && item.currentReading !== null)
         .map(item => ({
           roomId: item.roomId,
-          previousReading: item.lastReadingValue,
+          previousReading: item.lastReadingValue ?? 0,
           currentReading: item.currentReading,
           unitRate: item.unitRate || defaultRate,
           freeAllowanceUnits: item.freeAllowanceUnits || 0,
           billingMonth,
           billingYear,
-          splitMode: item.splitMode,
-          isRollover: item.isRollover,
-          photoUrl: item.photoUrl
+          splitMode: item.splitMode || 'FAIR_PROPORTIONAL',
+          isRollover: item.isRollover || false,
+          photoUrl: item.photoUrl || ''
         }));
 
       if (payloadReadings.length === 0) {
-        throw new Error('Please enter current meter readings before saving.');
+        throw new Error('No room meter readings found on the sheet to record. Please ensure rooms are loaded.');
       }
 
       return api.post(`/utilities/properties/${selectedPropertyId}/bulk-record-readings`, {
@@ -306,19 +355,30 @@ export default function UtilitiesPage() {
       }).then(r => r.data);
     },
     onSuccess: (data, appendToRentInvoices) => {
+      setSheetItems((prev) =>
+        prev.map((item) => ({
+          ...item,
+          isDirty: false,
+          hasSavedDraft: !appendToRentInvoices,
+          status: appendToRentInvoices ? 'BILLED' : 'UNBILLED',
+        }))
+      );
       if (appendToRentInvoices) {
-        toast.success(`Logged ${data.recordedRooms} room meter readings and appended ₹${data.totalBilledAmount} to tenant rent invoices!`);
+        toast.success(`⚡ Logged ${data.recordedRooms} room meter readings and appended ₹${data.totalBilledAmount} to tenant rent invoices!`);
         queryClient.invalidateQueries({ queryKey: ['/invoices'] });
         queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
       } else {
-        toast.success(`Saved draft meter readings for ${data.recordedRooms} rooms.`);
+        toast.success(`💾 Saved draft meter readings for ${data.recordedRooms} rooms.`);
       }
+      queryClient.invalidateQueries({ queryKey: ['property-meter-sheet'] });
+      queryClient.invalidateQueries({ queryKey: ['property-utility-stats'] });
       refetchSheet();
       refetchStats();
       setConfirmApplyOpen(false);
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.message || err.message || 'Bulk recording failed');
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Bulk recording failed';
+      toast.error(msg);
     }
   });
 
@@ -371,22 +431,24 @@ export default function UtilitiesPage() {
         description="Log monthly electric sub-meter readings, upload meter dial proof photos, apply free unit allowances, and merge directly into tenant invoices."
         icon={Zap}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
             <Button
               variant="outline"
               disabled={bulkSubmitMutation.isPending || sheetLoading}
               onClick={() => bulkSubmitMutation.mutate(false)}
+              className="rounded-xl h-10 text-xs sm:text-sm font-semibold"
             >
               <Save className="mr-1.5 h-4 w-4 text-muted-foreground" />
               Save Draft
             </Button>
             <Button
-              className="bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1.5 shadow-sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1.5 rounded-xl h-10 text-xs sm:text-sm shadow-xs"
               disabled={bulkSubmitMutation.isPending || sheetLoading}
               onClick={() => setConfirmApplyOpen(true)}
             >
-              <FileCheck className="h-4 w-4" />
-              1-Click Apply to Rent Invoices
+              <FileCheck className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">1-Click Apply to Rent Invoices</span>
+              <span className="sm:hidden">Apply to Invoices</span>
             </Button>
           </div>
         }
@@ -451,10 +513,10 @@ export default function UtilitiesPage() {
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Building / Block</Label>
               <Select value={selectedBuildingId} onValueChange={(v) => setSelectedBuildingId(v)}>
-                <SelectTrigger className="h-9 text-xs">
+                <SelectTrigger className="h-10 text-sm rounded-xl border-border/80 bg-card">
                   <SelectValue placeholder="All Buildings" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl border-border/80 bg-popover/95 backdrop-blur-xl text-sm">
                   <SelectItem value="ALL">All Buildings</SelectItem>
                   {(buildings ?? []).map((b) => (
                     <SelectItem key={b.id} value={b.id}>
@@ -469,10 +531,10 @@ export default function UtilitiesPage() {
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Month</Label>
               <Select value={String(billingMonth)} onValueChange={(v) => setBillingMonth(Number(v))}>
-                <SelectTrigger className="h-9 text-xs">
+                <SelectTrigger className="h-10 text-sm rounded-xl border-border/80 bg-card">
                   <SelectValue placeholder="Month" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl border-border/80 bg-popover/95 backdrop-blur-xl text-sm">
                   {Array.from({ length: 12 }, (_, i) => (
                     <SelectItem key={i + 1} value={String(i + 1)}>
                       {new Date(2000, i).toLocaleString('default', { month: 'short' })}
@@ -488,7 +550,7 @@ export default function UtilitiesPage() {
               <Input
                 type="number"
                 step="0.5"
-                className="h-9 text-xs font-semibold"
+                className="h-10 text-sm font-semibold rounded-xl border-border/80"
                 value={defaultRate}
                 onChange={(e) => setDefaultRate(Number(e.target.value))}
               />
@@ -503,7 +565,7 @@ export default function UtilitiesPage() {
                 type="number"
                 step="1"
                 placeholder="e.g. 10"
-                className="h-9 text-xs font-semibold border-emerald-300 dark:border-emerald-800"
+                className="h-10 text-sm font-semibold rounded-xl border-emerald-300 dark:border-emerald-800"
                 value={defaultFreeAllowance}
                 onChange={(e) => setDefaultFreeAllowance(Number(e.target.value))}
               />
@@ -513,11 +575,11 @@ export default function UtilitiesPage() {
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Search</Label>
               <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="101, Rahul..."
-                  className="h-9 pl-8 text-xs"
+                  placeholder="Room 101, Rahul..."
+                  className="h-10 pl-9 text-sm rounded-xl border-border/80"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -591,6 +653,21 @@ export default function UtilitiesPage() {
                           <div>
                             <div className="font-semibold text-foreground flex items-center gap-1.5">
                               <span>Room {item.roomNumber}</span>
+                              {item.isDirty && (
+                                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[9px] px-1.5 py-0 h-4">
+                                  Unsaved
+                                </Badge>
+                              )}
+                              {!item.isDirty && item.hasSavedDraft && (
+                                <Badge className="bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 text-[9px] px-1.5 py-0 h-4">
+                                  Draft
+                                </Badge>
+                              )}
+                              {!item.isDirty && item.status === 'BILLED' && (
+                                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-[9px] px-1.5 py-0 h-4">
+                                  Billed
+                                </Badge>
+                              )}
                             </div>
                             <div className="text-[10px] text-muted-foreground flex items-center gap-1">
                               <span>{item.buildingName || 'Main Building'}</span>
@@ -640,7 +717,7 @@ export default function UtilitiesPage() {
                         {item.photoUrl ? (
                           <div className="relative inline-block group">
                             <img
-                              src={item.photoUrl}
+                              src={resolveFileUrl(item.photoUrl)}
                               alt="Meter Proof"
                               className="h-8 w-8 rounded-lg object-cover border border-emerald-500 shadow-xs cursor-pointer"
                               onClick={() => setActivePreviewRoom(item)}
@@ -947,7 +1024,7 @@ export default function UtilitiesPage() {
                   {activePreviewRoom.photoUrl ? (
                     <div className="relative rounded-lg overflow-hidden border max-h-48 bg-slate-950 flex items-center justify-center">
                       <img
-                        src={activePreviewRoom.photoUrl}
+                        src={resolveFileUrl(activePreviewRoom.photoUrl)}
                         alt="Meter Dial Reading Proof"
                         className="max-h-48 w-full object-contain"
                       />

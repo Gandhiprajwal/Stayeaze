@@ -159,15 +159,15 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val) resetForm(); onOpenChange(val); }}>
-      <DialogContent className="sm:max-w-2xl flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="p-6 pb-4 border-b bg-muted/30">
-          <div className="flex items-center justify-between">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
+        <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
-                <UserPlus className="h-6 w-6" />
+              <div className="p-2 sm:p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+                <UserPlus className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
               <div>
-                <DialogTitle className="text-lg font-bold">Quick Add Resident</DialogTitle>
+                <DialogTitle className="text-base sm:text-lg font-bold">Quick Add Resident</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                   Streamlined onboarding wizard for existing & new residents.
                 </DialogDescription>
@@ -175,23 +175,23 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
             </div>
 
             {/* Step Indicators */}
-            <div className="flex items-center gap-1.5 text-xs font-semibold">
-              <span className={`px-2 py-0.5 rounded-full ${step === 1 ? 'bg-primary text-primary-foreground font-bold' : step > 1 ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-muted text-muted-foreground'}`}>
+            <div className="flex items-center justify-between sm:justify-end gap-1.5 text-xs font-semibold w-full sm:w-auto bg-muted/40 sm:bg-transparent p-1.5 sm:p-0 rounded-xl">
+              <span className={`px-2.5 py-1 rounded-lg text-center flex-1 sm:flex-none ${step === 1 ? 'bg-primary text-primary-foreground font-bold shadow-xs' : step > 1 ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-muted/60 text-muted-foreground'}`}>
                 1. Room
               </span>
-              <span className="text-muted-foreground">→</span>
-              <span className={`px-2 py-0.5 rounded-full ${step === 2 ? 'bg-primary text-primary-foreground font-bold' : step > 2 ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-muted text-muted-foreground'}`}>
+              <span className="text-muted-foreground text-[10px]">→</span>
+              <span className={`px-2.5 py-1 rounded-lg text-center flex-1 sm:flex-none ${step === 2 ? 'bg-primary text-primary-foreground font-bold shadow-xs' : step > 2 ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-muted/60 text-muted-foreground'}`}>
                 2. Financials
               </span>
-              <span className="text-muted-foreground">→</span>
-              <span className={`px-2 py-0.5 rounded-full ${step === 3 ? 'bg-primary text-primary-foreground font-bold' : 'bg-muted text-muted-foreground'}`}>
+              <span className="text-muted-foreground text-[10px]">→</span>
+              <span className={`px-2.5 py-1 rounded-lg text-center flex-1 sm:flex-none ${step === 3 ? 'bg-primary text-primary-foreground font-bold shadow-xs' : 'bg-muted/60 text-muted-foreground'}`}>
                 3. KYC (Opt.)
               </span>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[calc(85vh-140px)]">
           {/* STEP 1: Basic Info & Room Allocation */}
           {step === 1 && (
             <div className="space-y-4 animate-in fade-in-50 duration-200">
@@ -202,7 +202,14 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold">Phone Number *</Label>
-                  <Input placeholder="10-digit mobile number" value={phone} onChange={e => setPhone(e.target.value)} />
+                  <Input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="10-digit mobile number"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  />
                 </div>
               </div>
 
@@ -242,13 +249,17 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold">Room & Bed *</Label>
                   <RoomSelect
-                    rooms={rooms}
+                    rooms={rooms.filter((r: any) => !propertyId || r.propertyId === propertyId)}
                     beds={beds}
                     selectedRoomNumber={roomNumber}
                     selectedBedNumber={bedNumber}
                     onSelectRoom={(rNum, rId, defaultRent) => {
                       setRoomNumber(rNum);
                       if (rId) setRoomId(rId);
+                      const matched = rooms.find((r: any) => r.id === rId || r.roomNumber === rNum);
+                      if (matched && (matched as any).propertyId && !propertyId) {
+                        setPropertyId((matched as any).propertyId);
+                      }
                       if (defaultRent && rent === 8000) setRent(defaultRent);
                     }}
                     onSelectBed={(bNum) => {
@@ -356,7 +367,14 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold">Emergency Phone</Label>
-                  <Input placeholder="Emergency 10-digit number" value={emergencyContact} onChange={e => setEmergencyContact(e.target.value)} />
+                  <Input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="Emergency 10-digit number"
+                    value={emergencyContact}
+                    onChange={e => setEmergencyContact(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  />
                 </div>
               </div>
 
@@ -374,11 +392,13 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
           )}
         </div>
 
-        <DialogFooter className="p-4 border-t bg-muted/20 flex items-center justify-between">
+        <DialogFooter className="p-4 border-t border-border/60 bg-muted/20 flex flex-row items-center justify-between gap-2 shrink-0">
           {step === 1 && (
             <>
-              <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button disabled={!isStep1Valid} onClick={() => setStep(2)} className="gap-2">
+              <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl h-9.5 text-xs font-semibold">
+                Cancel
+              </Button>
+              <Button disabled={!isStep1Valid} onClick={() => setStep(2)} className="gap-2 rounded-xl h-9.5 text-xs sm:text-sm font-bold shadow-xs">
                 Next: Financials <ArrowRight className="h-4 w-4" />
               </Button>
             </>
@@ -386,15 +406,15 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
 
           {step === 2 && (
             <>
-              <Button variant="outline" onClick={() => setStep(1)} className="gap-1.5">
+              <Button variant="outline" onClick={() => setStep(1)} className="gap-1.5 rounded-xl h-9.5 text-xs font-semibold">
                 <ArrowLeft className="h-3.5 w-3.5" /> Back
               </Button>
               <div className="flex items-center gap-2">
-                <Button variant="secondary" onClick={handleSubmit} disabled={isSubmitting || !isStep2Valid}>
-                  Save Now (Skip KYC)
+                <Button variant="secondary" onClick={handleSubmit} disabled={isSubmitting || !isStep2Valid} className="rounded-xl h-9.5 text-xs font-semibold">
+                  Save (Skip KYC)
                 </Button>
-                <Button disabled={!isStep2Valid} onClick={() => setStep(3)} className="gap-2">
-                  Next: KYC & Emergency <ArrowRight className="h-4 w-4" />
+                <Button disabled={!isStep2Valid} onClick={() => setStep(3)} className="gap-2 rounded-xl h-9.5 text-xs sm:text-sm font-bold shadow-xs">
+                  Next: KYC <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
             </>
@@ -402,10 +422,10 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
 
           {step === 3 && (
             <>
-              <Button variant="outline" onClick={() => setStep(2)} className="gap-1.5">
+              <Button variant="outline" onClick={() => setStep(2)} className="gap-1.5 rounded-xl h-9.5 text-xs font-semibold">
                 <ArrowLeft className="h-3.5 w-3.5" /> Back
               </Button>
-              <Button onClick={handleSubmit} disabled={isSubmitting} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+              <Button onClick={handleSubmit} disabled={isSubmitting} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl h-9.5 text-xs sm:text-sm shadow-xs">
                 <Check className="h-4 w-4" /> Complete Onboarding
               </Button>
             </>

@@ -18,6 +18,7 @@ import {
   fetchCheckinChecklistThunk,
   fetchCheckoutAuditThunk
 } from '../store/slices/tenantSlice';
+import { fetchAllBedsFlat } from '../store/slices/propertySlice';
 
 export default function TenantPanel({ token, tenants, fetchTenants, inquiries, fetchInquiries, setError, setSuccess }) {
   const dispatch = useDispatch();
@@ -27,6 +28,13 @@ export default function TenantPanel({ token, tenants, fetchTenants, inquiries, f
   const tenantAgreements = useSelector(state => state.tenant.selectedTenantAgreements);
   const activeCheckinChecklist = useSelector(state => state.tenant.selectedTenantCheckin);
   const activeCheckoutAudit = useSelector(state => state.tenant.selectedTenantCheckout);
+  const allBedsFlat = useSelector(state => state.property.allBedsFlat || []);
+
+  useEffect(() => {
+    if (token) {
+      dispatch(fetchAllBedsFlat(token));
+    }
+  }, [token, dispatch]);
 
   const [tenantSubTab, setTenantSubTab] = useState('residents'); // 'residents', 'leads'
   const [residentViewTab, setResidentViewTab] = useState('details'); // 'details', 'kyc', 'agreements', 'checkin-checklist', 'checkout-audit'
@@ -283,11 +291,31 @@ export default function TenantPanel({ token, tenants, fetchTenants, inquiries, f
                   border: selectedTenant?.id === t.id ? '1px solid var(--primary)' : '1px solid transparent',
                   marginBottom: '6px',
                   borderRadius: '4px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}
                 onClick={() => dispatch(setSelectedTenant(t))}
               >
-                <strong>{t.firstName} {t.lastName}</strong>
+                <div>
+                  <strong>{t.firstName} {t.lastName}</strong>
+                  {t.roomNumber && (
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      🚪 Room {t.roomNumber} {t.bedNumber ? `• Bed ${t.bedNumber}` : ''}
+                      {t.propertyName && ` (${t.propertyName})`}
+                    </div>
+                  )}
+                </div>
+                <span style={{
+                  fontSize: '11px',
+                  padding: '2px 6px',
+                  borderRadius: '8px',
+                  background: t.status === 'ACTIVE' ? 'rgba(52,211,153,0.2)' : 'rgba(245,158,11,0.2)',
+                  color: t.status === 'ACTIVE' ? '#34d399' : '#fbbf24'
+                }}>
+                  {t.status || 'ACTIVE'}
+                </span>
               </div>
             ))}
           </div>
@@ -310,18 +338,51 @@ export default function TenantPanel({ token, tenants, fetchTenants, inquiries, f
                 {residentViewTab === 'details' && (
                   <div>
                     {bookings.length > 0 ? (
-                      <div>
-                        <p>Booking Status: <strong>{bookings[0].status}</strong></p>
-                        <p>Check-in Allocation Date: {bookings[0].checkinDate}</p>
-                        <p>Base Rent: {bookings[0].rentAgreed} | Security Deposit: {bookings[0].depositAgreed}</p>
-                        {bookings[0].bed && <p>Assigned Bed: 🛏️ Bed {bookings[0].bed.bedNumber}</p>}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <p style={{ margin: 0 }}>Booking Status: <strong>{bookings[0].status}</strong></p>
+                        <p style={{ margin: 0 }}>Check-in Allocation Date: {bookings[0].checkinDate}</p>
+                        <p style={{ margin: 0 }}>Base Rent: INR {bookings[0].rentAgreed} | Security Deposit: INR {bookings[0].depositAgreed}</p>
+                        {bookings[0].bed && (
+                          <div style={{ padding: '10px 14px', background: 'rgba(99,102,241,0.1)', borderRadius: '6px', border: '1px solid rgba(99,102,241,0.2)' }}>
+                            <p style={{ margin: '0 0 4px 0' }}>Assigned Bed: <strong>Bed {bookings[0].bed.bedNumber}</strong></p>
+                            <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              Location: {bookings[0].bed.propertyName || bookings[0].propertyName || 'Property'} › {bookings[0].bed.buildingName || bookings[0].buildingName || 'Building'} › {bookings[0].bed.floorName || (bookings[0].bed.floorNumber != null ? `Floor ${bookings[0].bed.floorNumber}` : '')} › Room {bookings[0].bed.roomNumber || bookings[0].roomNumber || ''}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <form onSubmit={handleSaveBooking} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <input className="form-control" placeholder="Bed ID" required value={bookingBedId} onChange={e => setBookingBedId(e.target.value)} />
-                        <input type="date" className="form-control" required value={bookingCheckinDate} onChange={e => setBookingCheckinDate(e.target.value)} />
-                        <input className="form-control" placeholder="Agreed Monthly Rent" required value={bookingRentAgreed} onChange={e => setBookingRentAgreed(e.target.value)} />
-                        <input className="form-control" placeholder="Agreed Security Deposit" required value={bookingDepositAgreed} onChange={e => setBookingDepositAgreed(e.target.value)} />
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontWeight: 600, fontSize: '13px' }}>Select Available Bed</label>
+                          <select
+                            className="form-control"
+                            required
+                            value={bookingBedId}
+                            onChange={e => {
+                              setBookingBedId(e.target.value);
+                              const selected = allBedsFlat.find(b => b.id === e.target.value);
+                              if (selected && selected.rent) {
+                                setBookingRentAgreed(selected.rent.toString());
+                              }
+                            }}
+                          >
+                            <option value="">-- Choose Bed (Property › Building › Floor › Room › Bed) --</option>
+                            {allBedsFlat.map(b => (
+                              <option key={b.id} value={b.id}>
+                                {b.propertyName || 'Property'} › {b.buildingName || 'Building'} › {b.floorName || (b.floorNumber != null ? `Floor ${b.floorNumber}` : '')} › Room {b.roomNumber} › Bed {b.bedNumber} ({b.status || 'AVAILABLE'})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '13px' }}>Check-in Date</label>
+                          <input type="date" className="form-control" required value={bookingCheckinDate} onChange={e => setBookingCheckinDate(e.target.value)} />
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <input className="form-control" placeholder="Agreed Monthly Rent (INR)" required value={bookingRentAgreed} onChange={e => setBookingRentAgreed(e.target.value)} />
+                          <input className="form-control" placeholder="Agreed Security Deposit (INR)" required value={bookingDepositAgreed} onChange={e => setBookingDepositAgreed(e.target.value)} />
+                        </div>
                         <button type="submit" className="btn btn-primary">Allocate Bed Check-in</button>
                       </form>
                     )}

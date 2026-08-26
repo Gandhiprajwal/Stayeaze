@@ -55,30 +55,49 @@ export default function AuditLogsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Audit Logs" description="Immutable record of all user actions across the console." icon={ScrollText}
+    <div className="space-y-6 pb-12 sm:pb-6">
+      <PageHeader
+        title="Audit Logs"
+        description="Immutable record of all user actions across the console."
+        icon={ScrollText}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
             {isSuperAdmin && (
-              <Button asChild variant="default" className="bg-indigo-600 hover:bg-indigo-700 text-white">
+              <Button asChild variant="default" className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-9.5 text-xs font-bold shadow-xs flex-1 sm:flex-none">
                 <Link to="/super-admin/system-logs">
-                  <Terminal className="mr-1.5 h-4 w-4" /> Live Backend Server Logs
+                  <Terminal className="mr-1.5 h-3.5 w-3.5" /> Live Backend Server Logs
                 </Link>
               </Button>
             )}
-            <Button variant="outline" onClick={exportLogs}><Download className="mr-1.5 h-4 w-4" /> Export Logs</Button>
+            <Button variant="outline" onClick={exportLogs} className="rounded-xl h-9.5 text-xs font-semibold shrink-0">
+              <Download className="mr-1.5 h-3.5 w-3.5" /> Export Logs
+            </Button>
           </div>
-        } />
+        }
+      />
 
-      <Card className="border-dashed bg-muted/20">
-        <CardContent className="flex items-center gap-3 p-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-info/10 text-info"><Filter className="h-4.5 w-4.5 h-5 w-5" /></div>
-          <p className="text-sm text-muted-foreground">Audit logs are retained for compliance. Use the filters to narrow down by module, action, or date range.</p>
+      <Card className="rounded-2xl border-dashed bg-muted/20 shadow-xs">
+        <CardContent className="flex items-center gap-3 p-4 sm:p-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-info/10 text-info">
+            <Filter className="h-5 w-5" />
+          </div>
+          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            Audit logs are retained for compliance. Use the filters to narrow down by module, action, or date range.
+          </p>
         </CardContent>
       </Card>
 
-      <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search by user, action or entity..." exportFilename="audit-logs" initialSortBy="timestamp"
-        filters={[{ key: 'module', label: 'Module', options: modules }, { key: 'action', label: 'Action', options: actions }]} />
+      <DataTable
+        endpoint={ENDPOINT}
+        columns={columns}
+        searchPlaceholder="Search by user, action or entity..."
+        exportFilename="audit-logs"
+        initialSortBy="timestamp"
+        filters={[
+          { key: 'module', label: 'Module', options: modules },
+          { key: 'action', label: 'Action', options: actions },
+        ]}
+      />
     </div>
   );
 }

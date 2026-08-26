@@ -46,7 +46,7 @@ export default function StaffDashboardPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-6">
       <PageHeader
         title="Staff & Housekeeping Task Hub"
         description="Daily room cleaning schedules, turnover readiness, and assigned repair work orders."
@@ -54,72 +54,72 @@ export default function StaffDashboardPage() {
       />
 
       {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-l-4 border-l-amber-500 shadow-xs">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-muted-foreground">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <Card className="rounded-2xl border-l-4 border-l-amber-500 shadow-xs">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Assigned Repair Tasks
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-amber-600 dark:text-amber-400">
+          <CardContent className="p-4 sm:p-5 pt-0">
+            <div className="text-2xl sm:text-3xl font-extrabold font-mono text-amber-600 dark:text-amber-400">
               {pendingComplaints.length}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Pending maintenance requests</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Pending maintenance requests</p>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-blue-500 shadow-xs">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-muted-foreground">
+        <Card className="rounded-2xl border-l-4 border-l-blue-500 shadow-xs">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Rooms Turnover Pending
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-blue-600 dark:text-blue-400">
+          <CardContent className="p-4 sm:p-5 pt-0">
+            <div className="text-2xl sm:text-3xl font-extrabold font-mono text-blue-600 dark:text-blue-400">
               {dirtyRooms.length > 0 ? dirtyRooms.length : 3}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Cleaning required before check-in</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Cleaning required before check-in</p>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-emerald-500 shadow-xs">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-muted-foreground">
+        <Card className="rounded-2xl border-l-4 border-l-emerald-500 shadow-xs">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Duty Shift Status
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-5 pt-0">
             <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xl font-bold">On Active Duty</span>
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span className="text-lg sm:text-xl font-bold">On Active Duty</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Housekeeping & Maintenance</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Housekeeping & Maintenance</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="tasks" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="tasks">
-            <Wrench className="mr-1.5 h-4 w-4" />
+        <TabsList className="grid w-full grid-cols-2 max-w-md h-10 rounded-xl p-1 bg-muted/70">
+          <TabsTrigger value="tasks" className="rounded-lg text-xs font-semibold">
+            <Wrench className="mr-1.5 h-3.5 w-3.5" />
             Repair Orders ({pendingComplaints.length})
           </TabsTrigger>
-          <TabsTrigger value="cleaning">
-            <DoorOpen className="mr-1.5 h-4 w-4" />
+          <TabsTrigger value="cleaning" className="rounded-lg text-xs font-semibold">
+            <DoorOpen className="mr-1.5 h-3.5 w-3.5" />
             Room Cleaning ({dirtyRooms.length > 0 ? dirtyRooms.length : 3})
           </TabsTrigger>
         </TabsList>
 
         {/* Work Orders Tab */}
         <TabsContent value="tasks" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-bold">Assigned Maintenance & Repair Tickets</CardTitle>
-              <CardDescription>Resident and facility repairs requiring attention.</CardDescription>
+          <Card className="rounded-2xl shadow-xs overflow-hidden">
+            <CardHeader className="p-4 sm:p-6 pb-3 border-b">
+              <CardTitle className="text-base sm:text-lg font-bold">Assigned Maintenance &amp; Repair Tickets</CardTitle>
+              <CardDescription className="text-xs">Resident and facility repairs requiring attention.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 sm:p-6">
               {loadingComplaints ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">Loading tasks...</div>
               ) : pendingComplaints.length === 0 ? (
@@ -132,10 +132,10 @@ export default function StaffDashboardPage() {
                   {pendingComplaints.map((c: any) => (
                     <div
                       key={c.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border bg-card hover:bg-muted/40 transition"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border bg-card hover:bg-muted/40 transition shadow-xs"
                     >
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-sm">{c.title || 'Maintenance Request'}</span>
                           <Badge variant="secondary" className="text-[10px] font-bold">
                             {c.category || 'General'}
@@ -150,12 +150,12 @@ export default function StaffDashboardPage() {
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto w-full sm:w-auto">
                         {c.status !== 'in_progress' && (
                           <Button
                             size="sm"
                             variant="secondary"
-                            className="h-8 text-xs"
+                            className="rounded-xl h-8.5 text-xs flex-1 sm:flex-none"
                             onClick={() => updateWorkOrderMutation.mutate({ id: c.id, status: 'in_progress' })}
                           >
                             <Clock className="mr-1 h-3.5 w-3.5" /> Start Work
@@ -163,7 +163,7 @@ export default function StaffDashboardPage() {
                         )}
                         <Button
                           size="sm"
-                          className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                          className="rounded-xl h-8.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex-1 sm:flex-none shadow-xs"
                           onClick={() => updateWorkOrderMutation.mutate({ id: c.id, status: 'resolved' })}
                         >
                           <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Mark Done
@@ -179,17 +179,17 @@ export default function StaffDashboardPage() {
 
         {/* Cleaning Tab */}
         <TabsContent value="cleaning" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-bold">Room Cleaning & Turnover Readiness</CardTitle>
-              <CardDescription>Mark rooms cleaned to make them available for new resident check-ins.</CardDescription>
+          <Card className="rounded-2xl shadow-xs overflow-hidden">
+            <CardHeader className="p-4 sm:p-6 pb-3 border-b">
+              <CardTitle className="text-base sm:text-lg font-bold">Room Cleaning &amp; Turnover Readiness</CardTitle>
+              <CardDescription className="text-xs">Mark rooms cleaned to make them available for new resident check-ins.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 sm:p-6">
               <div className="space-y-3">
                 {rooms.slice(0, 6).map((r: any, idx: number) => (
                   <div
                     key={r.id || idx}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border bg-card"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border bg-card shadow-xs"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -203,12 +203,12 @@ export default function StaffDashboardPage() {
 
                     <Button
                       size="sm"
-                      className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                      className="rounded-xl h-8.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold self-end sm:self-auto w-full sm:w-auto shadow-xs"
                       onClick={() => {
                         toast({ title: 'Room Marked Clean', description: `Room ${r.roomNumber || idx + 1} is now ready for check-in.` });
                       }}
                     >
-                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Mark Clean & Ready
+                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Mark Clean &amp; Ready
                     </Button>
                   </div>
                 ))}

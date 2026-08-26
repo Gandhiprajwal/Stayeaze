@@ -3,6 +3,9 @@ package com.stayeaze.backend.payload.request;
 import java.util.UUID;
 
 public class BedRequest {
+    private UUID propertyId;
+    private UUID buildingId;
+    private UUID floorId;
     private UUID roomId;
 
     private String bedNumber;
@@ -14,6 +17,15 @@ public class BedRequest {
 
     public BedRequest() {
     }
+
+    public UUID getPropertyId() { return propertyId; }
+    public void setPropertyId(UUID propertyId) { this.propertyId = propertyId; }
+
+    public UUID getBuildingId() { return buildingId; }
+    public void setBuildingId(UUID buildingId) { this.buildingId = buildingId; }
+
+    public UUID getFloorId() { return floorId; }
+    public void setFloorId(UUID floorId) { this.floorId = floorId; }
 
     public UUID getRoomId() { return roomId; }
     public void setRoomId(UUID roomId) { this.roomId = roomId; }

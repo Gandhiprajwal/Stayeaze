@@ -32,7 +32,10 @@ export function useCreate<T>(endpoint: string, label = 'Record') {
       invalidateAllRelated(qc, endpoint);
       toast.success(`${label} created successfully`);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message || e?.message || `Failed to create ${label.toLowerCase()}`;
+      toast.error(msg);
+    },
   });
 }
 
@@ -61,11 +64,12 @@ export function useUpdate<T extends { id?: string }>(endpoint: string, label = '
       });
       return { previousData };
     },
-    onError: (e: Error, _vars, context: any) => {
+    onError: (e: any, _vars, context: any) => {
       if (context?.previousData) {
         qc.setQueryData([endpoint], context.previousData);
       }
-      toast.error(e.message);
+      const msg = e?.response?.data?.message || e?.message || `Failed to update ${label.toLowerCase()}`;
+      toast.error(msg);
     },
     onSuccess: () => {
       toast.success(`${label} updated successfully`);

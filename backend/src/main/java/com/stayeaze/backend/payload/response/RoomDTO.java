@@ -12,6 +12,7 @@ public class RoomDTO implements Serializable {
     private UUID id;
     private UUID floorId;
     private Integer floorNumber;
+    private String floorName;
     private UUID buildingId;
     private String buildingName;
     private UUID propertyId;
@@ -38,31 +39,16 @@ public class RoomDTO implements Serializable {
         try {
             if (r.getFloor() != null) {
                 dto.setFloorId(r.getFloor().getId());
-            }
-        } catch (Exception ignored) {}
-        try {
-            if (r.getFloor() != null) {
                 dto.setFloorNumber(r.getFloor().getFloorNumber());
-            }
-        } catch (Exception ignored) {}
-        try {
-            if (r.getFloor() != null && r.getFloor().getBuilding() != null) {
-                dto.setBuildingId(r.getFloor().getBuilding().getId());
-            }
-        } catch (Exception ignored) {}
-        try {
-            if (r.getFloor() != null && r.getFloor().getBuilding() != null) {
-                dto.setBuildingName(r.getFloor().getBuilding().getName());
-            }
-        } catch (Exception ignored) {}
-        try {
-            if (r.getFloor() != null && r.getFloor().getBuilding() != null && r.getFloor().getBuilding().getProperty() != null) {
-                dto.setPropertyId(r.getFloor().getBuilding().getProperty().getId());
-            }
-        } catch (Exception ignored) {}
-        try {
-            if (r.getFloor() != null && r.getFloor().getBuilding() != null && r.getFloor().getBuilding().getProperty() != null) {
-                dto.setPropertyName(r.getFloor().getBuilding().getProperty().getName());
+                dto.setFloorName(r.getFloor().getName());
+                if (r.getFloor().getBuilding() != null) {
+                    dto.setBuildingId(r.getFloor().getBuilding().getId());
+                    dto.setBuildingName(r.getFloor().getBuilding().getName());
+                    if (r.getFloor().getBuilding().getProperty() != null) {
+                        dto.setPropertyId(r.getFloor().getBuilding().getProperty().getId());
+                        dto.setPropertyName(r.getFloor().getBuilding().getProperty().getName());
+                    }
+                }
             }
         } catch (Exception ignored) {}
         dto.setRoomNumber(r.getRoomNumber());
@@ -90,6 +76,9 @@ public class RoomDTO implements Serializable {
 
     public Integer getFloorNumber() { return floorNumber; }
     public void setFloorNumber(Integer floorNumber) { this.floorNumber = floorNumber; }
+
+    public String getFloorName() { return floorName; }
+    public void setFloorName(String floorName) { this.floorName = floorName; }
 
     public UUID getBuildingId() { return buildingId; }
     public void setBuildingId(UUID buildingId) { this.buildingId = buildingId; }

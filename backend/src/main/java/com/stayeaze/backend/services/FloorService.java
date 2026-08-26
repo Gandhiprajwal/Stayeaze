@@ -78,13 +78,49 @@ public class FloorService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    @Cacheable(value = "building_floors", key = "#building.id.toString()")
+    public List<FloorDTO> getFloorsByBuilding(com.stayeaze.backend.models.Building building) {
+        if (building == null) return new java.util.ArrayList<>();
+        List<Floor> floors = floorRepository.findByBuilding(building);
+        try {
+            List<Object[]> rows = floorRepository.getMetricsByFloorForBuildingNative(building.getId());
+            java.util.Map<UUID, int[]> metricMap = new java.util.HashMap<>();
+            if (rows != null) {
+                for (Object[] r : rows) {
+                    if (r == null || r[0] == null) continue;
+                    UUID fId = UUID.fromString(r[0].toString());
+                    int rms = r[1] != null ? ((Number) r[1]).intValue() : 0;
+                    int bds = r[2] != null ? ((Number) r[2]).intValue() : 0;
+                    int occ = r[3] != null ? ((Number) r[3]).intValue() : 0;
+                    metricMap.put(fId, new int[]{rms, bds, occ});
+                }
+            }
+            for (Floor f : floors) {
+                int[] m = metricMap.get(f.getId());
+                if (m != null) {
+                    f.setRooms(m[0]);
+                    f.setBeds(m[1]);
+                    f.setOccupied(m[2]);
+                } else {
+                    populateFloorStats(f, building.getProperty() != null ? building.getProperty().getOrganization() : null);
+                }
+            }
+        } catch (Exception e) {
+            floors.forEach(f -> populateFloorStats(f, building.getProperty() != null ? building.getProperty().getOrganization() : null));
+        }
+        return floors.stream().map(FloorDTO::fromEntity).collect(Collectors.toList());
+    }
+
     @Caching(evict = {
         @CacheEvict(value = "floors_v2", allEntries = true),
+        @CacheEvict(value = "building_floors", allEntries = true),
         @CacheEvict(value = "rooms_v3", allEntries = true),
         @CacheEvict(value = "beds_v3", allEntries = true),
         @CacheEvict(value = "tenants", allEntries = true),
         @CacheEvict(value = "buildings", allEntries = true),
         @CacheEvict(value = "propertyDtos", allEntries = true),
+        @CacheEvict(value = "propertySummaries", allEntries = true),
         @CacheEvict(value = "minimalProperties", allEntries = true),
         @CacheEvict(value = "properties-minimal", allEntries = true),
         @CacheEvict(value = "tenants-minimal", allEntries = true)
@@ -94,11 +130,13 @@ public class FloorService {
 
     @Caching(evict = {
         @CacheEvict(value = "floors_v2", allEntries = true),
+        @CacheEvict(value = "building_floors", allEntries = true),
         @CacheEvict(value = "rooms_v3", allEntries = true),
         @CacheEvict(value = "beds_v3", allEntries = true),
         @CacheEvict(value = "tenants", allEntries = true),
         @CacheEvict(value = "buildings", allEntries = true),
         @CacheEvict(value = "propertyDtos", allEntries = true),
+        @CacheEvict(value = "propertySummaries", allEntries = true),
         @CacheEvict(value = "minimalProperties", allEntries = true),
         @CacheEvict(value = "properties-minimal", allEntries = true),
         @CacheEvict(value = "tenants-minimal", allEntries = true)
@@ -109,11 +147,13 @@ public class FloorService {
 
     @Caching(evict = {
         @CacheEvict(value = "floors_v2", allEntries = true),
+        @CacheEvict(value = "building_floors", allEntries = true),
         @CacheEvict(value = "rooms_v3", allEntries = true),
         @CacheEvict(value = "beds_v3", allEntries = true),
         @CacheEvict(value = "tenants", allEntries = true),
         @CacheEvict(value = "buildings", allEntries = true),
         @CacheEvict(value = "propertyDtos", allEntries = true),
+        @CacheEvict(value = "propertySummaries", allEntries = true),
         @CacheEvict(value = "minimalProperties", allEntries = true),
         @CacheEvict(value = "properties-minimal", allEntries = true),
         @CacheEvict(value = "tenants-minimal", allEntries = true)

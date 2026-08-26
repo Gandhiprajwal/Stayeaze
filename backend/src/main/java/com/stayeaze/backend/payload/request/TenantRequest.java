@@ -41,6 +41,10 @@ public class TenantRequest {
     private String leaseStart;
     private String leaseEnd;
     private UUID propertyId;
+    private UUID buildingId;
+    private UUID floorId;
+    private UUID roomId;
+    private UUID bedId;
     private String roomNumber;
     private String bedNumber;
     private String status;
@@ -51,6 +55,18 @@ public class TenantRequest {
 
     public TenantRequest() {
     }
+
+    public UUID getBuildingId() { return buildingId; }
+    public void setBuildingId(UUID buildingId) { this.buildingId = buildingId; }
+
+    public UUID getFloorId() { return floorId; }
+    public void setFloorId(UUID floorId) { this.floorId = floorId; }
+
+    public UUID getRoomId() { return roomId; }
+    public void setRoomId(UUID roomId) { this.roomId = roomId; }
+
+    public UUID getBedId() { return bedId; }
+    public void setBedId(UUID bedId) { this.bedId = bedId; }
 
     public String getName() {
         return name;

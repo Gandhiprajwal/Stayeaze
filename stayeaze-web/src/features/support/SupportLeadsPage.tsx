@@ -129,19 +129,29 @@ export default function SupportLeadsPage() {
       />
 
       <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b">
           <div>
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <UserCheck className="h-4 w-4 text-emerald-600" /> Prospective PG Organizations
+            <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+              <UserCheck className="h-4 w-4 text-emerald-600 shrink-0" /> Prospective PG Organizations
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs">
               Showing {filteredLeads.length} leads in the onboarding pipeline
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-56 md:w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search proprietor, PG name..."
+                className="pl-8 text-xs h-9 rounded-xl w-full"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36 text-xs h-9">
+              <SelectTrigger className="w-full sm:w-36 text-xs h-9 rounded-xl">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -153,17 +163,7 @@ export default function SupportLeadsPage() {
               </SelectContent>
             </Select>
 
-            <div className="relative w-48 sm:w-60">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search proprietor, PG name..."
-                className="pl-8 text-xs h-9"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            <Button size="sm" variant="outline" className="h-9 w-9 p-0" onClick={() => refetch()}>
+            <Button size="sm" variant="outline" className="h-9 w-9 p-0 rounded-xl shrink-0" onClick={() => refetch()} title="Refresh leads">
               <RefreshCw className="h-3.5 w-3.5" />
             </Button>
           </div>

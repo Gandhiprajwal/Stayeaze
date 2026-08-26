@@ -205,25 +205,41 @@ export function Tenant360Drawer({ tenantId, open, onOpenChange }: Tenant360Drawe
           )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between bg-card">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-            className="text-xs"
-          >
-            Close
-          </Button>
+        {/* Footer Actions with 1-Tap Mobile Call & WhatsApp */}
+        <div className="p-4 border-t border-border/60 flex items-center justify-between gap-2 bg-muted/20">
+          <div className="flex items-center gap-2">
+            {tenant?.mobile && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  className="rounded-xl h-9 text-xs font-semibold gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+                >
+                  <a href={`tel:${tenant.mobile}`}>
+                    <Phone className="h-3.5 w-3.5" /> Call
+                  </a>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={sendWhatsAppReminder}
+                  className="rounded-xl h-9 text-xs font-semibold gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+                >
+                  <Send className="h-3.5 w-3.5" /> WhatsApp
+                </Button>
+              </>
+            )}
+          </div>
           <Button
             size="sm"
             onClick={() => {
               onOpenChange(false);
               navigate(`/tenants/${tenantId}`);
             }}
-            className="text-xs font-bold gap-1.5"
+            className="rounded-xl h-9 text-xs font-bold gap-1.5 shadow-xs"
           >
-            View Full Profile <ExternalLink className="h-3.5 w-3.5" />
+            Full Profile <ExternalLink className="h-3.5 w-3.5" />
           </Button>
         </div>
       </SheetContent>

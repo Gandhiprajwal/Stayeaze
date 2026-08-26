@@ -184,21 +184,21 @@ export default function UserJourneyTrackingPage() {
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 sm:pb-6">
       {/* Header */}
       <PageHeader
         title="User Journey & Payment Telemetry"
         description="Comprehensive real-time audit log of user logins, checkout orders, gateway captures, payment anomalies, and organization traces."
         actions={
-          <div className="flex items-center gap-2.5">
-            <Button size="sm" variant="outline" onClick={handleExportCsv} className="text-xs h-9 font-medium">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+            <Button size="sm" variant="outline" onClick={handleExportCsv} className="rounded-xl text-xs h-9 font-medium">
               <Download className="mr-1.5 h-3.5 w-3.5" /> Export Audit CSV
             </Button>
             <Button
               size="sm"
               onClick={handleRefreshTelemetry}
               disabled={isRefreshing}
-              className="text-xs h-9 bg-indigo-600 hover:bg-indigo-700 font-medium"
+              className="rounded-xl text-xs h-9 bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
             >
               <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
               {isRefreshing ? 'Refreshing...' : 'Refresh Telemetry'}
@@ -208,63 +208,63 @@ export default function UserJourneyTrackingPage() {
       />
 
       {/* KPI Stats Cards */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl p-4 bg-card border shadow-xs flex items-center justify-between">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="rounded-2xl p-4 sm:p-5 bg-card border shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Trace Events</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Trace Events</p>
             {loadingStats ? (
               <div className="h-7 w-16 rounded-md bg-muted animate-pulse mt-1" />
             ) : (
-              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{statsData?.totalEvents ?? 0}</p>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">{statsData?.totalEvents ?? 0}</p>
             )}
-            <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">All organizations</p>
+            <p className="text-[10px] sm:text-[11px] text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">All organizations</p>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-100 dark:border-indigo-900/50 shrink-0">
+          <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-100 dark:border-indigo-900/50 shrink-0">
             <Activity className="h-5 w-5" />
           </div>
         </div>
 
-        <div className="rounded-xl p-4 bg-card border shadow-xs flex items-center justify-between">
+        <div className="rounded-2xl p-4 sm:p-5 bg-card border shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Payment Failures</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Payment Failures</p>
             {loadingStats ? (
               <div className="h-7 w-12 rounded-md bg-muted animate-pulse mt-1" />
             ) : (
-              <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">{statsData?.paymentFailures ?? 0}</p>
+              <p className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 mt-1 font-mono">{statsData?.paymentFailures ?? 0}</p>
             )}
-            <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Gateway & checkout errors</p>
+            <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium mt-0.5">Gateway & checkout</p>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center border border-rose-100 dark:border-rose-900/50 shrink-0">
+          <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center border border-rose-100 dark:border-rose-900/50 shrink-0">
             <CreditCard className="h-5 w-5" />
           </div>
         </div>
 
-        <div className="rounded-xl p-4 bg-card border shadow-xs flex items-center justify-between">
+        <div className="rounded-2xl p-4 sm:p-5 bg-card border shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Payment Anomalies</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Payment Anomalies</p>
             {loadingStats ? (
               <div className="h-7 w-10 rounded-md bg-muted animate-pulse mt-1" />
             ) : (
-              <p className="text-2xl font-black text-red-600 mt-1">{statsData?.criticalAnomalies ?? 0}</p>
+              <p className="text-xl sm:text-2xl font-black text-red-600 mt-1 font-mono">{statsData?.criticalAnomalies ?? 0}</p>
             )}
-            <p className="text-[11px] text-red-600 font-medium mt-0.5">Deducted / Unconfirmed</p>
+            <p className="text-[10px] sm:text-[11px] text-red-600 font-medium mt-0.5">Deducted / Unconfirmed</p>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-red-50 dark:bg-red-950/50 text-red-600 flex items-center justify-center border border-red-100 dark:border-red-900/50 shrink-0">
+          <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-red-50 dark:bg-red-950/50 text-red-600 flex items-center justify-center border border-red-100 dark:border-red-900/50 shrink-0">
             <AlertTriangle className="h-5 w-5" />
           </div>
         </div>
 
-        <div className="rounded-xl p-4 bg-card border shadow-xs flex items-center justify-between">
+        <div className="rounded-2xl p-4 sm:p-5 bg-card border shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Auth / Login Failures</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Auth Failures</p>
             {loadingStats ? (
               <div className="h-7 w-12 rounded-md bg-muted animate-pulse mt-1" />
             ) : (
-              <p className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{statsData?.authFailures ?? 0}</p>
+              <p className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 mt-1 font-mono">{statsData?.authFailures ?? 0}</p>
             )}
-            <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Password & 2FA blocks</p>
+            <p className="text-[10px] sm:text-[11px] text-muted-foreground font-medium mt-0.5">Password & 2FA blocks</p>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-100 dark:border-amber-900/50 shrink-0">
+          <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-100 dark:border-amber-900/50 shrink-0">
             <ShieldAlert className="h-5 w-5" />
           </div>
         </div>
@@ -322,11 +322,11 @@ export default function UserJourneyTrackingPage() {
       )}
 
       {/* Main Filter & Search Toolbar */}
-      <div className="p-4 rounded-xl bg-card border shadow-xs space-y-3">
+      <div className="p-4 sm:p-5 rounded-2xl bg-card border shadow-xs space-y-3.5">
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
           {/* Search bar */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search by Email, Order ID, Payment ID, IP Address, Action..."
               value={search}
@@ -334,10 +334,10 @@ export default function UserJourneyTrackingPage() {
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              className="pl-9 text-xs h-9.5 rounded-lg"
+              className="pl-9 text-xs sm:text-sm h-10 rounded-xl w-full"
             />
             {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-2.5 text-xs text-muted-foreground hover:text-foreground">
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground">
                 ✕
               </button>
             )}
@@ -352,14 +352,14 @@ export default function UserJourneyTrackingPage() {
                 setCurrentPage(1);
               }}
             >
-              <SelectTrigger className="h-9.5 text-xs rounded-lg">
-                <Building2 className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+              <SelectTrigger className="h-10 text-xs sm:text-sm rounded-xl">
+                <Building2 className="mr-2 h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <SelectValue placeholder="All Organizations" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All Organizations (Global Feed)</SelectItem>
+                <SelectItem value="ALL" className="text-xs">All Organizations (Global Feed)</SelectItem>
                 {organizations.map((org: any) => (
-                  <SelectItem key={org.id} value={org.id}>
+                  <SelectItem key={org.id} value={org.id} className="text-xs">
                     {org.name} ({org.subdomain})
                   </SelectItem>
                 ))}
@@ -369,68 +369,72 @@ export default function UserJourneyTrackingPage() {
         </div>
 
         {/* Category & Status Filter Pills */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border/40">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 border-t border-border/60">
           {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-            <span className="text-[11px] font-bold text-muted-foreground uppercase mr-1 flex items-center gap-1">
-              <Filter className="h-3 w-3" /> Category:
-            </span>
-            {[
-              { id: 'ALL', label: 'All Events' },
-              { id: 'SAAS_BILLING', label: 'SaaS Billing' },
-              { id: 'TENANT_RENT', label: 'Tenant Rent' },
-              { id: 'AUTH', label: 'Auth & Logins' },
-              { id: 'ONBOARDING', label: 'Onboarding' },
-              { id: 'SYSTEM_ERROR', label: 'Errors' },
-            ].map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => {
-                  setCategoryFilter(cat.id);
-                  setCurrentPage(1);
-                }}
-                className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  categoryFilter === cat.id
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
+          <div className="w-full sm:w-auto overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex items-center gap-1.5 w-max">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase mr-1 flex items-center gap-1 shrink-0">
+                <Filter className="h-3 w-3" /> Category:
+              </span>
+              {[
+                { id: 'ALL', label: 'All Events' },
+                { id: 'SAAS_BILLING', label: 'SaaS Billing' },
+                { id: 'TENANT_RENT', label: 'Tenant Rent' },
+                { id: 'AUTH', label: 'Auth & Logins' },
+                { id: 'ONBOARDING', label: 'Onboarding' },
+                { id: 'SYSTEM_ERROR', label: 'Errors' },
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    setCategoryFilter(cat.id);
+                    setCurrentPage(1);
+                  }}
+                  className={`h-8 px-3 rounded-xl text-xs font-semibold transition-all shrink-0 whitespace-nowrap ${
+                    categoryFilter === cat.id
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Status Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-            <span className="text-[11px] font-bold text-muted-foreground uppercase mr-1">Status:</span>
-            {[
-              { id: 'ALL', label: 'All' },
-              { id: 'SUCCESS', label: 'Success' },
-              { id: 'FAILURE', label: 'Failed' },
-              { id: 'WARNING', label: 'Warnings' },
-              { id: 'CRITICAL', label: 'Critical' },
-            ].map((st) => (
-              <button
-                key={st.id}
-                onClick={() => {
-                  setStatusFilter(st.id);
-                  setCurrentPage(1);
-                }}
-                className={`h-7 px-2.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  statusFilter === st.id
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
-                    : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {st.label}
-              </button>
-            ))}
+          <div className="w-full sm:w-auto overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex items-center gap-1.5 w-max">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase mr-1 shrink-0">Status:</span>
+              {[
+                { id: 'ALL', label: 'All' },
+                { id: 'SUCCESS', label: 'Success' },
+                { id: 'FAILURE', label: 'Failed' },
+                { id: 'WARNING', label: 'Warnings' },
+                { id: 'CRITICAL', label: 'Critical' },
+              ].map((st) => (
+                <button
+                  key={st.id}
+                  onClick={() => {
+                    setStatusFilter(st.id);
+                    setCurrentPage(1);
+                  }}
+                  className={`h-8 px-3 rounded-xl text-xs font-semibold transition-all shrink-0 whitespace-nowrap ${
+                    statusFilter === st.id
+                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                      : 'bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Events Data Table */}
-      <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+      <div className="rounded-2xl border bg-card shadow-xs overflow-hidden">
         {loadingEvents ? (
           <div className="py-20 text-center text-sm text-muted-foreground space-y-3">
             <RefreshCw className="h-8 w-8 animate-spin mx-auto text-indigo-600" />
@@ -447,116 +451,202 @@ export default function UserJourneyTrackingPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader className="bg-muted/40">
-                <TableRow>
-                  <TableHead className="w-[180px] text-xs font-bold uppercase">Timestamp</TableHead>
-                  <TableHead className="text-xs font-bold uppercase">Organization</TableHead>
-                  <TableHead className="text-xs font-bold uppercase">User / Client</TableHead>
-                  <TableHead className="text-xs font-bold uppercase">Category</TableHead>
-                  <TableHead className="text-xs font-bold uppercase">Action / Event</TableHead>
-                  <TableHead className="text-xs font-bold uppercase">Status</TableHead>
-                  <TableHead className="text-xs font-bold uppercase">Resource Ref</TableHead>
-                  <TableHead className="text-xs font-bold uppercase">Device / IP</TableHead>
-                  <TableHead className="text-right text-xs font-bold uppercase w-[120px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody className="text-xs">
-                {events.map((ev) => (
-                  <TableRow key={ev.id} className="hover:bg-muted/40 transition-colors">
-                    <TableCell className="font-mono text-muted-foreground whitespace-nowrap">
-                      {formatDate(ev.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-semibold text-slate-900 dark:text-white">
+          <>
+            {/* Mobile View: High-Density Breakdown Cards */}
+            <div className="block md:hidden space-y-3.5 p-4">
+              {events.map((ev) => (
+                <div key={ev.id} className="p-4 rounded-2xl border bg-card shadow-xs space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-sm text-foreground truncate">
                         {ev.orgName || 'Global Platform'}
                       </div>
                       {ev.orgSubdomain && (
-                        <span className="text-[10px] font-mono text-muted-foreground">{ev.orgSubdomain}.stayeaze.com</span>
+                        <span className="text-[10px] font-mono text-muted-foreground block">{ev.orgSubdomain}.stayeaze.com</span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium text-slate-800 dark:text-slate-200">
-                        {ev.userEmail || 'Anonymous'}
-                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                      {getStatusBadge(ev.status)}
+                      {getCategoryBadge(ev.category)}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-muted/40 space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-foreground">{ev.action}</span>
+                      {ev.amount != null && ev.amount > 0 && (
+                        <span className="font-mono font-bold text-emerald-600 text-xs">
+                          {formatCurrency(ev.amount)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/40">
+                      <span className="truncate">{ev.userEmail || 'Anonymous'}</span>
                       {ev.userRole && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase font-mono">
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 uppercase font-mono shrink-0 ml-1">
                           {ev.userRole.replace('ROLE_', '')}
                         </Badge>
                       )}
-                    </TableCell>
-                    <TableCell>{getCategoryBadge(ev.category)}</TableCell>
-                    <TableCell>
-                      <div className="font-semibold text-slate-900 dark:text-white">
-                        {ev.action}
-                      </div>
-                      {ev.amount != null && ev.amount > 0 && (
-                        <div className="font-mono font-bold text-emerald-600 text-[11px]">
-                          {formatCurrency(ev.amount)}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1">
+                    <span className="font-mono">{formatDate(ev.createdAt)}</span>
+                    <span className="truncate max-w-[140px] text-right">{ev.device || 'Web Browser'}</span>
+                  </div>
+
+                  {ev.resourceId && (
+                    <div className="flex items-center justify-between text-[11px] font-mono bg-muted/20 px-2.5 py-1 rounded-lg border border-border/40">
+                      <span className="text-muted-foreground truncate max-w-[180px]">Ref: {ev.resourceId}</span>
+                      <button
+                        onClick={() => copyToClipboard(ev.resourceId!, 'Resource ID')}
+                        className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
+                        title="Copy ID"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+                    {(ev.category === 'SAAS_BILLING' || ev.category === 'TENANT_RENT' || ev.status === 'CRITICAL') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8.5 px-3 text-xs font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50 rounded-xl"
+                        onClick={() => {
+                          setReconcileTarget(ev);
+                          setReconcileNotes(`Verified with gateway by Super Admin`);
+                        }}
+                      >
+                        Re-verify
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8.5 px-3 text-xs font-semibold rounded-xl"
+                      onClick={() => setInspectEvent(ev)}
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1" /> Inspect
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop View: Full 9-Column Tabular View */}
+            <div className="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-muted/40">
+                  <TableRow>
+                    <TableHead className="w-[180px] text-xs font-bold uppercase">Timestamp</TableHead>
+                    <TableHead className="text-xs font-bold uppercase">Organization</TableHead>
+                    <TableHead className="text-xs font-bold uppercase">User / Client</TableHead>
+                    <TableHead className="text-xs font-bold uppercase">Category</TableHead>
+                    <TableHead className="text-xs font-bold uppercase">Action / Event</TableHead>
+                    <TableHead className="text-xs font-bold uppercase">Status</TableHead>
+                    <TableHead className="text-xs font-bold uppercase">Resource Ref</TableHead>
+                    <TableHead className="text-xs font-bold uppercase">Device / IP</TableHead>
+                    <TableHead className="text-right text-xs font-bold uppercase w-[120px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="text-xs">
+                  {events.map((ev) => (
+                    <TableRow key={ev.id} className="hover:bg-muted/40 transition-colors">
+                      <TableCell className="font-mono text-muted-foreground whitespace-nowrap">
+                        {formatDate(ev.createdAt)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-semibold text-slate-900 dark:text-white">
+                          {ev.orgName || 'Global Platform'}
                         </div>
-                      )}
-                    </TableCell>
-                    <TableCell>{getStatusBadge(ev.status)}</TableCell>
-                    <TableCell>
-                      {ev.resourceId ? (
-                        <div className="flex items-center gap-1 font-mono text-[11px]">
-                          <span className="truncate max-w-[110px]">{ev.resourceId}</span>
-                          <button
-                            onClick={() => copyToClipboard(ev.resourceId!, 'Resource ID')}
-                            className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
-                            title="Copy ID"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </button>
+                        {ev.orgSubdomain && (
+                          <span className="text-[10px] font-mono text-muted-foreground">{ev.orgSubdomain}.stayeaze.com</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium text-slate-800 dark:text-slate-200">
+                          {ev.userEmail || 'Anonymous'}
                         </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                        {ev.device || 'Web Browser'}
-                      </div>
-                      <div className="text-[10px] font-mono text-muted-foreground">{ev.clientIp || '127.0.0.1'}</div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          onClick={() => setInspectEvent(ev)}
-                          title="Inspect JSON Payload & Diagnostics"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                        {(ev.category === 'SAAS_BILLING' || ev.category === 'TENANT_RENT' || ev.status === 'CRITICAL') && (
+                        {ev.userRole && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase font-mono">
+                            {ev.userRole.replace('ROLE_', '')}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{getCategoryBadge(ev.category)}</TableCell>
+                      <TableCell>
+                        <div className="font-semibold text-slate-900 dark:text-white">
+                          {ev.action}
+                        </div>
+                        {ev.amount != null && ev.amount > 0 && (
+                          <div className="font-mono font-bold text-emerald-600 text-[11px]">
+                            {formatCurrency(ev.amount)}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(ev.status)}</TableCell>
+                      <TableCell>
+                        {ev.resourceId ? (
+                          <div className="flex items-center gap-1 font-mono text-[11px]">
+                            <span className="truncate max-w-[110px]">{ev.resourceId}</span>
+                            <button
+                              onClick={() => copyToClipboard(ev.resourceId!, 'Resource ID')}
+                              className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
+                              title="Copy ID"
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                          {ev.device || 'Web Browser'}
+                        </div>
+                        <div className="text-[10px] font-mono text-muted-foreground">{ev.clientIp || '127.0.0.1'}</div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             size="sm"
-                            variant="outline"
-                            className="h-7 px-2 text-[10px] font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50"
-                            onClick={() => {
-                              setReconcileTarget(ev);
-                              setReconcileNotes(`Verified with gateway by Super Admin`);
-                            }}
-                            title="Re-verify with Gateway"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={() => setInspectEvent(ev)}
+                            title="Inspect JSON Payload & Diagnostics"
                           >
-                            Re-verify
+                            <Eye className="h-3.5 w-3.5" />
                           </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                          {(ev.category === 'SAAS_BILLING' || ev.category === 'TENANT_RENT' || ev.status === 'CRITICAL') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-[10px] font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                              onClick={() => {
+                                setReconcileTarget(ev);
+                                setReconcileNotes(`Verified with gateway by Super Admin`);
+                              }}
+                              title="Re-verify with Gateway"
+                            >
+                              Re-verify
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
 
         {/* Pagination Bar */}
         {totalEventsCount > 0 && (
-          <div className="py-3 px-4 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+          <div className="py-3 px-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
             <div>
               Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalEventsCount)} of {totalEventsCount} trace events
             </div>
@@ -564,7 +654,7 @@ export default function UserJourneyTrackingPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 text-xs font-medium"
+                className="h-8 text-xs font-medium rounded-xl"
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               >
@@ -574,7 +664,7 @@ export default function UserJourneyTrackingPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 text-xs font-medium"
+                className="h-8 text-xs font-medium rounded-xl"
                 disabled={currentPage >= totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               >
@@ -587,11 +677,11 @@ export default function UserJourneyTrackingPage() {
 
       {/* JSON Payload & Diagnostic Inspector Modal */}
       <Dialog open={!!inspectEvent} onOpenChange={(open) => !open && setInspectEvent(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[85vh] flex flex-col rounded-2xl p-5 sm:p-6">
           <DialogHeader>
             <div className="flex items-center gap-2">
               <Terminal className="h-5 w-5 text-indigo-600" />
-              <DialogTitle className="text-base font-bold">Event Diagnostic Inspector</DialogTitle>
+              <DialogTitle className="text-base sm:text-lg font-bold">Event Diagnostic Inspector</DialogTitle>
             </div>
             <DialogDescription className="text-xs">
               Trace ID: <span className="font-mono">{inspectEvent?.id}</span> • {inspectEvent?.createdAt}
@@ -601,7 +691,7 @@ export default function UserJourneyTrackingPage() {
           {inspectEvent && (
             <div className="space-y-4 my-2 overflow-y-auto pr-1 text-xs">
               {/* Event Metadata Grid */}
-              <div className="grid grid-cols-2 gap-3 p-3 bg-muted/40 rounded-xl border">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-muted/40 rounded-xl border">
                 <div>
                   <span className="text-muted-foreground text-[10px] uppercase font-bold">Organization</span>
                   <p className="font-semibold">{inspectEvent.orgName || 'N/A'} ({inspectEvent.orgSubdomain || 'public'})</p>
@@ -660,11 +750,11 @@ export default function UserJourneyTrackingPage() {
             </div>
           )}
 
-          <DialogFooter className="border-t pt-3 flex items-center justify-between sm:justify-between">
+          <DialogFooter className="border-t pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-0">
             <Button
               variant="outline"
               size="sm"
-              className="text-xs font-semibold"
+              className="text-xs font-semibold rounded-xl h-10 sm:h-9"
               onClick={() => {
                 if (inspectEvent) {
                   const eventDetail = {
@@ -680,9 +770,9 @@ export default function UserJourneyTrackingPage() {
                 }
               }}
             >
-              <LifeBuoy className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> Create / Link Support Ticket
+              <LifeBuoy className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> Link Ticket
             </Button>
-            <Button size="sm" onClick={() => setInspectEvent(null)} className="text-xs">
+            <Button size="sm" onClick={() => setInspectEvent(null)} className="text-xs rounded-xl h-10 sm:h-9">
               Close
             </Button>
           </DialogFooter>
@@ -691,11 +781,11 @@ export default function UserJourneyTrackingPage() {
 
       {/* Reconcile & Verify Gateway Dialog */}
       <Dialog open={!!reconcileTarget} onOpenChange={(open) => !open && setReconcileTarget(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl p-5 sm:p-6">
           <DialogHeader>
             <div className="flex items-center gap-2">
               <Wrench className="h-5 w-5 text-indigo-600" />
-              <DialogTitle className="text-base font-bold">Reconcile & Synchronize Gateway</DialogTitle>
+              <DialogTitle className="text-base sm:text-lg font-bold">Reconcile Gateway</DialogTitle>
             </div>
             <DialogDescription className="text-xs">
               Re-verify the transaction status with the payment gateway and update the subscriber workspace state.
@@ -725,7 +815,7 @@ export default function UserJourneyTrackingPage() {
                   value={reconcileNotes}
                   onChange={(e) => setReconcileNotes(e.target.value)}
                   onBlur={() => setReconcileNotesTouched(true)}
-                  className={`text-xs h-9 ${reconcileNotesTouched && !reconcileNotes.trim() ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
+                  className={`text-xs h-10 rounded-xl ${reconcileNotesTouched && !reconcileNotes.trim() ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
                 />
                 {reconcileNotesTouched && !reconcileNotes.trim() && (
                   <p className="text-[11px] font-medium text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
@@ -743,13 +833,13 @@ export default function UserJourneyTrackingPage() {
             </div>
           )}
 
-          <DialogFooter className="gap-2">
-            <Button variant="outline" size="sm" onClick={() => setReconcileTarget(null)} className="text-xs">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setReconcileTarget(null)} className="text-xs rounded-xl h-10 w-full sm:w-auto">
               Cancel
             </Button>
             <Button
               size="sm"
-              className="text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold transition-all"
+              className="text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold transition-all rounded-xl h-10 w-full sm:w-auto"
               disabled={reconcileNotes.trim().length < 5 || reconcileMutation.isPending}
               onClick={() => {
                 if (reconcileTarget && reconcileNotes.trim().length >= 5) {
@@ -761,7 +851,7 @@ export default function UserJourneyTrackingPage() {
               }}
             >
               {reconcileMutation.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Check className="h-3.5 w-3.5 mr-1.5" />}
-              Confirm & Mark Reconciled
+              Confirm Reconciled
             </Button>
           </DialogFooter>
         </DialogContent>

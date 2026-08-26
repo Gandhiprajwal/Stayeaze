@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { LogIn, Plus, Pencil, Trash2, BadgeCheck, Calendar, CreditCard, Zap, Wallet, UserCheck, ShieldCheck, FileText } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
@@ -73,7 +73,15 @@ export default function CheckInsPage() {
     enabled: dialogOpen,
   });
 
-  const roomOptions = (allRooms ?? []).filter((r) => r.status !== 'archived' && r.status !== 'maintenance' && r.status !== 'blocked');
+  const form = useForm(emptyForm);
+
+  const roomOptions = useMemo(() => {
+    return (allRooms ?? []).filter((r: any) => {
+      if (r.status === 'archived' || r.status === 'maintenance' || r.status === 'blocked') return false;
+      if (form.values.propertyId && r.propertyId && r.propertyId !== form.values.propertyId) return false;
+      return true;
+    });
+  }, [allRooms, form.values.propertyId]);
 
   // Fetch beds for selected room
   const { data: bedsForRoom } = useQuery({
@@ -89,7 +97,6 @@ export default function CheckInsPage() {
   const createMut = useCreate<CheckIn>(ENDPOINT, 'Check-in');
   const updateMut = useUpdate<CheckIn>(ENDPOINT, 'Check-in');
   const deleteMut = useDelete(ENDPOINT, 'Check-in');
-  const form = useForm(emptyForm);
 
   function handleSelectTenant(tenantId: string) {
     form.setValue('tenantId', tenantId);

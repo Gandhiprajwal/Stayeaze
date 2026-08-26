@@ -342,7 +342,7 @@ public class AuthController {
                     new UsernamePasswordAuthenticationToken(email, loginRequest.getPassword()));
 
             UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-            User user = userRepository.findById(userDetails.getId()).orElse(null);
+            User user = userLookup.orElseGet(() -> userRepository.findById(userDetails.getId()).orElse(null));
 
             if (user != null && Boolean.TRUE.equals(user.getIsTwoFactorEnabled())) {
                 String otp = String.format("%06d", new java.security.SecureRandom().nextInt(1000000));
@@ -383,13 +383,7 @@ public class AuthController {
                     .map(item -> item.getAuthority())
                     .collect(Collectors.toList());
 
-            // Clear existing refresh tokens first
-            try {
-                refreshTokenService.deleteByUserId(userDetails.getId());
-            } catch (Exception ignored) {
-            }
-
-            // Generate new refresh token
+            // Generate/rotate refresh token in single transaction
             RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getId());
             org.springframework.http.ResponseCookie cookie = jwtUtils.generateRefreshTokenCookie(refreshToken.getToken());
 

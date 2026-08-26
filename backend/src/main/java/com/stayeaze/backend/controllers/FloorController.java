@@ -24,9 +24,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import com.stayeaze.backend.models.Tenant;
@@ -130,7 +128,7 @@ public class FloorController {
         }
 
         Floor floor = new Floor(building, request.getFloorNumber(), request.getName());
-        Floor saved = floorRepository.save(floor);
+        Floor saved = floorService.saveFloor(floor);
         return new ResponseEntity<>(populateFloorStats(saved), HttpStatus.CREATED);
     }
 
@@ -143,9 +141,7 @@ public class FloorController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse(e.getMessage()));
         }
 
-        List<Floor> floors = floorRepository.findByBuilding(building);
-        floors.forEach(this::populateFloorStats);
-        List<FloorDTO> dtos = floors.stream().map(FloorDTO::fromEntity).collect(Collectors.toList());
+        List<FloorDTO> dtos = floorService.getFloorsByBuilding(building);
         return ResponseEntity.ok(dtos);
     }
 
@@ -251,6 +247,9 @@ public class FloorController {
         Building building = buildingRepository.findById(request.getBuildingId()).orElse(null);
         if (building == null || !isBuildingAuthorizedForUser(building)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Building not found or unauthorized"));
+        }
+        if (request.getPropertyId() != null && building.getProperty() != null && !building.getProperty().getId().equals(request.getPropertyId())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Specified building does not belong to the selected property!"));
         }
 
         // Use provided floorNumber, or derive from name, or auto-increment

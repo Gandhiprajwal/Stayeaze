@@ -495,34 +495,54 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Manage your account, preferences and organization." icon={SettingsIcon} />
 
       <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSearchParams({ tab: val }); }}>
-        <div className="flex justify-between items-center mb-2">
-          <TabsList>
-            <TabsTrigger value="profile"><User className="mr-1.5 h-4 w-4" /> Profile</TabsTrigger>
-            <TabsTrigger value="appearance"><Palette className="mr-1.5 h-4 w-4" /> Appearance</TabsTrigger>
-            <TabsTrigger value="notifications"><Bell className="mr-1.5 h-4 w-4" /> Notifications</TabsTrigger>
-            {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'RECEPTIONIST') && (
-              <TabsTrigger value="wifi"><Wifi className="mr-1.5 h-4 w-4 text-cyan-500" /> Wi-Fi Hub</TabsTrigger>
-            )}
-            {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'ACCOUNTANT') && (
-              <TabsTrigger value="organization"><Building2 className="mr-1.5 h-4 w-4" /> Organization</TabsTrigger>
-            )}
-            {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
-              <TabsTrigger value="branding"><Palette className="mr-1.5 h-4 w-4 text-purple-500" /> Custom Branding</TabsTrigger>
-            )}
-            {user?.role === 'SUPER_ADMIN' && (
-              <TabsTrigger value="saas-invoicing"><Sparkles className="mr-1.5 h-4 w-4 text-emerald-500" /> SaaS Invoice & Platform Settings</TabsTrigger>
-            )}
-            {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
-              <TabsTrigger value="subscription"><Sparkles className="mr-1.5 h-4 w-4 text-amber-500" /> SaaS Subscription</TabsTrigger>
-            )}
-            <TabsTrigger value="security"><Shield className="mr-1.5 h-4 w-4" /> Security</TabsTrigger>
-          </TabsList>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 w-full">
+          <div className="w-full overflow-x-auto pb-1 scrollbar-none">
+            <TabsList className="h-10.5 p-1 rounded-xl bg-muted/60 border border-border/60 gap-1 inline-flex shrink-0">
+              <TabsTrigger value="profile" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                <User className="mr-1.5 h-3.5 w-3.5" /> Profile
+              </TabsTrigger>
+              <TabsTrigger value="appearance" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                <Palette className="mr-1.5 h-3.5 w-3.5" /> Appearance
+              </TabsTrigger>
+              <TabsTrigger value="notifications" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                <Bell className="mr-1.5 h-3.5 w-3.5" /> Notifications
+              </TabsTrigger>
+              {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'RECEPTIONIST') && (
+                <TabsTrigger value="wifi" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                  <Wifi className="mr-1.5 h-3.5 w-3.5 text-cyan-500" /> Wi-Fi Hub
+                </TabsTrigger>
+              )}
+              {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'ACCOUNTANT') && (
+                <TabsTrigger value="organization" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                  <Building2 className="mr-1.5 h-3.5 w-3.5" /> Organization
+                </TabsTrigger>
+              )}
+              {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
+                <TabsTrigger value="branding" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                  <Palette className="mr-1.5 h-3.5 w-3.5 text-purple-500" /> Custom Branding
+                </TabsTrigger>
+              )}
+              {user?.role === 'SUPER_ADMIN' && (
+                <TabsTrigger value="saas-invoicing" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5 text-emerald-500" /> SaaS Invoicing
+                </TabsTrigger>
+              )}
+              {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
+                <TabsTrigger value="subscription" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5 text-amber-500" /> Subscription
+                </TabsTrigger>
+              )}
+              <TabsTrigger value="security" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                <Shield className="mr-1.5 h-3.5 w-3.5" /> Security
+              </TabsTrigger>
+            </TabsList>
+          </div>
           {user?.role === 'SUPER_ADMIN' && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => window.location.href = '/super-admin/integrations'}
-              className="border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 font-semibold"
+              className="border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 font-semibold rounded-xl shrink-0"
             >
               <SettingsIcon className="mr-1.5 h-4 w-4" /> Cloud & Infrastructure Integrations
             </Button>

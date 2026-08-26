@@ -15,26 +15,51 @@ import java.util.UUID;
 
 @Repository
 public interface RoomRepository extends JpaRepository<Room, UUID> {
-    List<Room> findByFloor(Floor floor);
+    @Query("SELECT r FROM Room r LEFT JOIN FETCH r.floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p WHERE r.floor = :floor")
+    List<Room> findByFloor(@Param("floor") Floor floor);
 
-    @Query("SELECT r FROM Room r WHERE r.floor.id = :floorId")
+    @Query("SELECT r FROM Room r LEFT JOIN FETCH r.floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p WHERE r.floor.id = :floorId")
     List<Room> findByFloorId(@Param("floorId") UUID floorId);
     Optional<Room> findByIdAndFloor(UUID id, Floor floor);
     Boolean existsByFloorAndRoomNumber(Floor floor, String roomNumber);
 
-    @Query("SELECT r FROM Room r WHERE r.floor.building.property.organization.id = :orgId")
+    @Query("SELECT r FROM Room r LEFT JOIN FETCH r.floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p WHERE p.organization.id = :orgId")
     List<Room> findByOrganizationId(@Param("orgId") UUID orgId);
 
-    @Query("SELECT r FROM Room r WHERE r.floor.building.property.organization.id = :orgId")
+    @Query(value = "SELECT r FROM Room r LEFT JOIN FETCH r.floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p WHERE p.organization.id = :orgId",
+           countQuery = "SELECT count(r) FROM Room r WHERE r.floor.building.property.organization.id = :orgId")
     Page<Room> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
     @Query(value = "SELECT floor_id FROM rooms WHERE id = :roomId", nativeQuery = true)
     UUID findFloorIdByRoomId(@Param("roomId") UUID roomId);
 
-    @Query(value = "SELECT * FROM rooms r ORDER BY r.room_number ASC", nativeQuery = true)
+    @Query("SELECT r FROM Room r LEFT JOIN FETCH r.floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p ORDER BY r.roomNumber ASC")
     List<Room> findAllSuperAdmin();
 
     Page<Room> findAll(Pageable pageable);
+
+    @Query(value = "SELECT " +
+            "CAST(r.id AS text) AS roomId, " +
+            "r.room_number AS roomNumber, " +
+            "r.sharing_type AS sharingType, " +
+            "r.base_rent AS baseRent, " +
+            "r.status AS status, " +
+            "CAST(f.id AS text) AS floorId, " +
+            "f.name AS floorName, " +
+            "f.floor_number AS floorNumber, " +
+            "CAST(bl.id AS text) AS buildingId, " +
+            "bl.name AS buildingName, " +
+            "CAST(p.id AS text) AS propertyId, " +
+            "p.name AS propertyName " +
+            "FROM rooms r " +
+            "JOIN floors f ON r.floor_id = f.id " +
+            "JOIN buildings bl ON f.building_id = bl.id " +
+            "JOIN properties p ON bl.property_id = p.id " +
+            "WHERE p.id = CAST(:propertyId AS uuid) " +
+            "AND (r.status IS NULL OR LOWER(r.status) != 'archived') " +
+            "ORDER BY r.room_number ASC",
+            nativeQuery = true)
+    List<Object[]> findPublicRoomsWithHierarchyNative(@Param("propertyId") UUID propertyId);
 
     @Query(value = "SELECT r.* FROM rooms r " +
             "JOIN floors f ON r.floor_id = f.id " +

@@ -23,6 +23,20 @@ public class JwtUtils {
     @Value("${jwt.expiration}")
     private int jwtExpirationMs;
 
+    private static final String DEFAULT_DEV_SECRET = "404E635266556A586E3272357538782F413F4428472B4B6250655368566D5970";
+
+    @jakarta.annotation.PostConstruct
+    public void validateSecretOnStartup() {
+        if (jwtSecret == null || jwtSecret.isBlank()) {
+            throw new IllegalStateException("CRITICAL SECURITY ERROR: jwt.secret is not configured. Application cannot start.");
+        }
+        if (DEFAULT_DEV_SECRET.equalsIgnoreCase(jwtSecret.trim())) {
+            logger.warn("SECURITY NOTICE: Using development default JWT secret placeholder. In production, ensure JWT_SECRET environment variable is set to a secure 256-bit random key.");
+        } else {
+            logger.info("JWT secret verified and loaded securely from environment configuration.");
+        }
+    }
+
     public String generateJwtToken(Authentication authentication) {
         if (authentication.getPrincipal() instanceof com.stayeaze.backend.security.services.UserDetailsImpl userPrincipal) {
             java.util.List<String> roles = userPrincipal.getAuthorities().stream()

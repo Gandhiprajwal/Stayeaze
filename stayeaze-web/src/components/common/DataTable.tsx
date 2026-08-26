@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDebounce } from '@/lib/hooks/use-debounce';
@@ -70,6 +71,14 @@ interface DataTableProps<T> {
   initialSortOrder?: 'asc' | 'desc';
   initialPageSize?: number;
   bulkActions?: BulkAction[];
+  emptyAction?: {
+    label: string;
+    onClick: () => void;
+    icon?: React.ComponentType<{ className?: string }>;
+  };
+  emptyDescription?: string;
+  syncUrlState?: boolean;
+  virtualizeThreshold?: number;
 }
 
 function getFilterableValues(item: Record<string, unknown>, key: string): string[] {
@@ -207,22 +216,83 @@ export function DataTable<T extends { id: string }>({
   initialSortOrder = 'asc',
   initialPageSize = 10,
   bulkActions,
+  emptyAction,
+  emptyDescription,
+  syncUrlState = true,
+  virtualizeThreshold = 50,
 }: DataTableProps<T>) {
-  const [params, setParams] = useState<QueryParams>({
-    page: 1,
-    pageSize: initialPageSize,
-    sortBy: initialSortBy,
-    sortOrder: initialSortOrder,
-    search: '',
-    filters: {},
-  });
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const getInitialParams = (): QueryParams => {
+    if (!syncUrlState) {
+      return {
+        page: 1,
+        pageSize: initialPageSize,
+        sortBy: initialSortBy,
+        sortOrder: initialSortOrder,
+        search: '',
+        filters: {},
+      };
+    }
+
+    const searchFromUrl = searchParams.get('search') || '';
+    const pageFromUrl = Number(searchParams.get('page')) || 1;
+    const pageSizeFromUrl = Number(searchParams.get('pageSize')) || initialPageSize;
+    const sortByFromUrl = searchParams.get('sortBy') || initialSortBy;
+    const sortOrderFromUrl = (searchParams.get('sortOrder') as 'asc' | 'desc') || initialSortOrder;
+
+    const filtersFromUrl: Record<string, string> = {};
+    if (filters) {
+      filters.forEach((f) => {
+        const val = searchParams.get(f.key);
+        if (val) filtersFromUrl[f.key] = val;
+      });
+    }
+
+    return {
+      page: pageFromUrl,
+      pageSize: pageSizeFromUrl,
+      sortBy: sortByFromUrl,
+      sortOrder: sortOrderFromUrl,
+      search: searchFromUrl,
+      filters: filtersFromUrl,
+    };
+  };
+
+  const [params, setParams] = useState<QueryParams>(getInitialParams);
   const [visibleCols, setVisibleCols] = useState<Set<string>>(
     new Set(columns.map((c) => c.key))
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(syncUrlState ? (searchParams.get('from') || '') : '');
+  const [dateTo, setDateTo] = useState(syncUrlState ? (searchParams.get('to') || '') : '');
   const debouncedSearch = useDebounce(params.search ?? '', 300);
+
+  // Sync state changes back to URL query parameters
+  useEffect(() => {
+    if (!syncUrlState) return;
+
+    const newParams = new URLSearchParams();
+    if (params.search && params.search.trim()) newParams.set('search', params.search.trim());
+    if (params.page && params.page > 1) newParams.set('page', String(params.page));
+    if (params.pageSize && params.pageSize !== initialPageSize) newParams.set('pageSize', String(params.pageSize));
+    if (params.sortBy && params.sortBy !== initialSortBy) newParams.set('sortBy', params.sortBy);
+    if (params.sortOrder && params.sortOrder !== initialSortOrder) newParams.set('sortOrder', params.sortOrder);
+
+    if (params.filters) {
+      Object.entries(params.filters).forEach(([k, v]) => {
+        if (v && v !== 'all') newParams.set(k, String(v));
+      });
+    }
+    if (dateFrom) newParams.set('from', dateFrom);
+    if (dateTo) newParams.set('to', dateTo);
+
+    const currentQuery = searchParams.toString();
+    const newQuery = newParams.toString();
+    if (currentQuery !== newQuery) {
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [params, dateFrom, dateTo, syncUrlState]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rawPayload, isLoading, isError, error } = useQuery<any, Error>({
@@ -362,6 +432,20 @@ export function DataTable<T extends { id: string }>({
   const someOnPageSelected = pageRowIds.some((id) => selectedIds.has(id));
   const hasBulk = !!bulkActions && bulkActions.length > 0;
 
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const shouldVirtualize = displayRows.length > virtualizeThreshold;
+
+  const rowVirtualizer = useVirtualizer({
+    count: displayRows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 52,
+    overscan: 6,
+    enabled: shouldVirtualize,
+  });
+
+  const virtualItems = shouldVirtualize ? rowVirtualizer.getVirtualItems() : null;
+  const totalVirtualHeight = shouldVirtualize ? rowVirtualizer.getTotalSize() : 0;
+
   function toggleSort(key: string) {
     setParams((p) => {
       if (p.sortBy !== key) return { ...p, sortBy: key, sortOrder: 'asc', page: 1 };
@@ -449,74 +533,92 @@ export function DataTable<T extends { id: string }>({
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <div className="relative max-w-xs flex-1">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      {/* Enterprise Ergonomic Toolbar */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+          {/* Prominent, Sizeable Search Bar */}
+          <div className="relative w-full sm:w-64 md:w-72 lg:w-80 shrink-0">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={searchPlaceholder}
               value={params.search ?? ''}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8"
+              className="pl-10 pr-8 h-10 rounded-xl bg-card/90 border-border/80 text-xs sm:text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-primary/40"
             />
+            {params.search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-0.5 rounded-full hover:bg-muted"
+              >
+                ✕
+              </button>
+            )}
           </div>
-          {filters.map((f) => (
-            <Select key={f.key} value={params.filters?.[f.key] ?? 'all'} onValueChange={(v) => setFilter(f.key, v)}>
-              <SelectTrigger className="h-9 w-[140px]">
-                <SelectValue placeholder={f.label} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{f.label}: All</SelectItem>
-                {f.options.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ))}
-          {dateRangeFilter && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className={cn('h-9 gap-1.5', dateRangeActive && 'border-primary text-primary')}>
-                  <CalendarRange className="h-4 w-4" /> {dateRangeActive ? 'Date: Set' : dateRangeFilter.label}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-72" align="start">
-                <div className="space-y-3 p-1">
-                  <p className="text-sm font-medium">{dateRangeFilter.label}</p>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="text-xs text-muted-foreground">From</label>
-                      <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 h-8" />
+
+          {/* Filter Dropdowns - Generous Width & Spacing */}
+          {(filters.length > 0 || dateRangeFilter) && (
+            <div className="flex items-center gap-2 flex-wrap flex-1 sm:flex-none">
+              {filters.map((f) => (
+                <Select key={f.key} value={params.filters?.[f.key] ?? 'all'} onValueChange={(v) => setFilter(f.key, v)}>
+                  <SelectTrigger className="h-10 rounded-xl border-border/80 bg-card/90 text-xs sm:text-sm font-medium w-full sm:w-auto min-w-[130px] sm:min-w-[145px] shadow-xs px-3">
+                    <SelectValue placeholder={f.label} />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl border-border/80 bg-popover/95 backdrop-blur-xl shadow-xl text-xs sm:text-sm p-1">
+                    <SelectItem value="all" className="rounded-lg">{f.label}: All</SelectItem>
+                    {f.options.map((o) => (
+                      <SelectItem key={o.value} value={o.value} className="rounded-lg">{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ))}
+
+              {dateRangeFilter && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className={cn('h-10 rounded-xl gap-2 text-xs sm:text-sm font-medium px-3 shadow-xs w-full sm:w-auto shrink-0', dateRangeActive && 'border-primary text-primary font-semibold bg-primary/5')}>
+                      <CalendarRange className="h-4 w-4" /> {dateRangeActive ? 'Date: Filtered' : dateRangeFilter.label}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-76 rounded-2xl border-border/80 bg-popover/95 backdrop-blur-xl p-4 shadow-2xl" align="start">
+                    <div className="space-y-3.5">
+                      <p className="text-sm font-semibold text-foreground">{dateRangeFilter.label}</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">From</label>
+                          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 rounded-xl text-xs" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">To</label>
+                          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 rounded-xl text-xs" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <Button size="sm" className="flex-1 h-9 rounded-xl text-xs font-semibold" onClick={applyDateRange}>Apply Range</Button>
+                        <Button size="sm" variant="outline" className="h-9 rounded-xl text-xs" onClick={clearDateRange}>Clear</Button>
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">To</label>
-                      <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="mt-1 h-8" />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" className="flex-1" onClick={applyDateRange}>Apply</Button>
-                    <Button size="sm" variant="outline" onClick={clearDateRange}>Clear</Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={exportData} disabled={!filteredItems.length}>
-            <Download className="mr-1.5 h-4 w-4" /> Export
+        {/* Action Tools (Export & Columns) */}
+        <div className="flex items-center gap-2 justify-end shrink-0">
+          <Button variant="outline" onClick={exportData} disabled={!filteredItems.length} className="h-10 rounded-xl text-xs sm:text-sm font-medium gap-2 px-3 shadow-xs">
+            <Download className="h-4 w-4" /> Export
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Settings2 className="mr-1.5 h-4 w-4" /> Columns
+              <Button variant="outline" className="h-10 rounded-xl text-xs sm:text-sm font-medium gap-2 px-3 shadow-xs">
+                <Settings2 className="h-4 w-4" /> Columns
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
-              <DropdownMenuSeparator />
+            <DropdownMenuContent align="end" className="w-52 rounded-2xl border-border/80 bg-popover/95 backdrop-blur-xl shadow-2xl text-sm p-2">
+              <DropdownMenuLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-2 py-1">Toggle Columns</DropdownMenuLabel>
+              <DropdownMenuSeparator className="my-1" />
               {columns.map((c) => (
                 <DropdownMenuCheckboxRow
                   key={c.key}
@@ -565,11 +667,11 @@ export function DataTable<T extends { id: string }>({
         </div>
       )}
 
-      {/* Table */}
-      <div className="rounded-lg border bg-card">
-        <div className="overflow-x-auto">
+      {/* Desktop Table (Hidden on Mobile) */}
+      <div className="hidden md:block rounded-xl border bg-card/80 backdrop-blur-sm overflow-hidden shadow-xs">
+        <div ref={tableContainerRef} className={cn("overflow-x-auto", shouldVirtualize && "max-h-[680px] overflow-y-auto")}>
           <Table>
-            <TableHeader>
+            <TableHeader className={cn(shouldVirtualize && "sticky top-0 z-10 bg-card/95 backdrop-blur-sm")}>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 {hasBulk && (
                   <TableHead className="w-[44px]">
@@ -620,13 +722,82 @@ export function DataTable<T extends { id: string }>({
               ) : !displayRows.length ? (
                 <TableRow>
                   <TableCell colSpan={activeCols.length + (rowActions ? 1 : 0) + (hasBulk ? 1 : 0)} className="py-16">
-                    <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                      <Inbox className="h-10 w-10 opacity-40" />
-                      <p className="text-sm font-medium">No records found</p>
-                      <p className="text-xs">Try adjusting your search or filters.</p>
+                    <div className="flex flex-col items-center justify-center gap-3 text-center max-w-sm mx-auto">
+                      <div className="h-12 w-12 rounded-2xl bg-muted/60 flex items-center justify-center text-muted-foreground border border-border/60">
+                        <Inbox className="h-6 w-6 opacity-60" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          {params.search ? `No results for "${params.search}"` : 'No records found'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {emptyDescription ?? (params.search ? 'Try adjusting your search terms or filters.' : 'Get started by creating your first entry.')}
+                        </p>
+                      </div>
+                      {params.search ? (
+                        <Button variant="outline" size="sm" onClick={() => setSearch('')} className="rounded-xl h-8.5 text-xs font-semibold">
+                          Clear Search
+                        </Button>
+                      ) : emptyAction ? (
+                        <Button size="sm" onClick={emptyAction.onClick} className="rounded-xl h-8.5 text-xs font-semibold gap-1.5 shadow-xs">
+                          {emptyAction.icon && <emptyAction.icon className="h-3.5 w-3.5" />}
+                          {emptyAction.label}
+                        </Button>
+                      ) : null}
                     </div>
                   </TableCell>
                 </TableRow>
+              ) : shouldVirtualize && virtualItems ? (
+                <>
+                  {virtualItems.length > 0 && virtualItems[0].start > 0 && (
+                    <tr>
+                      <td colSpan={activeCols.length + (rowActions ? 1 : 0) + (hasBulk ? 1 : 0)} style={{ height: `${virtualItems[0].start}px` }} />
+                    </tr>
+                  )}
+                  {virtualItems.map((virtualRow) => {
+                    const row = displayRows[virtualRow.index];
+                    const isSelected = selectedIds.has(row.id);
+                    return (
+                      <TableRow
+                        key={row.id}
+                        data-index={virtualRow.index}
+                        ref={rowVirtualizer.measureElement}
+                        className={cn(onRowClick && 'cursor-pointer', isSelected && 'bg-primary/5')}
+                        onClick={onRowClick ? () => onRowClick(row) : undefined}
+                      >
+                        {hasBulk && (
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => toggleSelectRow(row.id)}
+                              aria-label="Select row"
+                            />
+                          </TableCell>
+                        )}
+                        {activeCols.map((col) => (
+                          <TableCell key={col.key} className={cn(col.className)}>
+                            {col.cell ? col.cell(row) : ((row as Record<string, unknown>)[col.key] as React.ReactNode)}
+                          </TableCell>
+                        ))}
+                        {rowActions && (
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            {rowActions(row)}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
+                  {virtualItems.length > 0 && (
+                    <tr>
+                      <td
+                        colSpan={activeCols.length + (rowActions ? 1 : 0) + (hasBulk ? 1 : 0)}
+                        style={{
+                          height: `${Math.max(0, totalVirtualHeight - (virtualItems[virtualItems.length - 1]?.end || 0))}px`,
+                        }}
+                      />
+                    </tr>
+                  )}
+                </>
               ) : (
                 displayRows.map((row) => {
                   const isSelected = selectedIds.has(row.id);
@@ -662,22 +833,123 @@ export function DataTable<T extends { id: string }>({
             </TableBody>
           </Table>
         </div>
+      </div>
 
-        {/* Footer / pagination */}
-        <div className="flex flex-col items-center justify-between gap-3 border-t px-4 py-3 sm:flex-row">
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      {/* Mobile Stacked Cards (Visible on Mobile < 768px) */}
+      <div className="block md:hidden space-y-3">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-28 rounded-2xl bg-muted/40 animate-pulse border border-border/60" />
+          ))
+        ) : isError ? (
+          <div className="p-8 text-center text-sm text-destructive rounded-2xl border border-destructive/20 bg-destructive/5">
+            {error?.message ?? 'Failed to load data'}
+          </div>
+        ) : !displayRows.length ? (
+          <div className="rounded-2xl border border-border/80 bg-card/80 backdrop-blur-md p-8 text-center text-muted-foreground space-y-3 shadow-xs">
+            <div className="h-11 w-11 rounded-2xl bg-muted/60 flex items-center justify-center text-muted-foreground border border-border/60 mx-auto">
+              <Inbox className="h-5.5 w-5.5 opacity-60" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {params.search ? `No results for "${params.search}"` : 'No records found'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-xs mx-auto">
+                {emptyDescription ?? (params.search ? 'Try adjusting your search terms or filters.' : 'Get started by creating your first entry.')}
+              </p>
+            </div>
+            {params.search ? (
+              <Button variant="outline" size="sm" onClick={() => setSearch('')} className="rounded-xl h-8.5 text-xs font-semibold">
+                Clear Search
+              </Button>
+            ) : emptyAction ? (
+              <Button size="sm" onClick={emptyAction.onClick} className="rounded-xl h-8.5 text-xs font-semibold gap-1.5 shadow-xs">
+                {emptyAction.icon && <emptyAction.icon className="h-3.5 w-3.5" />}
+                {emptyAction.label}
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          displayRows.map((row) => {
+            const isSelected = selectedIds.has(row.id);
+            const firstCol = activeCols[0];
+            const secondCol = activeCols[1];
+            const remainingCols = activeCols.slice(2);
+
+            return (
+              <div
+                key={row.id}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={cn(
+                  'p-4 rounded-2xl border border-border/80 bg-card/90 backdrop-blur-md shadow-xs space-y-3 transition-all duration-200',
+                  onRowClick && 'active:scale-[0.99] cursor-pointer',
+                  isSelected && 'ring-2 ring-primary border-primary/50'
+                )}
+              >
+                <div className="flex items-start justify-between gap-2 border-b border-border/50 pb-2.5">
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {hasBulk && (
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelectRow(row.id)}
+                          aria-label="Select row"
+                        />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-foreground text-sm truncate">
+                        {firstCol ? (firstCol.cell ? firstCol.cell(row) : (row as any)[firstCol.key]) : null}
+                      </div>
+                      {secondCol && (
+                        <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {secondCol.cell ? secondCol.cell(row) : (row as any)[secondCol.key]}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {rowActions && (
+                    <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                      {rowActions(row)}
+                    </div>
+                  )}
+                </div>
+
+                {remainingCols.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-0.5">
+                    {remainingCols.map((col) => (
+                      <div key={col.key} className="space-y-0.5">
+                        <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">
+                          {col.header}
+                        </span>
+                        <div className="text-foreground font-medium truncate">
+                          {col.cell ? col.cell(row) : (row as any)[col.key]}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+        {/* Footer / Pagination Controls */}
+        <div className="flex flex-col items-center justify-between gap-3 border-t border-border/60 bg-muted/10 px-4 py-3 sm:flex-row rounded-2xl">
+          <div className="flex items-center gap-3 text-xs sm:text-sm text-muted-foreground">
             <span>
-              Showing <span className="font-medium text-foreground">{start}</span>–<span className="font-medium text-foreground">{end}</span> of{' '}
-              <span className="font-medium text-foreground">{total}</span>
+              Showing <span className="font-semibold text-foreground">{start}</span>–<span className="font-semibold text-foreground">{end}</span> of{' '}
+              <span className="font-semibold text-foreground">{total}</span>
             </span>
             <Select
               value={String(params.pageSize ?? initialPageSize)}
               onValueChange={(v) => setParams((p) => ({ ...p, pageSize: Number(v), page: 1 }))}
             >
-              <SelectTrigger className="h-7 w-[110px] text-xs">
+              <SelectTrigger className="h-9 w-[115px] text-xs sm:text-sm rounded-xl border-border/80 bg-card">
                 <SelectValue placeholder={`${initialPageSize} / page`} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-xl border-border/80 bg-popover/95 backdrop-blur-xl text-xs sm:text-sm">
                 {[10, 20, 50, 100].map((s) => (
                   <SelectItem key={s} value={String(s)}>{s} / page</SelectItem>
                 ))}
@@ -685,19 +957,23 @@ export function DataTable<T extends { id: string }>({
             </Select>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <Button
-              variant="outline" size="icon" className="h-8 w-8"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-xl border-border/80 shadow-2xs"
               disabled={page <= 1}
               onClick={() => setParams((p) => ({ ...p, page: (p.page ?? 1) - 1 }))}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="px-2 text-xs font-medium">
+            <span className="px-2.5 text-xs sm:text-sm font-semibold text-foreground">
               Page {page} of {totalPages}
             </span>
             <Button
-              variant="outline" size="icon" className="h-8 w-8"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-xl border-border/80 shadow-2xs"
               disabled={page >= totalPages}
               onClick={() => setParams((p) => ({ ...p, page: (p.page ?? 1) + 1 }))}
             >
@@ -706,7 +982,6 @@ export function DataTable<T extends { id: string }>({
           </div>
         </div>
       </div>
-    </div>
   );
 }
 

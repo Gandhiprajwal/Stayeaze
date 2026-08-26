@@ -38,5 +38,19 @@ public interface BuildingRepository extends JpaRepository<Building, UUID> {
     @Query(value = "SELECT b.* FROM buildings b JOIN properties p ON b.property_id = p.id WHERE p.org_id = CAST(:orgId AS uuid)", nativeQuery = true)
     List<Building> findByOrganizationIdNative(@Param("orgId") UUID orgId);
 
+    @Query(value = "SELECT " +
+                   "CAST(bl.id AS text) as buildingId, " +
+                   "COUNT(DISTINCT f.id) as totalFloors, " +
+                   "COUNT(DISTINCT r.id) as totalRooms, " +
+                   "COUNT(b.id) as totalBeds, " +
+                   "COALESCE(SUM(CASE WHEN UPPER(b.status) = 'OCCUPIED' THEN 1 ELSE 0 END), 0) as occupiedBeds " +
+                   "FROM buildings bl " +
+                   "LEFT JOIN floors f ON f.building_id = bl.id AND (f.status IS NULL OR UPPER(f.status) != 'ARCHIVED') " +
+                   "LEFT JOIN rooms r ON r.floor_id = f.id AND (r.status IS NULL OR UPPER(r.status) != 'ARCHIVED') " +
+                   "LEFT JOIN beds b ON b.room_id = r.id AND (b.status IS NULL OR UPPER(b.status) != 'ARCHIVED') " +
+                   "WHERE bl.property_id = CAST(:propertyId AS uuid) AND (bl.status IS NULL OR UPPER(bl.status) != 'ARCHIVED') " +
+                   "GROUP BY bl.id", nativeQuery = true)
+    List<Object[]> getMetricsByBuildingForPropertyNative(@Param("propertyId") UUID propertyId);
+
     Page<Building> findAll(Pageable pageable);
 }

@@ -132,3 +132,5 @@ export function resolveFileUrl(url?: string | null): string {
   const cleanPath = url.startsWith('/') ? url : `/${url}`;
   return `${backendBase}${cleanPath}`;
 }
+
+export const resolveBackendUrl = resolveFileUrl;

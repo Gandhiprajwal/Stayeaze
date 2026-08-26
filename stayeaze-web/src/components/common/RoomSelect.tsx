@@ -96,17 +96,19 @@ export function RoomSelect({
     });
   }, [rooms, search, onlyAvailable, roomStatsMap]);
 
-  // Group rooms hierarchically by [Building Name • Floor Name]
+  // Group rooms hierarchically by [Property Name › Building Name • Floor Name]
   const groupedRooms = useMemo(() => {
-    const groups: Record<string, { buildingName: string; floorName: string; rooms: Room[] }> = {};
+    const groups: Record<string, { propertyName?: string; buildingName: string; floorName: string; rooms: Room[] }> = {};
     
     for (const r of filteredRooms) {
+      const propName = (r as any).propertyName || '';
       const bldgName = (r as any).buildingName || 'Main Building';
       const floorName = (r as any).floorName || ((r as any).floorNumber != null ? `Floor ${(r as any).floorNumber}` : 'Main Floor');
-      const groupKey = `${bldgName} __ ${floorName}`;
+      const groupKey = `${propName} __ ${bldgName} __ ${floorName}`;
 
       if (!groups[groupKey]) {
         groups[groupKey] = {
+          propertyName: propName,
           buildingName: bldgName,
           floorName: floorName,
           rooms: []
@@ -229,7 +231,7 @@ export function RoomSelect({
                     </div>
                   </div>
                 ) : (
-                  <span className="text-xs">Search & Select Room (Building $\to$ Floor $\to$ Room)...</span>
+                  <span className="text-xs text-muted-foreground">Select Room (Building › Floor › Room)...</span>
                 )}
               </div>
 
@@ -281,13 +283,19 @@ export function RoomSelect({
               ) : (
                 Object.entries(groupedRooms).map(([groupKey, group]) => (
                   <div key={groupKey} className="py-2 first:pt-0 last:pb-0 space-y-1.5">
-                    {/* Hierarchical Group Header: Building & Floor */}
+                    {/* Hierarchical Group Header: Property › Building & Floor */}
                     <div className="flex items-center justify-between px-2 pt-1 pb-0.5">
                       <div className="flex items-center gap-1.5 text-[11px] font-bold text-foreground">
-                        <Building2 className="h-3.5 w-3.5 text-primary" />
+                        {group.propertyName && (
+                          <>
+                            <span className="text-muted-foreground font-normal">{group.propertyName}</span>
+                            <span className="text-muted-foreground font-normal">›</span>
+                          </>
+                        )}
+                        <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
                         <span>{group.buildingName}</span>
                         <span className="text-muted-foreground">•</span>
-                        <Layers className="h-3 w-3 text-muted-foreground" />
+                        <Layers className="h-3 w-3 text-muted-foreground shrink-0" />
                         <span className="text-muted-foreground">{group.floorName}</span>
                       </div>
                       <Badge variant="secondary" className="text-[9px] py-0 px-1 font-mono">

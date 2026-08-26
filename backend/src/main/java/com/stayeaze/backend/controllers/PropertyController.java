@@ -311,34 +311,36 @@ public class PropertyController {
 
         org.springframework.data.domain.Page<PropertyDTO> pageResult;
         if (isSuperAdmin) {
-            List<Property> allProps = propertyRepository.findAllSuperAdmin();
-            int total = allProps.size();
+            List<PropertySummaryDTO> superAdminProps = propertyService.getPropertySummariesByOrganization(null);
+            int total = superAdminProps.size();
             int fromIndex = Math.min((page - 1) * pageSize, total);
             int toIndex = Math.min(fromIndex + pageSize, total);
-            List<Property> pageSlice = allProps.subList(fromIndex, toIndex);
-            List<PropertySummaryDTO> superAdminProps = pageSlice.stream()
-                    .map(p -> PropertySummaryDTO.fromEntity(propertyService.populatePropertyStats(p)))
-                    .collect(Collectors.toList());
+            List<PropertySummaryDTO> pageSlice = (fromIndex < total) ? superAdminProps.subList(fromIndex, toIndex) : new ArrayList<>();
             int totalPages = (total == 0) ? 1 : (int) Math.ceil((double) total / pageSize);
-            return ResponseEntity.ok(new com.stayeaze.backend.payload.response.PageResponse<>(superAdminProps, (long) total, page, pageSize, totalPages));
+            return ResponseEntity.ok(new com.stayeaze.backend.payload.response.PageResponse<>(pageSlice, (long) total, page, pageSize, totalPages));
         } else {
             UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
                     .getAuthentication().getPrincipal();
             User user = userRepository.findById(userDetails.getId()).orElse(null);
-            List<Property> props = new ArrayList<>();
+            List<PropertySummaryDTO> summaries;
             if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
-                props = propertyRepository.findByIdIn(user.getPropertyIds());
+                List<Property> props = propertyRepository.findByIdIn(user.getPropertyIds());
                 if (props.isEmpty() && user.getOrganization() != null) {
-                    props = propertyRepository.findByOrganizationIdNative(user.getOrganization().getId());
+                    summaries = propertyService.getPropertySummariesByOrganization(user.getOrganization());
+                } else {
+                    props = propertyService.populatePropertiesStats(props);
+                    summaries = props.stream()
+                            .map(PropertySummaryDTO::fromEntity)
+                            .collect(Collectors.toList());
                 }
             } else if (user != null && user.getOrganization() != null) {
-                props = propertyRepository.findByOrganizationIdNative(user.getOrganization().getId());
+                summaries = propertyService.getPropertySummariesByOrganization(user.getOrganization());
             } else if (userDetails != null && userDetails.getOrgId() != null) {
-                props = propertyRepository.findByOrganizationIdNative(userDetails.getOrgId());
+                Organization org = organizationRepository.findById(userDetails.getOrgId()).orElse(null);
+                summaries = propertyService.getPropertySummariesByOrganization(org);
+            } else {
+                summaries = new ArrayList<>();
             }
-            List<PropertySummaryDTO> summaries = props.stream()
-                    .map(p -> PropertySummaryDTO.fromEntity(propertyService.populatePropertyStats(p)))
-                    .collect(Collectors.toList());
             return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(summaries, page, pageSize));
         }
     }

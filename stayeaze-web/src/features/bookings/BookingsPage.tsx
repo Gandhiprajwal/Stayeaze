@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarCheck, Plus, Pencil, Trash2, Eye, CheckCircle2, XCircle, CreditCard, Zap, Wallet, Calendar, FileText, Download } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -67,7 +67,15 @@ export default function BookingsPage() {
     enabled: dialogOpen,
   });
 
-  const roomOptions = (allRooms ?? []).filter((r) => r.status !== 'archived' && r.status !== 'maintenance' && r.status !== 'blocked');
+  const form = useForm(emptyForm);
+
+  const roomOptions = useMemo(() => {
+    return (allRooms ?? []).filter((r: any) => {
+      if (r.status === 'archived' || r.status === 'maintenance' || r.status === 'blocked') return false;
+      if (form.values.propertyId && r.propertyId && r.propertyId !== form.values.propertyId) return false;
+      return true;
+    });
+  }, [allRooms, form.values.propertyId]);
 
   // Fetch beds for selected room
   const { data: bedsForRoom } = useQuery({
@@ -83,7 +91,6 @@ export default function BookingsPage() {
   const createMut = useCreate<Booking>(ENDPOINT, 'Booking');
   const updateMut = useUpdate<Booking>(ENDPOINT, 'Booking');
   const deleteMut = useDelete(ENDPOINT, 'Booking');
-  const form = useForm(emptyForm);
 
   const { data: defaultDepData } = useQuery({
     queryKey: ['org-billing-profile-deposit-bookings'],

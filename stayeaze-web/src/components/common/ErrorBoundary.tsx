@@ -1,6 +1,7 @@
 import { Component, ReactNode, ErrorInfo } from 'react';
 import { AlertOctagon, RefreshCw, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { reportFrontendError } from '@/lib/telemetry';
 
 interface Props {
   children: ReactNode;
@@ -36,6 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
     console.error('Unhandled UI Error caught by StayEaze ErrorBoundary:', error, errorInfo);
+    reportFrontendError(error, { componentStack: errorInfo.componentStack });
   }
 
   copyLog = () => {

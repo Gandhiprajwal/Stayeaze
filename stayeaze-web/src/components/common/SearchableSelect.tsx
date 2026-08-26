@@ -160,7 +160,7 @@ export function SearchableSelect({
             </div>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] min-w-[280px] max-w-[420px] shadow-xl border-border bg-popover rounded-xl overflow-hidden" align="start">
+        <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] min-w-[260px] max-w-[min(420px,calc(100vw-2rem))] shadow-xl border-border bg-popover rounded-xl overflow-hidden" align="start">
           <div className="flex items-center border-b px-3 py-2 bg-muted/30">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground mr-2" />
             <input

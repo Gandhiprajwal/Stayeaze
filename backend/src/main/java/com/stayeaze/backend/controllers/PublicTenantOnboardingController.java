@@ -160,109 +160,106 @@ public class PublicTenantOnboardingController {
             return ResponseEntity.ok(result);
         }
         try {
-            List<Room> rooms = roomRepository.findByPropertyIdNative(propertyId);
-            List<Tenant> allTenants = tenantRepository.findAll();
-            for (Room r : rooms) {
-                List<Bed> rBeds = bedRepository.findByRoomId(r.getId());
-                long totalBeds = rBeds != null ? rBeds.size() : 0;
-                if (totalBeds == 0) {
-                    String sharing = r.getSharingType() != null ? r.getSharingType().toUpperCase() : "SINGLE";
-                    totalBeds = (sharing.contains("DOUBLE") || sharing.contains("2")) ? 2 :
+            List<Object[]> rows = roomRepository.findPublicRoomsWithHierarchyNative(propertyId);
+            if (rows != null) {
+                for (Object[] row : rows) {
+                    if (row == null || row[0] == null) continue;
+                    String roomIdStr = (String) row[0];
+                    UUID roomId = UUID.fromString(roomIdStr);
+                    String roomNumber = (String) row[1];
+                    String sharingType = (String) row[2];
+                    BigDecimal baseRent = row[3] != null ? (BigDecimal) row[3] : new BigDecimal("8000.00");
+                    String status = (String) row[4];
+                    String floorId = (String) row[5];
+                    String floorName = (String) row[6];
+                    Integer floorNumber = row[7] != null ? ((Number) row[7]).intValue() : null;
+                    String buildingId = (String) row[8];
+                    String buildingName = (String) row[9];
+                    String propId = (String) row[10];
+                    String propName = (String) row[11];
+
+                    String sharing = sharingType != null ? sharingType.toUpperCase() : "SINGLE";
+                    int totalBeds = (sharing.contains("DOUBLE") || sharing.contains("2")) ? 2 :
                                 (sharing.contains("TRIPLE") || sharing.contains("3")) ? 3 :
                                 (sharing.contains("FOUR") || sharing.contains("QUAD") || sharing.contains("4")) ? 4 : 1;
-                }
 
-                long occupiedBeds = rBeds != null ? rBeds.stream().filter(b -> {
-                    if (b.getStatus() != null && !"available".equalsIgnoreCase(b.getStatus())) {
-                        return true;
+                    List<Object[]> bedRows = bedRepository.findPublicBedsWithHierarchyNative(roomId);
+                    int actualBedsCount = bedRows != null ? bedRows.size() : 0;
+                    if (actualBedsCount > 0) {
+                        totalBeds = actualBedsCount;
                     }
-                    return allTenants.stream().anyMatch(t -> {
-                        String ts = t.getStatus();
-                        boolean isCheckedOut = "CHECKED_OUT".equalsIgnoreCase(ts);
-                        return !isCheckedOut &&
-                                r.getRoomNumber() != null && r.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
-                                b.getBedNumber() != null && b.getBedNumber().equalsIgnoreCase(t.getBedNumber());
-                    });
-                }).count() : 0;
 
-                long availableBeds = Math.max(0, totalBeds - occupiedBeds);
+                    int occupiedCount = 0;
+                    if (bedRows != null) {
+                        for (Object[] br : bedRows) {
+                            String bStatus = br[2] != null ? br[2].toString() : "available";
+                            if (!"available".equalsIgnoreCase(bStatus)) {
+                                occupiedCount++;
+                            }
+                        }
+                    }
 
-                Map<String, Object> map = new HashMap<>();
-                map.put("id", r.getId());
-                map.put("roomNumber", r.getRoomNumber());
-                map.put("type", r.getType() != null ? r.getType() : r.getSharingType());
-                map.put("sharingType", r.getSharingType());
-                map.put("baseRent", r.getBaseRent() != null ? r.getBaseRent() : new BigDecimal("8000.00"));
-                map.put("totalBeds", totalBeds);
-                map.put("availableBeds", availableBeds);
-                map.put("isFull", totalBeds > 0 && availableBeds == 0);
-                result.add(map);
+                    int availableBeds = Math.max(0, totalBeds - occupiedCount);
+
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", roomId);
+                    map.put("roomNumber", roomNumber);
+                    map.put("type", sharingType != null ? sharingType.toLowerCase() : "single");
+                    map.put("sharingType", sharingType);
+                    map.put("baseRent", baseRent);
+                    map.put("totalBeds", totalBeds);
+                    map.put("availableBeds", availableBeds);
+                    map.put("isFull", totalBeds > 0 && availableBeds == 0);
+                    map.put("propertyId", propId);
+                    map.put("propertyName", propName);
+                    map.put("buildingId", buildingId);
+                    map.put("buildingName", buildingName);
+                    map.put("floorId", floorId);
+                    map.put("floorName", floorName != null ? floorName : (floorNumber != null ? "Floor " + floorNumber : ""));
+                    map.put("floorNumber", floorNumber);
+                    result.add(map);
+                }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(PublicTenantOnboardingController.class).error("Error loading public rooms for property " + propertyId, e);
+        }
         return ResponseEntity.ok(result);
     }
 
-    @GetMapping("/beds")
-    @org.springframework.transaction.annotation.Transactional
-    public ResponseEntity<?> getPublicBeds(@RequestParam(required = false) UUID roomId) {
+    @GetMapping({"/beds", "/rooms/{roomId}/beds"})
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public ResponseEntity<?> getPublicBeds(
+            @PathVariable(required = false) UUID roomId,
+            @RequestParam(name = "roomId", required = false) UUID roomIdParam) {
+        UUID effectiveRoomId = roomId != null ? roomId : roomIdParam;
         List<Map<String, Object>> result = new ArrayList<>();
-        if (roomId == null) {
+        if (effectiveRoomId == null) {
             return ResponseEntity.ok(result);
         }
 
-        Room room = roomRepository.findById(roomId).orElse(null);
-        if (room == null) {
-            return ResponseEntity.ok(result);
-        }
+        try {
+            List<Object[]> rows = bedRepository.findPublicBedsWithHierarchyNative(effectiveRoomId);
+            if (rows != null) {
+                for (Object[] br : rows) {
+                    if (br == null || br[0] == null) continue;
+                    String bStatus = br[2] != null ? br[2].toString() : "available";
+                    if (!"available".equalsIgnoreCase(bStatus)) continue;
 
-        List<Bed> beds = bedRepository.findByRoomId(roomId);
-        if (beds == null || beds.isEmpty()) {
-            beds = new ArrayList<>();
-            String sharing = room.getSharingType() != null ? room.getSharingType().toUpperCase() : "SINGLE";
-            int count = (sharing.contains("DOUBLE") || sharing.contains("2")) ? 2 :
-                        (sharing.contains("TRIPLE") || sharing.contains("3")) ? 3 :
-                        (sharing.contains("FOUR") || sharing.contains("QUAD") || sharing.contains("4")) ? 4 : 1;
-
-            for (int i = 1; i <= count; i++) {
-                String bNum = String.valueOf((char) ('A' + i - 1));
-                Bed newBed = new Bed(room, bNum);
-                newBed.setStatus("AVAILABLE");
-                bedRepository.save(newBed);
-                beds.add(newBed);
-            }
-        }
-
-        List<Tenant> allTenants = tenantRepository.findAll();
-        for (Bed b : beds) {
-            boolean isOccupied = false;
-            if (b.getStatus() != null && !"available".equalsIgnoreCase(b.getStatus())) {
-                isOccupied = true;
-            } else {
-                String rNum = room.getRoomNumber();
-                String bNum = b.getBedNumber();
-                boolean tenantInBed = allTenants.stream().anyMatch(t -> {
-                    String ts = t.getStatus();
-                    boolean isCheckedOut = "CHECKED_OUT".equalsIgnoreCase(ts);
-                    return !isCheckedOut &&
-                            rNum != null && rNum.equalsIgnoreCase(t.getRoomNumber()) &&
-                            bNum != null && bNum.equalsIgnoreCase(t.getBedNumber());
-                });
-                if (tenantInBed) {
-                    isOccupied = true;
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", UUID.fromString((String) br[0]));
+                    map.put("bedNumber", br[1]);
+                    map.put("status", "AVAILABLE");
+                    map.put("isOccupied", false);
+                    map.put("roomId", UUID.fromString((String) br[3]));
+                    map.put("roomNumber", br[4]);
+                    map.put("buildingName", br[5]);
+                    map.put("floorName", br[6]);
+                    map.put("propertyName", br[7]);
+                    result.add(map);
                 }
             }
-
-            // Exclude occupied beds completely from the public onboarding selection
-            if (isOccupied) {
-                continue;
-            }
-
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", b.getId());
-            map.put("bedNumber", b.getBedNumber());
-            map.put("status", "AVAILABLE");
-            map.put("isOccupied", false);
-            result.add(map);
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(PublicTenantOnboardingController.class).error("Error loading public beds for room " + effectiveRoomId, e);
         }
         return ResponseEntity.ok(result);
     }
@@ -342,6 +339,10 @@ public class PublicTenantOnboardingController {
             }
         }
 
+        String resolvedPropName = (property != null && property.getName() != null && !property.getName().isBlank())
+                ? property.getName()
+                : (property != null && property.getOrganization() != null ? property.getOrganization().getName() : "StayEaze Residency");
+
         Map<String, Object> orderPayload = new HashMap<>();
         orderPayload.put("orderId", orderId);
         orderPayload.put("keyId", activeKeyId);
@@ -350,6 +351,8 @@ public class PublicTenantOnboardingController {
         orderPayload.put("rentAmount", rent);
         orderPayload.put("depositAmount", deposit);
         orderPayload.put("currency", "INR");
+        orderPayload.put("propertyName", resolvedPropName);
+        orderPayload.put("businessName", resolvedPropName);
         orderPayload.put("tenantName", req.get("tenantName") != null ? req.get("tenantName").toString() : "New Tenant");
         orderPayload.put("tenantEmail", req.get("tenantEmail") != null ? req.get("tenantEmail").toString() : "tenant@stayeaze.com");
         orderPayload.put("tenantPhone", req.get("tenantPhone") != null ? req.get("tenantPhone").toString() : "9876543210");
@@ -526,7 +529,18 @@ public class PublicTenantOnboardingController {
             }
 
             occupancySyncService.syncStatsAndEvictCaches(null);
-            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            Map<String, Object> response = new HashMap<>();
+            response.put("id", saved.getId());
+            response.put("firstName", saved.getFirstName());
+            response.put("lastName", saved.getLastName());
+            response.put("email", saved.getEmail());
+            response.put("mobile", saved.getMobile());
+            response.put("roomNumber", saved.getRoomNumber());
+            response.put("bedNumber", saved.getBedNumber());
+            response.put("status", saved.getStatus());
+            response.put("tempPassword", tempPassword);
+            response.put("message", "Resident successfully registered.");
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new MessageResponse("Public Onboarding Error: " + e.getMessage()));

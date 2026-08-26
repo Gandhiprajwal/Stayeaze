@@ -82,21 +82,31 @@ public class BookingController {
         try {
             if (propId == null && b.getTenant() != null) propId = b.getTenant().getPropertyId();
         } catch (Exception ignored) {}
-        if (propId == null && b.getBed() != null && b.getBed().getRoom() != null && b.getBed().getRoom().getFloor() != null && b.getBed().getRoom().getFloor().getBuilding() != null) {
-            propId = b.getBed().getRoom().getFloor().getBuilding().getProperty().getId();
-        }
+        try {
+            if (propId == null && b.getBed() != null && b.getBed().getRoom() != null && b.getBed().getRoom().getFloor() != null && b.getBed().getRoom().getFloor().getBuilding() != null) {
+                propId = b.getBed().getRoom().getFloor().getBuilding().getProperty().getId();
+            }
+        } catch (Exception ignored) {}
         if (propId == null) {
-            Organization org = getLoggedUserOrg();
-            propId = propertyRepository.findAll().stream().filter(p -> p.getOrganization().getId().equals(org.getId())).map(Property::getId).findFirst().orElse(null);
+            try {
+                Organization org = getLoggedUserOrg();
+                if (org != null) {
+                    propId = propertyRepository.findAll().stream().filter(p -> p.getOrganization() != null && p.getOrganization().getId().equals(org.getId())).map(Property::getId).findFirst().orElse(null);
+                }
+            } catch (Exception ignored) {}
         }
         map.put("propertyId", propId);
 
         String rNum = b.getRoomNumber();
-        if (rNum == null && b.getBed() != null && b.getBed().getRoom() != null) rNum = b.getBed().getRoom().getRoomNumber();
+        try {
+            if (rNum == null && b.getBed() != null && b.getBed().getRoom() != null) rNum = b.getBed().getRoom().getRoomNumber();
+        } catch (Exception ignored) {}
         map.put("roomNumber", rNum != null ? rNum : "101");
 
         String bNum = b.getBedNumber();
-        if (bNum == null && b.getBed() != null) bNum = b.getBed().getBedNumber();
+        try {
+            if (bNum == null && b.getBed() != null) bNum = b.getBed().getBedNumber();
+        } catch (Exception ignored) {}
         map.put("bedNumber", bNum != null ? bNum : "B1");
 
         map.put("checkInDate", b.getCheckinDate() != null ? b.getCheckinDate().toString() : java.time.LocalDate.now().toString());
@@ -488,6 +498,7 @@ public class BookingController {
     }
 
     @GetMapping("/bookings")
+    @Transactional(readOnly = true)
     public ResponseEntity<?> getFlatBookings(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {

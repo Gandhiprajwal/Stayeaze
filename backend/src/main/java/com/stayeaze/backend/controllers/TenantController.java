@@ -945,6 +945,11 @@ public class TenantController {
             } catch (Exception ignored) {}
         }
 
+        UUID oldPropertyId = tenant.getPropertyId();
+        String oldRoomNumber = tenant.getRoomNumber();
+        String oldBedNumber = tenant.getBedNumber();
+        String oldStatus = tenant.getStatus();
+
         tenant.setFirstName(request.getFirstName());
         tenant.setLastName(request.getLastName());
         tenant.setEmail(request.getEmail());
@@ -987,25 +992,46 @@ public class TenantController {
         Tenant updated = tenantRepository.save(tenant);
         populateBuildingName(updated);
         auditLogService.logCurrent("Updated tenant record: " + (updated.getFirstName() != null ? updated.getFirstName() : "") + " " + (updated.getLastName() != null ? updated.getLastName() : ""), null);
-        occupancySyncService.syncStatsAndEvictCaches(null);
+
+        // Trigger Atomic Room/Bed Transfer & Occupancy Synchronization
+        boolean locationChanged = (oldRoomNumber != null && !oldRoomNumber.equalsIgnoreCase(updated.getRoomNumber())) ||
+                                 (oldBedNumber != null && !oldBedNumber.equalsIgnoreCase(updated.getBedNumber())) ||
+                                 (oldPropertyId != null && !oldPropertyId.equals(updated.getPropertyId())) ||
+                                 (oldRoomNumber == null && updated.getRoomNumber() != null);
+
+        boolean statusChanged = (oldStatus != null && !oldStatus.equalsIgnoreCase(updated.getStatus()));
+
+        if (locationChanged || statusChanged) {
+            occupancySyncService.handleTenantRoomTransfer(
+                updated,
+                oldPropertyId,
+                oldRoomNumber,
+                oldBedNumber,
+                updated.getPropertyId(),
+                updated.getRoomNumber(),
+                updated.getBedNumber(),
+                organization
+            );
+        } else {
+            occupancySyncService.syncAllStatsForOrg(organization);
+        }
 
         if ("ACTIVE".equalsIgnoreCase(updated.getStatus()) || "CHECKED_IN".equalsIgnoreCase(updated.getStatus()) || "COMPLETED".equalsIgnoreCase(updated.getStatus())) {
             final String tenantFullName = (updated.getFirstName() + " " + updated.getLastName()).trim();
             final UUID targetOrgId = organization != null ? organization.getId() : null;
-            List<CheckIn> tenantCheckIns = checkInRepository.findAll().stream()
-                .filter(c -> c.getOrganization() != null && targetOrgId != null && c.getOrganization().getId().equals(targetOrgId))
-                .filter(c -> (c.getTenantName() != null && c.getTenantName().equalsIgnoreCase(tenantFullName)) ||
-                             (updated.getRoomNumber() != null && !updated.getRoomNumber().isBlank() && updated.getRoomNumber().equalsIgnoreCase(c.getRoomNumber()) &&
-                              updated.getBedNumber() != null && !updated.getBedNumber().isBlank() && updated.getBedNumber().equalsIgnoreCase(c.getBedNumber())))
-                .collect(Collectors.toList());
+            List<CheckIn> tenantCheckIns = targetOrgId != null ? checkInRepository.findByOrganizationId(targetOrgId) : checkInRepository.findAll();
             for (CheckIn ci : tenantCheckIns) {
-                if ("pending".equalsIgnoreCase(ci.getStatus())) {
+                if (ci == null) continue;
+                boolean matches = (ci.getTenantName() != null && ci.getTenantName().equalsIgnoreCase(tenantFullName)) ||
+                                  (updated.getRoomNumber() != null && !updated.getRoomNumber().isBlank() && updated.getRoomNumber().equalsIgnoreCase(ci.getRoomNumber()) &&
+                                   updated.getBedNumber() != null && !updated.getBedNumber().isBlank() && updated.getBedNumber().equalsIgnoreCase(ci.getBedNumber()));
+                if (matches && "pending".equalsIgnoreCase(ci.getStatus())) {
                     ci.setStatus("completed");
                     checkInRepository.save(ci);
                 }
             }
         }
-        occupancySyncService.syncStatsAndEvictCaches(null);
+        occupancySyncService.syncAllStatsForOrg(organization);
         return ResponseEntity.ok(updated);
     }
 

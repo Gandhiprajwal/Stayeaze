@@ -70,10 +70,6 @@ export default function LoginPage() {
   const isMaintenanceMode = maintenanceData?.maintenanceModeEnabled;
   const maintenanceMessage = maintenanceData?.maintenanceMessage || 'StayEaze is undergoing scheduled maintenance.';
 
-  const demoAccounts = [
-    { role: 'Super Admin', email: 'superadmin@stayeaze.com', password: 'Friend@2010', icon: ShieldCheck, accent: 'text-destructive' },
-  ];
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setAuthError(null);
@@ -366,33 +362,6 @@ export default function LoginPage() {
                 <Link to="/signup" className="inline-flex items-center text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">
                   Register Property & Start 14-Day Free Trial / Subscribe →
                 </Link>
-              </div>
-
-              <div className="my-6 flex items-center gap-3">
-                <Separator className="flex-1" />
-                <span className="text-xs text-muted-foreground">Quick demo access</span>
-                <Separator className="flex-1" />
-              </div>
-
-              <div className="space-y-2">
-                {demoAccounts.map((acc) => (
-                  <button
-                    key={acc.email}
-                    onClick={() => fillDemo(acc.email, acc.password)}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-lg border bg-card px-3 py-2.5 text-left transition-all hover:border-primary/40 hover:shadow-sm'
-                    )}
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted">
-                      <acc.icon className={cn('h-4 w-4', acc.accent)} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">{acc.role}</p>
-                      <p className="truncate text-xs text-muted-foreground">{acc.email}</p>
-                    </div>
-                    <span className="text-xs font-medium text-primary">Use</span>
-                  </button>
-                ))}
               </div>
             </div>
           )}

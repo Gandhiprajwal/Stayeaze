@@ -122,8 +122,19 @@ public class WebSecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
-                        auth.requestMatchers("/api/v1/auth/**", "/api/v1/public/**", "/api/v1/saas/plans", "/api/v1/branding/**", "/api/v1/webhooks/**", "/ws-stayeaze/**", "/uploads/**", "/error").permitAll()
-                                .anyRequest().authenticated()
+                        auth.requestMatchers(
+                                "/api/v1/auth/**",
+                                "/api/v1/public/**",
+                                "/api/v1/saas/plans",
+                                "/api/v1/branding/**",
+                                "/api/v1/webhooks/**",
+                                "/ws-stayeaze/**",
+                                "/uploads/**",
+                                "/error",
+                                "/actuator/health/**"
+                        ).permitAll()
+                        .requestMatchers("/actuator/**").hasRole("SUPER_ADMIN")
+                        .anyRequest().authenticated()
                 );
 
         http.authenticationProvider(authenticationProvider());

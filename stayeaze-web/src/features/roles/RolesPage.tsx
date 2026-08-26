@@ -232,62 +232,64 @@ export default function RolesPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <StatCard label="Total Roles" value={roles?.length ?? 0} icon={ShieldCheck} accent="primary" />
         <StatCard label="System Roles" value={roles?.filter((r) => r.isSystem).length ?? 0} icon={Lock} accent="warning" hint="Protected system definitions" />
         <StatCard label="Assigned Users" value={roles?.reduce((s, r) => s + r.userCount, 0) ?? 0} icon={Users} accent="info" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-5 sm:gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
         {roles?.map((role) => (
-          <Card key={role.id} className="transition-shadow hover:shadow-md">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Card key={role.id} className="rounded-2xl border bg-card shadow-xs hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-800 transition-all flex flex-col justify-between overflow-hidden">
+            <CardHeader className="p-5 pb-3 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0 shadow-xs">
                     <ShieldCheck className="h-5 w-5" />
                   </div>
-                  <div>
-                    <CardTitle className="text-base">{role.name}</CardTitle>
+                  <div className="min-w-0">
+                    <CardTitle className="text-base font-bold truncate">{role.name}</CardTitle>
                     {role.isSystem && (
-                      <Badge variant="secondary" className="mt-1 text-[10px]">
+                      <Badge variant="secondary" className="mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md">
                         <Lock className="mr-1 h-3 w-3" /> System
                       </Badge>
                     )}
                   </div>
                 </div>
               </div>
-              <CardDescription className="mt-2">{role.description}</CardDescription>
+              <CardDescription className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{role.description || 'Custom role definition with tailored permissions.'}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="p-5 pt-0 space-y-3.5">
               <div className="flex flex-wrap gap-1.5">
                 {role.permissions.includes('*') ? (
-                  <Badge className="bg-emerald-600 text-white hover:bg-emerald-700">Full Access (*)</Badge>
+                  <Badge className="bg-emerald-600 text-white hover:bg-emerald-700 text-[11px] font-bold px-2.5 py-0.5 rounded-lg shadow-2xs">
+                    Full Access (*)
+                  </Badge>
                 ) : (
                   role.permissions.slice(0, 4).map((p) => (
-                    <Badge key={p} variant="outline" className="text-[10px] font-normal">
+                    <Badge key={p} variant="outline" className="text-[10px] font-medium rounded-md px-2 py-0.5 bg-muted/30">
                       {p}
                     </Badge>
                   ))
                 )}
                 {role.permissions.length > 4 && !role.permissions.includes('*') && (
-                  <Badge variant="outline" className="text-[10px]">
+                  <Badge variant="outline" className="text-[10px] font-semibold rounded-md px-1.5 py-0.5 bg-muted/50">
                     +{role.permissions.length - 4} more
                   </Badge>
                 )}
               </div>
-              <div className="flex items-center justify-between border-t pt-3">
-                <span className="text-xs text-muted-foreground">{role.userCount} users assigned</span>
+              <div className="flex items-center justify-between border-t border-border/60 pt-3">
+                <span className="text-xs text-muted-foreground font-medium">{role.userCount} users assigned</span>
                 {isSuperAdmin ? (
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(role)} title="Edit Role">
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-8.5 w-8.5 rounded-xl hover:bg-primary/10 hover:text-primary" onClick={() => openEdit(role)} title="Edit Role">
                       <Pencil className="h-4 w-4" />
                     </Button>
                     {!role.isSystem && (
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-destructive"
+                        className="h-8.5 w-8.5 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => setDeleteTarget(role)}
                         title="Delete Role"
                       >
@@ -296,7 +298,7 @@ export default function RolesPage() {
                     )}
                   </div>
                 ) : (
-                  <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                  <Badge variant="outline" className="text-[10px] text-muted-foreground rounded-md">
                     Standard
                   </Badge>
                 )}

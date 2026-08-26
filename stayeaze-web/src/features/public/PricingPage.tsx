@@ -90,21 +90,21 @@ export default function PricingPage() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between transition-colors">
       <Navbar />
 
-      <main className="pt-32 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
+      <main className="pt-24 sm:pt-32 pb-16 sm:pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 sm:space-y-16">
         
         {/* Header */}
         <div className="text-center space-y-4 max-w-3xl mx-auto">
-          <Badge variant="outline" className="border-blue-500/30 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10">
+          <Badge variant="outline" className="border-blue-500/30 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 text-xs font-semibold px-3 py-1">
             Transparent SaaS Pricing
           </Badge>
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-white font-heading">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-slate-900 dark:text-white font-heading tracking-tight">
             Simple Plans That Grow With Your PG
           </h1>
-          <p className="text-slate-600 dark:text-slate-400 text-base">
+          <p className="text-slate-600 dark:text-slate-400 text-sm sm:text-base">
             All plans include a 14-day free trial. No credit card required to start.
           </p>
 
-          <div className="flex items-center justify-center gap-4 pt-4">
+          <div className="flex items-center justify-center gap-3 sm:gap-4 pt-2 sm:pt-4 flex-wrap">
             <span className={`text-xs font-semibold ${!isAnnual ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>Monthly Billing</span>
             <div
               onClick={() => setIsAnnual(!isAnnual)}
@@ -112,34 +112,34 @@ export default function PricingPage() {
             >
               <div className={`h-4 w-4 rounded-full bg-white transition-transform ${isAnnual ? 'translate-x-6' : 'translate-x-0'}`} />
             </div>
-            <span className={`text-xs font-semibold flex items-center gap-1 ${isAnnual ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
+            <span className={`text-xs font-semibold flex items-center gap-1.5 ${isAnnual ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
               Annual Billing <Badge className="bg-amber-500 text-slate-950 text-[10px] font-bold">20% OFF</Badge>
             </span>
           </div>
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
           {plans.map((p, i) => (
             <div
               key={i}
-              className={`rounded-2xl p-6 flex flex-col justify-between transition-all ${
+              className={`rounded-2xl p-5 sm:p-6 flex flex-col justify-between transition-all ${
                 p.popular
                   ? 'bg-blue-50/50 dark:bg-blue-950/40 border-2 border-blue-500 shadow-xl dark:shadow-2xl shadow-blue-500/10 dark:shadow-blue-500/20 relative'
-                  : 'bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 shadow-sm hover:border-slate-300 dark:hover:border-slate-700'
+                  : 'bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-slate-300 dark:hover:border-slate-700'
               }`}
             >
               {p.popular && (
-                <Badge className="absolute -top-3 right-6 bg-amber-500 text-slate-950 font-bold uppercase text-[10px]">
+                <Badge className="absolute -top-3 right-6 bg-amber-500 text-slate-950 font-bold uppercase text-[10px] shadow-xs">
                   Most Popular
                 </Badge>
               )}
 
               <div className="space-y-4">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{p.badge}</span>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white font-heading">{p.name}</h3>
+                <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{p.badge}</span>
+                <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white font-heading">{p.name}</h3>
                 <div>
-                  <span className="text-4xl font-black text-slate-900 dark:text-white">{formatCurrency(isAnnual ? p.priceAnnual : p.priceMonthly)}</span>
+                  <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white font-mono">{formatCurrency(isAnnual ? p.priceAnnual : p.priceMonthly)}</span>
                   <span className="text-xs text-slate-500 dark:text-slate-400"> / month</span>
                 </div>
                 <div className="text-xs text-blue-600 dark:text-blue-400 font-semibold pb-4 border-b border-slate-200 dark:border-slate-800">
@@ -156,7 +156,7 @@ export default function PricingPage() {
               </div>
 
               <Link to="/signup" className="pt-6">
-                <Button className={`w-full font-bold ${p.popular ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white'}`}>
+                <Button className={`w-full font-bold rounded-xl h-11 text-xs sm:text-sm shadow-xs ${p.popular ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white'}`}>
                   Select {p.name}
                 </Button>
               </Link>

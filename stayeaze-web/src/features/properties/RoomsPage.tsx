@@ -49,6 +49,16 @@ export default function RoomsPage() {
   const [editing, setEditing] = useState<Room | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Room | null>(null);
 
+  const { data: properties } = useQuery({
+    queryKey: ['rooms-properties'],
+    queryFn: () => api.get<any[]>('/properties', { params: { pageSize: 100 } }).then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload;
+      return (payload as { data: any[] })?.data ?? [];
+    }),
+  });
+  const propMap = new Map((properties ?? []).map((p: any) => [p.id, p.name]));
+
   const { data: buildings } = useQuery({
     queryKey: ['rooms-buildings'],
     queryFn: () => api.get<Building[]>('/buildings', { params: { pageSize: 100 } }).then((r) => {
@@ -73,9 +83,24 @@ export default function RoomsPage() {
   const deleteMut = useDelete(ENDPOINT, 'Room');
   const form = useForm(emptyForm);
 
-  function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
+  const [formPropId, setFormPropId] = useState<string>('');
+  const [formBldId, setFormBldId] = useState<string>('');
+
+  function openCreate() {
+    setEditing(null);
+    setFormPropId('');
+    setFormBldId('');
+    form.reset(emptyForm);
+    setDialogOpen(true);
+  }
   function openEdit(row: Room) {
     setEditing(row);
+    const flr = (floors ?? []).find((f) => f.id === row.floorId);
+    const bld = (buildings ?? []).find((b) => b.id === (row.buildingId || flr?.buildingId));
+    const pId = row.propertyId || bld?.propertyId || '';
+    setFormPropId(pId);
+    setFormBldId(bld?.id || '');
+
     const num = row.roomNumber || row.number || '';
     const rawType = (row.type || row.sharingType || 'double').toString().toLowerCase();
     const normalizedType = rawType.includes('single') ? 'single' : rawType.includes('double') ? 'double' : rawType.includes('triple') ? 'triple' : rawType.includes('dorm') ? 'dorm' : 'double';
@@ -132,10 +157,17 @@ export default function RoomsPage() {
         </div>
       );
     }},
-    { key: 'buildingName', header: 'Building / Tower', sortable: true, cell: (r: any) => (
-      <div className="flex items-center gap-1.5 font-medium text-sm">
-        <Building2 className="h-4 w-4 text-muted-foreground" />
-        <span>{r.buildingName || 'Main Building'}</span>
+    { key: 'buildingName', header: 'Building & Property', sortable: true, cell: (r: any) => (
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-1.5 font-medium text-sm">
+          <Building2 className="h-4 w-4 text-muted-foreground" />
+          <span>{r.buildingName || 'Main Building'}</span>
+        </div>
+        {r.propertyName && (
+          <span className="text-xs text-muted-foreground pl-5 font-normal">
+            {r.propertyName}
+          </span>
+        )}
       </div>
     )},
     { key: 'floorId', header: 'Floor', sortable: true, cell: (r: any) => (
@@ -194,6 +226,8 @@ export default function RoomsPage() {
       <PageHeader title="Rooms" description="Manage rooms, sharing types and building-floor allocations." icon={DoorOpen}
         actions={<Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" /> Add Room</Button>} />
       <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search rooms, buildings, floors..." exportFilename="rooms" initialSortBy="number"
+        emptyAction={{ label: 'Add First Room', onClick: openCreate, icon: Plus }}
+        emptyDescription="No rooms have been added yet. Create your first room to start allocating beds."
         filters={[
           { key: 'status', label: 'Status', options: statuses },
           { key: 'type', label: 'Type', options: roomTypes },
@@ -214,23 +248,80 @@ export default function RoomsPage() {
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Room' : 'Add Room'} onSubmit={submit}
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput label="Room Number" required id="number" value={form.values.number} onChange={(e) => form.setValue('number', e.target.value)} error={form.errors.number} />
           <div className="space-y-1.5">
-            <Label required>Building & Floor</Label>
+            <Label>1. Property</Label>
             <SearchableSelect
-              options={(floors ?? []).map((f) => ({
-                value: f.id,
-                label: f.name || `Floor ${f.floorNumber || 1}`,
-                sublabel: f.buildingName || 'Main Building',
-                badge: f.buildingName || 'Building',
+              options={(properties ?? []).map((p: any) => ({
+                value: p.id,
+                label: p.name,
+                sublabel: p.address || p.city || 'Property',
               }))}
+              value={formPropId}
+              onChange={(val) => {
+                setFormPropId(val);
+                setFormBldId('');
+                form.setValue('floorId', '');
+              }}
+              placeholder="Choose Property..."
+              searchPlaceholder="Search properties..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>2. Building</Label>
+            <SearchableSelect
+              options={(buildings ?? [])
+                .filter((b) => !formPropId || b.propertyId === formPropId)
+                .map((b) => ({
+                  value: b.id,
+                  label: b.name,
+                  sublabel: `${b.propertyName || propMap.get(b.propertyId) || 'Property'} • ${b.code || 'Building'}`,
+                }))}
+              value={formBldId}
+              onChange={(val) => {
+                setFormBldId(val);
+                form.setValue('floorId', '');
+                const matchedBld = (buildings ?? []).find((b) => b.id === val);
+                if (matchedBld && matchedBld.propertyId && !formPropId) {
+                  setFormPropId(matchedBld.propertyId);
+                }
+              }}
+              placeholder={formPropId ? "Select building in property..." : "Select building..."}
+              searchPlaceholder="Search buildings..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label required>3. Floor</Label>
+            <SearchableSelect
+              options={(floors ?? [])
+                .filter((f) => !formBldId || f.buildingId === formBldId)
+                .map((f) => ({
+                  value: f.id,
+                  label: f.name || `Floor ${f.floorNumber || 1}`,
+                  sublabel: `${f.buildingName || 'Building'} • Level ${f.floorNumber || 1}`,
+                }))}
               value={form.values.floorId}
-              onChange={(v) => form.setValue('floorId', v)}
-              placeholder="Search & select building floor..."
-              searchPlaceholder="Search building & floor..."
+              onChange={(v) => {
+                form.setValue('floorId', v);
+                const matchedFloor = (floors ?? []).find((f) => f.id === v);
+                if (matchedFloor) {
+                  if (matchedFloor.buildingId && !formBldId) {
+                    setFormBldId(matchedFloor.buildingId);
+                  }
+                  const bld = (buildings ?? []).find((b) => b.id === matchedFloor.buildingId);
+                  if (bld && bld.propertyId && !formPropId) {
+                    setFormPropId(bld.propertyId);
+                  }
+                }
+              }}
+              placeholder={formBldId ? "Select floor in building..." : "Select floor..."}
+              searchPlaceholder="Search floors..."
             />
             {form.errors.floorId && <p className="text-xs text-destructive">{form.errors.floorId}</p>}
           </div>
+
+          <FormInput label="4. Room Number" required id="number" value={form.values.number} onChange={(e) => form.setValue('number', e.target.value)} error={form.errors.number} placeholder="e.g. 101, 202, Room A" />
           <div className="space-y-1.5"><Label>Room Type</Label><Select value={form.values.type} onValueChange={(v) => { form.setValue('type', v as Room['type']); const share = v === 'single' ? 1 : v === 'double' ? 2 : v === 'triple' ? 3 : 4; form.setValue('sharing', share); form.setValue('beds', share); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{roomTypes.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
           <FormInput label="Monthly Rent (₹)" type="number" id="rent" value={String(form.values.rent)} onChange={(e) => form.setValue('rent', Number(e.target.value))} />
           <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Room['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>

@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Users, Phone, Mail, MapPin, Calendar, Briefcase,
   CreditCard, ShieldCheck, Wallet, Home, FileText, Upload, CheckCircle2, XCircle, Trash2, ExternalLink, AlertCircle,
-  KeyRound, LogOut, Archive, RotateCcw, Pencil, Eye, ScrollText, Calculator
+  KeyRound, LogOut, Archive, RotateCcw, Pencil, Eye, ScrollText, Calculator, FileCheck
 } from 'lucide-react';
 import CheckoutSettlementModal from '@/features/check-out/CheckoutSettlementModal';
 
@@ -31,7 +31,7 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 import { propertyService } from '@/lib/services';
 import type { Tenant, Invoice, TenantDocument } from '@/lib/types';
-import { formatCurrency, formatDate, initials } from '@/lib/format';
+import { formatCurrency, formatDate, initials, resolveBackendUrl } from '@/lib/format';
 
 export default function TenantDetailPage() {
   const { id } = useParams();
@@ -43,8 +43,11 @@ export default function TenantDetailPage() {
   const [docNumber, setDocNumber] = useState('');
   const [fileUrl, setFileUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<TenantDocument | null>(null);
   const [agreementOpen, setAgreementOpen] = useState(false);
+  const kycFileInputRef = useRef<HTMLInputElement>(null);
 
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
@@ -52,12 +55,7 @@ export default function TenantDetailPage() {
   const [isArchiving, setIsArchiving] = useState(false);
   const [isDeletingPermanent, setIsDeletingPermanent] = useState(false);
 
-  const resolveFileUrl = (url?: string) => {
-    if (!url) return '';
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    if (url.startsWith('/')) return `http://localhost:8080${url}`;
-    return `http://localhost:8080/${url}`;
-  };
+  const resolveFileUrl = resolveBackendUrl;
 
   const formatIdTypeName = (rawType?: string): string => {
     if (!rawType || rawType.trim() === '' || rawType.trim() === '—') return '—';
@@ -290,54 +288,81 @@ export default function TenantDetailPage() {
         description={`${tenant.occupation || 'Tenant'} · ${tenant.email || tenant.phone}`}
         icon={Users}
         actions={
-          <div className="flex items-center flex-wrap gap-2">
+          <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 shrink-0">
             {tenant.status === 'pending_checkin' && (
-              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold" onClick={handleApproveDeskPayment}>
-                <CheckCircle2 className="mr-1.5 h-4 w-4" /> Approve Payment
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold rounded-xl h-9 text-xs sm:text-sm gap-1.5" onClick={handleApproveDeskPayment}>
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Approve Payment</span>
+                <span className="sm:hidden">Approve</span>
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setUploadOpen(true)}
+              className="rounded-xl h-9 text-xs sm:text-sm font-semibold border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
+            >
+              <Upload className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Upload KYC</span>
+              <span className="sm:hidden">KYC</span>
+            </Button>
             {kycUpper !== 'VERIFIED' && (
-              <Button size="sm" variant="outline" className="text-indigo-600 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 font-medium" onClick={handleVerifyKyc}>
-                <ShieldCheck className="mr-1.5 h-4 w-4" /> Verify KYC
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-indigo-600 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 font-medium rounded-xl h-9 text-xs sm:text-sm gap-1.5"
+                onClick={handleVerifyKyc}
+              >
+                <ShieldCheck className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Verify KYC</span>
+                <span className="sm:hidden">Verify</span>
               </Button>
             )}
-            <Button size="sm" variant="outline" onClick={handleSendCredentials}>
-              <KeyRound className="mr-1.5 h-4 w-4" /> Send Credentials
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSendCredentials}
+              className="rounded-xl h-9 text-xs sm:text-sm font-semibold gap-1.5"
+            >
+              <KeyRound className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Send Credentials</span>
+              <span className="sm:hidden">Credentials</span>
             </Button>
             {tenant.status !== 'checked_out' && tenant.status !== 'archived' && (
-              <Button size="sm" className="bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs gap-1.5" onClick={() => setCheckoutSettlementOpen(true)}>
-                <Calculator className="h-4 w-4" /> 1-Click Settle & Checkout
+              <Button
+                size="sm"
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs gap-1.5 rounded-xl h-9 text-xs sm:text-sm"
+                onClick={() => setCheckoutSettlementOpen(true)}
+              >
+                <Calculator className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">1-Click Settle & Checkout</span>
+                <span className="sm:hidden">Checkout</span>
               </Button>
             )}
             <RowActions
-              className="w-64"
-              label="Manage Resident"
+              className="w-60"
+              label="More Actions"
               items={[
-                { label: 'Upload KYC Document', icon: Upload, onSelect: () => setUploadOpen(true) },
                 ...(tenant.status === 'archived' ? [{
                   label: 'Unarchive Resident',
                   icon: RotateCcw,
                   variant: 'indigo' as const,
-                  separatorBefore: true,
                   sectionHeader: 'Status & Lifecycle',
-                  description: 'Restore resident to Active',
+                  description: 'Restore resident to Active status',
                   onSelect: handleUnarchive,
                 }] : [{
                   label: 'Archive Resident',
                   icon: Archive,
                   variant: 'default' as const,
-                  separatorBefore: true,
                   sectionHeader: 'Danger Zone',
-                  description: 'Frees bed, keeps invoices',
+                  description: 'Frees bed allocation, preserves ledger',
                   onSelect: () => setArchiveOpen(true),
                 }]),
                 {
                   label: 'Permanent Delete',
                   icon: Trash2,
                   variant: 'destructive' as const,
-                  separatorBefore: true,
-                  sectionHeader: 'Danger Zone',
-                  description: 'Erases tenant and history',
+                  description: 'Permanently erases resident & history',
                   onSelect: () => setPermanentDeleteOpen(true),
                 },
               ]}
@@ -573,19 +598,28 @@ export default function TenantDetailPage() {
 
       {/* Upload KYC Document Dialog */}
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Upload KYC Document</DialogTitle>
-            <DialogDescription>Provide mandatory document details and file upload for background verification.</DialogDescription>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
+          <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+                <FileCheck className="h-5 w-5 sm:h-6 sm:w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-base sm:text-lg font-bold">Upload KYC Document</DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Provide mandatory document details and file upload for background verification.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[calc(85vh-130px)]">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="font-semibold text-xs">Document Type <span className="text-destructive">*</span></Label>
                 <span className="text-[10px] text-destructive font-medium">Required</span>
               </div>
               <Select value={docType} onValueChange={(val: any) => setDocType(val)}>
-                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="AADHAAR">Aadhaar Card</SelectItem>
                   <SelectItem value="PAN">PAN Card</SelectItem>
@@ -595,7 +629,7 @@ export default function TenantDetailPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="font-semibold text-xs">Document Number / ID <span className="text-destructive">*</span></Label>
                 <span className="text-[10px] text-destructive font-medium">Required</span>
@@ -604,22 +638,53 @@ export default function TenantDetailPage() {
                 placeholder="e.g. 1234-5678-9012"
                 value={docNumber}
                 onChange={(e) => setDocNumber(e.target.value)}
+                className="rounded-xl"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="font-semibold text-xs">Select Document File <span className="text-destructive">*</span></Label>
-                <span className="text-[10px] text-emerald-600 font-medium">Auto-saved to Local Storage / S3</span>
+                <span className="text-[10px] text-emerald-600 font-medium">Auto-saved to Cloud Storage</span>
               </div>
-              <Input
+              <input
+                ref={kycFileInputRef}
                 type="file"
                 accept="image/*,application/pdf"
+                className="hidden"
                 onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
               />
-              {selectedFile && (
-                <p className="text-xs font-medium text-emerald-600 flex items-center gap-1">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-                </p>
+              {selectedFile ? (
+                <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 shrink-0">
+                      <FileCheck className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">{selectedFile.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB • Ready to upload</p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedFile(null)}
+                    className="h-8 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg shrink-0"
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => kycFileInputRef.current?.click()}
+                  className="p-4 rounded-xl border-2 border-dashed border-border/80 hover:border-primary/50 bg-muted/20 hover:bg-muted/30 text-center space-y-1.5 cursor-pointer transition"
+                >
+                  <div className="h-9 w-9 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                    <Upload className="h-4.5 w-4.5" />
+                  </div>
+                  <p className="text-xs font-semibold text-foreground">Click to browse or drop file</p>
+                  <p className="text-[11px] text-muted-foreground">PNG, JPG, PDF up to 10MB</p>
+                </div>
               )}
             </div>
             <div className="relative flex items-center py-1">
@@ -627,20 +692,22 @@ export default function TenantDetailPage() {
               <span className="mx-2 flex-shrink text-[10px] font-semibold uppercase text-muted-foreground">OR Provide Direct File URL</span>
               <div className="flex-grow border-t border-muted"></div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Document File URL (Optional if file selected above)</Label>
               <Input
                 placeholder="https://storage.example.com/docs/aadhaar.pdf"
                 value={fileUrl}
                 onChange={(e) => setFileUrl(e.target.value)}
+                className="rounded-xl"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setUploadOpen(false)}>Cancel</Button>
+          <DialogFooter className="p-4 border-t border-border/60 bg-muted/20 flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 sm:gap-2 shrink-0">
+            <Button variant="ghost" onClick={() => setUploadOpen(false)} className="rounded-xl h-9 text-xs font-semibold">Cancel</Button>
             <Button
               disabled={(!selectedFile && !fileUrl) || !docNumber || uploadMutation.isPending}
               onClick={() => uploadMutation.mutate({ documentType: docType, documentNumber: docNumber, fileUrl })}
+              className="bg-primary hover:bg-primary/90 text-white font-bold rounded-xl h-9 text-xs shadow-xs"
             >
               {uploadMutation.isPending ? 'Uploading...' : 'Upload Document'}
             </Button>

@@ -74,15 +74,29 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
     }
 
+    @ExceptionHandler(org.springframework.orm.ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(org.springframework.orm.ObjectOptimisticLockingFailureException ex) {
+        logger.warn("Optimistic locking conflict detected: {}", ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "This record was updated concurrently by another user or operation. Please refresh the page and try again."
+        );
+        problem.setTitle("Conflict Detected");
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleGenericException(Exception ex) {
-        logger.error("Unhandled Exception in API request", ex);
-        String detailMsg = ex.getClass().getName() + ": " + (ex.getMessage() != null ? ex.getMessage() : "No detail message");
-        if (ex.getCause() != null) {
-            detailMsg += " | Cause: " + ex.getCause().toString();
-        }
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, detailMsg);
-        problem.setTitle("Internal Server Error (" + ex.getClass().getSimpleName() + ")");
+        String correlationId = java.util.UUID.randomUUID().toString().substring(0, 8);
+        logger.error("Unhandled Exception in API request [CorrelationRef: {}]", correlationId, ex);
+
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "An unexpected internal error occurred. Please quote reference ID: " + correlationId
+        );
+        problem.setTitle("Internal Server Error");
+        problem.setProperty("correlationId", correlationId);
         problem.setProperty("timestamp", Instant.now());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(problem);
     }

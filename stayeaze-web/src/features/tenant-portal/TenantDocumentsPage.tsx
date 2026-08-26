@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, resolveBackendUrl } from '@/lib/format';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import api from '@/lib/api';
 
@@ -31,15 +31,11 @@ export default function TenantDocumentsPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [signingLease, setSigningLease] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState('documents');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const resolveFileUrl = (url?: string) => {
-    if (!url) return '';
-    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) return url;
-    if (url.startsWith('/')) return `http://localhost:8080${url}`;
-    return `http://localhost:8080/${url}`;
-  };
+  const resolveFileUrl = resolveBackendUrl;
 
   const { data: overview } = useQuery({
     queryKey: ['tenant-overview'],

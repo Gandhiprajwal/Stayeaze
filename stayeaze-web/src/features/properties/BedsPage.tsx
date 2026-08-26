@@ -34,6 +34,34 @@ export default function BedsPage() {
   const [editing, setEditing] = useState<Bed | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Bed | null>(null);
 
+  const { data: properties } = useQuery({
+    queryKey: ['beds-properties'],
+    queryFn: () => api.get<any[]>('/properties', { params: { pageSize: 100 } }).then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload;
+      return (payload as { data: any[] })?.data ?? [];
+    }),
+  });
+  const propMap = new Map((properties ?? []).map((p: any) => [p.id, p.name]));
+
+  const { data: buildings } = useQuery({
+    queryKey: ['beds-buildings'],
+    queryFn: () => api.get<any[]>('/buildings', { params: { pageSize: 100 } }).then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload;
+      return (payload as { data: any[] })?.data ?? [];
+    }),
+  });
+
+  const { data: floors } = useQuery({
+    queryKey: ['beds-floors'],
+    queryFn: () => api.get<any[]>('/floors', { params: { pageSize: 200 } }).then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload;
+      return (payload as { data: any[] })?.data ?? [];
+    }),
+  });
+
   const { data: rooms } = useQuery({
     queryKey: ['beds-rooms'],
     queryFn: () => api.get<any>('/rooms', { params: { pageSize: 500 } }).then((r) => {
@@ -50,9 +78,29 @@ export default function BedsPage() {
   const deleteMut = useDelete(ENDPOINT, 'Bed');
   const form = useForm(emptyForm);
 
-  function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
+  const [formPropId, setFormPropId] = useState<string>('');
+  const [formBldId, setFormBldId] = useState<string>('');
+  const [formFloorId, setFormFloorId] = useState<string>('');
+
+  function openCreate() {
+    setEditing(null);
+    setFormPropId('');
+    setFormBldId('');
+    setFormFloorId('');
+    form.reset(emptyForm);
+    setDialogOpen(true);
+  }
   function openEdit(row: Bed) {
     setEditing(row);
+    const rm = (rooms ?? []).find((r: any) => r.id === row.roomId);
+    const flr = (floors ?? []).find((f: any) => f.id === (rm?.floorId || (row as any).floorId));
+    const bld = (buildings ?? []).find((b: any) => b.id === (rm?.buildingId || flr?.buildingId));
+    const pId = rm?.propertyId || bld?.propertyId || '';
+
+    setFormPropId(pId);
+    setFormBldId(bld?.id || '');
+    setFormFloorId(flr?.id || '');
+
     form.reset({ number: row.number || (row as any).bedNumber || 'B1', roomId: row.roomId, status: row.status, tenantId: row.tenantId ?? '' });
     setDialogOpen(true);
   }
@@ -80,13 +128,20 @@ export default function BedsPage() {
     { key: 'roomId', header: 'Room', sortable: true, cell: (r: any) => (
       <span className="font-semibold text-sm">Room {formatRoomName(r.roomNumber || roomMap.get(r.roomId))}</span>
     )},
-    { key: 'buildingName', header: 'Building & Floor', sortable: true, cell: (r: any) => (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Building2 className="h-3.5 w-3.5 text-primary" />
-        <span>{r.buildingName || 'Main Building'}</span>
-        <span>•</span>
-        <Layers className="h-3 w-3" />
-        <span>{r.floorName || (r.floorNumber != null ? `Floor ${r.floorNumber}` : 'Floor')}</span>
+    { key: 'buildingName', header: 'Location (Property, Building & Floor)', sortable: true, cell: (r: any) => (
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Building2 className="h-3.5 w-3.5 text-primary" />
+          <span className="font-medium text-foreground">{r.buildingName || 'Main Building'}</span>
+          <span>•</span>
+          <Layers className="h-3 w-3" />
+          <span>{r.floorName || (r.floorNumber != null ? `Floor ${r.floorNumber}` : 'Floor')}</span>
+        </div>
+        {r.propertyName && (
+          <span className="text-[11px] text-muted-foreground pl-5 font-normal">
+            {r.propertyName}
+          </span>
+        )}
       </div>
     )},
     { key: 'tenantId', header: 'Tenant', sortable: true, cell: (r) => (r.tenantName || r.tenantId) ? (
@@ -119,18 +174,110 @@ export default function BedsPage() {
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label required>Room (Building $\to$ Floor $\to$ Room)</Label>
+            <Label>1. Property</Label>
             <SearchableSelect
-              options={(rooms ?? []).map((r: any) => ({
-                value: r.id,
-                label: `Room ${r.roomNumber || r.number}`,
-                sublabel: `${r.buildingName || 'Main Building'} • ${r.floorName || (r.floorNumber != null ? 'Floor ' + r.floorNumber : 'Floor')}`,
-                badge: r.buildingName || 'Building',
+              options={(properties ?? []).map((p: any) => ({
+                value: p.id,
+                label: p.name,
+                sublabel: p.address || p.city || 'Property',
               }))}
+              value={formPropId}
+              onChange={(val) => {
+                setFormPropId(val);
+                setFormBldId('');
+                setFormFloorId('');
+                form.setValue('roomId', '');
+              }}
+              placeholder="Choose Property..."
+              searchPlaceholder="Search properties..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>2. Building</Label>
+            <SearchableSelect
+              options={(buildings ?? [])
+                .filter((b) => !formPropId || b.propertyId === formPropId)
+                .map((b) => ({
+                  value: b.id,
+                  label: b.name,
+                  sublabel: `${b.propertyName || propMap.get(b.propertyId) || 'Property'} • ${b.code || 'Building'}`,
+                }))}
+              value={formBldId}
+              onChange={(val) => {
+                setFormBldId(val);
+                setFormFloorId('');
+                form.setValue('roomId', '');
+                const matchedBld = (buildings ?? []).find((b) => b.id === val);
+                if (matchedBld && matchedBld.propertyId && !formPropId) {
+                  setFormPropId(matchedBld.propertyId);
+                }
+              }}
+              placeholder={formPropId ? "Select building in property..." : "Select building..."}
+              searchPlaceholder="Search buildings..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>3. Floor</Label>
+            <SearchableSelect
+              options={(floors ?? [])
+                .filter((f) => !formBldId || f.buildingId === formBldId)
+                .map((f) => ({
+                  value: f.id,
+                  label: f.name || `Floor ${f.floorNumber || 1}`,
+                  sublabel: `${f.buildingName || 'Building'} • Level ${f.floorNumber || 1}`,
+                }))}
+              value={formFloorId}
+              onChange={(val) => {
+                setFormFloorId(val);
+                form.setValue('roomId', '');
+                const matchedFloor = (floors ?? []).find((f) => f.id === val);
+                if (matchedFloor) {
+                  if (matchedFloor.buildingId && !formBldId) {
+                    setFormBldId(matchedFloor.buildingId);
+                  }
+                  const bld = (buildings ?? []).find((b) => b.id === matchedFloor.buildingId);
+                  if (bld && bld.propertyId && !formPropId) {
+                    setFormPropId(bld.propertyId);
+                  }
+                }
+              }}
+              placeholder={formBldId ? "Select floor in building..." : "Select floor..."}
+              searchPlaceholder="Search floors..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label required>4. Room</Label>
+            <SearchableSelect
+              options={(rooms ?? [])
+                .filter((r: any) => !formFloorId || r.floorId === formFloorId)
+                .map((r: any) => ({
+                  value: r.id,
+                  label: `Room ${r.roomNumber || r.number}`,
+                  sublabel: `${r.buildingName || 'Building'} • ${r.floorName || (r.floorNumber != null ? 'Floor ' + r.floorNumber : 'Floor')}`,
+                  badge: r.buildingName || 'Building',
+                }))}
               value={form.values.roomId}
-              onChange={(v) => form.setValue('roomId', v)}
-              placeholder="Search & select room..."
-              searchPlaceholder="Search by room, building, floor..."
+              onChange={(v) => {
+                form.setValue('roomId', v);
+                const matchedRoom = (rooms ?? []).find((r: any) => r.id === v);
+                if (matchedRoom) {
+                  if (matchedRoom.floorId && !formFloorId) {
+                    setFormFloorId(matchedRoom.floorId);
+                  }
+                  if (matchedRoom.buildingId && !formBldId) {
+                    setFormBldId(matchedRoom.buildingId);
+                  }
+                  const bld = (buildings ?? []).find((b) => b.id === matchedRoom.buildingId);
+                  if (bld && bld.propertyId && !formPropId) {
+                    setFormPropId(bld.propertyId);
+                  }
+                }
+              }}
+              placeholder={formFloorId ? "Select room on floor..." : "Select room..."}
+              searchPlaceholder="Search room..."
             />
             {form.errors.roomId && <p className="text-xs text-destructive">{form.errors.roomId}</p>}
           </div>

@@ -46,7 +46,7 @@ public class MeterReading {
     @Column(name = "free_allowance_units", precision = 10, scale = 2)
     private BigDecimal freeAllowanceUnits = BigDecimal.ZERO;
 
-    @Column(name = "photo_url", length = 500)
+    @Column(name = "photo_url", columnDefinition = "TEXT")
     private String photoUrl;
 
     @Column(name = "tenant_split_details_json", columnDefinition = "TEXT")

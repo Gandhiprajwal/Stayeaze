@@ -26,6 +26,9 @@ public class Bed {
     @Column(name = "qr_code", unique = true, length = 150)
     private String qrCode;
 
+    @Version
+    private Long version = 0L;
+
     @Transient
     private String tenantId;
 
@@ -104,5 +107,13 @@ public class Bed {
 
     public void setTenantName(String tenantName) {
         this.tenantName = tenantName;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }

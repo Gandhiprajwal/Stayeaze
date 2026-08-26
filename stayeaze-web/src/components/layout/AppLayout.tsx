@@ -21,6 +21,7 @@ import { initials } from '@/lib/format';
 import { roleLabels } from '@/lib/role-utils';
 import { CommandPalette } from './CommandPalette';
 import { NotificationBell } from './NotificationBell';
+import { MobileBottomNav } from './MobileBottomNav';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { toast } from '@/hooks/use-toast';
 import api from '@/lib/api';
@@ -272,22 +273,33 @@ export function AppLayout() {
             <Menu className="h-5 w-5" />
           </Button>
 
-          {/* Search — opens command palette */}
+          {/* Mobile search trigger button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="sm:hidden text-muted-foreground hover:text-foreground rounded-xl h-9.5 w-9.5"
+            onClick={() => setCmdOpen(true)}
+            aria-label="Open search palette"
+          >
+            <Search className="h-4.5 w-4.5" />
+          </Button>
+
+          {/* Desktop/Tablet Search bar — opens command palette */}
           <button
             onClick={() => setCmdOpen(true)}
-            className="relative hidden max-w-md flex-1 items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent sm:flex"
+            className="relative hidden sm:flex items-center gap-2.5 rounded-xl border border-border/80 bg-background/90 px-3.5 py-2 text-sm text-muted-foreground transition-all hover:bg-accent hover:border-primary/40 w-64 md:w-80 lg:w-96 shadow-xs"
           >
-            <Search className="h-4 w-4" />
-            <span>
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="truncate text-xs sm:text-sm">
               {user?.role === 'SUPER_ADMIN'
                 ? 'Search properties, users, roles...'
                 : ['ADMIN', 'PROPERTY_MANAGER', 'RECEPTIONIST'].includes(user?.role ?? '')
-                ? 'Search tenants, rooms, check-ins, invoices...'
+                ? 'Search tenants, rooms, check-ins...'
                 : user?.role === 'ACCOUNTANT'
-                ? 'Search invoices, payments, billing...'
+                ? 'Search invoices, payments...'
                 : 'Search pages & features...'}
             </span>
-            <kbd className="ml-auto hidden items-center gap-0.5 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground md:flex">
+            <kbd className="ml-auto hidden items-center gap-0.5 rounded-lg border bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground lg:flex shrink-0">
               <Command className="h-3 w-3" /> K
             </kbd>
           </button>
@@ -421,12 +433,14 @@ export function AppLayout() {
         )}
 
         {/* Content */}
-        <main className="flex-1 min-h-0 overflow-y-auto">
-          <div className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full max-w-full">
+          <div className="mx-auto max-w-[1600px] w-full p-3 sm:p-6 lg:p-8 pb-32 md:pb-8">
             <Outlet />
           </div>
         </main>
       </div>
+
+      <MobileBottomNav onOpenMoreMenu={() => setMobileOpen(true)} />
 
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
 

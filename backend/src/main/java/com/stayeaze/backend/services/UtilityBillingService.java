@@ -171,6 +171,8 @@ public class UtilityBillingService {
         public Double totalAmount;
         public Double freeAllowanceUnits;
         public String photoUrl;
+        public String status;
+        public Boolean hasSavedDraft;
         public List<TenantUtilitySplit> tenantSplits = new ArrayList<>();
         public List<Map<String, Object>> occupants = new ArrayList<>();
     }
@@ -351,31 +353,40 @@ public class UtilityBillingService {
                     .collect(Collectors.toList());
         }
 
+        // Batch load all cycle meter readings in 1 query instead of querying per room
+        List<MeterReading> cycleReadings = new ArrayList<>();
+        try {
+            cycleReadings = meterReadingRepository.findByPropertyIdAndBillingMonthAndBillingYear(propertyId, targetMonth, targetYear);
+        } catch (Exception ignored) {}
+        if (cycleReadings == null) cycleReadings = new ArrayList<>();
+
+        Map<UUID, MeterReading> readingByRoomMap = new HashMap<>();
+        for (MeterReading mr : cycleReadings) {
+            if (mr != null && mr.getRoom() != null) {
+                readingByRoomMap.put(mr.getRoom().getId(), mr);
+            }
+        }
+
+        // Batch load active residents count for property
+        int activeResidentsCount = 0;
+        try {
+            List<Tenant> propTenants = tenantRepository.findByPropertyId(propertyId);
+            if (propTenants != null) {
+                activeResidentsCount = (int) propTenants.stream()
+                        .filter(t -> t != null && (t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus())))
+                        .count();
+            }
+        } catch (Exception ignored) {}
+
         double totalUnits = 0.0;
         double totalCost = 0.0;
         double totalTenantRecovery = 0.0;
         int recordedRoomsCount = 0;
-        int activeResidentsCount = 0;
 
         for (Room room : allRooms) {
             if (room == null) continue;
 
-            // Count active tenants accurately for this room
-            List<Tenant> tenants = getActiveTenantsForRoom(room, propertyId);
-            activeResidentsCount += tenants.size();
-
-            List<MeterReading> roomReadings = new ArrayList<>();
-            try {
-                roomReadings = meterReadingRepository.findByRoom(room);
-            } catch (Exception ignored) {}
-            if (roomReadings == null) roomReadings = new ArrayList<>();
-
-            MeterReading thisCycleReading = roomReadings.stream()
-                    .filter(mr -> mr != null && mr.getBillingMonth() != null && mr.getBillingMonth() == targetMonth
-                               && mr.getBillingYear() != null && mr.getBillingYear() == targetYear)
-                    .max(Comparator.comparing(MeterReading::getReadingDate, Comparator.nullsFirst(Comparator.naturalOrder())))
-                    .orElse(null);
-
+            MeterReading thisCycleReading = readingByRoomMap.get(room.getId());
             if (thisCycleReading != null) {
                 recordedRoomsCount++;
                 double units = thisCycleReading.getUnitsConsumed() != null ? thisCycleReading.getUnitsConsumed().doubleValue() : 0.0;
@@ -433,13 +444,108 @@ public class UtilityBillingService {
         } else {
             roomPage = roomRepository.findByPropertyAndBuildingPaginated(propertyId, buildingId, pageable);
         }
-        List<RoomMeterSheetItem> items = new ArrayList<>();
-
         int targetMonth = billingMonth != null ? billingMonth : LocalDate.now().getMonthValue();
         int targetYear = billingYear != null ? billingYear : LocalDate.now().getYear();
 
-        for (Room room : roomPage.getContent()) {
-            items.add(buildRoomMeterSheetItem(room, propertyId, targetMonth, targetYear));
+        List<RoomMeterSheetItem> items = new ArrayList<>();
+        List<Room> pageRooms = roomPage.getContent();
+
+        // Batch preload readings and tenants in 2 indexed queries instead of 2 * pageSize queries
+        List<UUID> pageRoomIds = pageRooms.stream().map(Room::getId).filter(Objects::nonNull).collect(Collectors.toList());
+        List<MeterReading> allRoomReadings = new ArrayList<>();
+        if (!pageRoomIds.isEmpty()) {
+            try {
+                allRoomReadings = meterReadingRepository.findByRoomIdIn(pageRoomIds);
+            } catch (Exception ignored) {}
+        }
+        if (allRoomReadings == null) allRoomReadings = new ArrayList<>();
+
+        Map<UUID, MeterReading> thisCycleReadingByRoomMap = new HashMap<>();
+        Map<UUID, MeterReading> priorReadingByRoomMap = new HashMap<>();
+
+        for (MeterReading mr : allRoomReadings) {
+            if (mr != null && mr.getRoom() != null && mr.getRoom().getId() != null) {
+                UUID rId = mr.getRoom().getId();
+                boolean isCurrentCycle = mr.getBillingMonth() != null && mr.getBillingMonth() == targetMonth
+                        && mr.getBillingYear() != null && mr.getBillingYear() == targetYear;
+                if (isCurrentCycle) {
+                    thisCycleReadingByRoomMap.put(rId, mr);
+                } else {
+                    // Check if strictly prior
+                    boolean isPrior = mr.getBillingYear() != null && (
+                            mr.getBillingYear() < targetYear || 
+                            (mr.getBillingYear() == targetYear && mr.getBillingMonth() != null && mr.getBillingMonth() < targetMonth)
+                    );
+                    if (isPrior) {
+                        MeterReading currentPrior = priorReadingByRoomMap.get(rId);
+                        if (currentPrior == null || (mr.getReadingDate() != null && (currentPrior.getReadingDate() == null || mr.getReadingDate().isAfter(currentPrior.getReadingDate())))) {
+                            priorReadingByRoomMap.put(rId, mr);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Map tenants to rooms strictly by Room UUID / Bed booking rather than ambiguous room number string
+        Map<UUID, List<Tenant>> tenantsByRoomId = new HashMap<>();
+        Set<UUID> assignedTenantIds = new HashSet<>();
+
+        List<Booking> activeBookings = Collections.emptyList();
+        try {
+            activeBookings = bookingRepository.findAll();
+        } catch (Exception ignored) {}
+        if (activeBookings == null) activeBookings = Collections.emptyList();
+
+        List<Tenant> propTenants = new ArrayList<>();
+        try {
+            propTenants = tenantRepository.findByPropertyId(propertyId);
+        } catch (Exception ignored) {}
+        if (propTenants == null) propTenants = new ArrayList<>();
+        Map<UUID, Tenant> validTenantMap = new HashMap<>();
+        for (Tenant t : propTenants) {
+            if (t != null && t.getId() != null) {
+                validTenantMap.put(t.getId(), t);
+            }
+        }
+
+        for (Booking b : activeBookings) {
+            if (b == null) continue;
+            try {
+                boolean isActive = b.getStatus() == null || "CONFIRMED".equalsIgnoreCase(b.getStatus()) || "CHECKED_IN".equalsIgnoreCase(b.getStatus());
+                if (isActive && b.getBed() != null && b.getBed().getRoom() != null && b.getTenant() != null) {
+                    UUID tenantId = b.getTenant().getId();
+                    Tenant t = validTenantMap.get(tenantId);
+                    if (t != null && (t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()))) {
+                        UUID roomId = b.getBed().getRoom().getId();
+                        tenantsByRoomId.computeIfAbsent(roomId, k -> new ArrayList<>()).add(t);
+                        assignedTenantIds.add(t.getId());
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        for (Room room : pageRooms) {
+            List<Tenant> roomOccupants = new ArrayList<>(tenantsByRoomId.getOrDefault(room.getId(), Collections.emptyList()));
+            
+            // Fallback for unbooked tenants matching room number and specific building
+            if (roomOccupants.isEmpty() && room.getRoomNumber() != null) {
+                String rNum = room.getRoomNumber().trim();
+                for (Tenant t : propTenants) {
+                    if (t != null && !assignedTenantIds.contains(t.getId()) && (t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()))) {
+                        if (rNum.equalsIgnoreCase(t.getRoomNumber())) {
+                            String tBldg = t.getBuildingName();
+                            String rBldg = (room.getFloor() != null && room.getFloor().getBuilding() != null) ? room.getFloor().getBuilding().getName() : null;
+                            if (tBldg == null || rBldg == null || tBldg.equalsIgnoreCase(rBldg)) {
+                                roomOccupants.add(t);
+                                assignedTenantIds.add(t.getId());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            items.add(buildRoomMeterSheetItemFast(room, thisCycleReadingByRoomMap.get(room.getId()), priorReadingByRoomMap.get(room.getId()), roomOccupants));
         }
 
         Map<String, Object> response = new HashMap<>();
@@ -451,6 +557,91 @@ public class UtilityBillingService {
         response.put("last", roomPage.isLast());
 
         return response;
+    }
+
+    private RoomMeterSheetItem buildRoomMeterSheetItemFast(Room room, MeterReading thisCycleReading, MeterReading priorReading, List<Tenant> roomTenants) {
+        RoomMeterSheetItem item = new RoomMeterSheetItem();
+        item.roomId = room.getId();
+        item.roomNumber = room.getRoomNumber();
+        if (room.getFloor() != null) {
+            item.floorId = room.getFloor().getId();
+            item.floorNumber = room.getFloor().getFloorNumber();
+            item.floorName = room.getFloor().getName() != null ? room.getFloor().getName() : (item.floorNumber != null ? "Floor " + item.floorNumber : "Main Floor");
+            if (room.getFloor().getBuilding() != null) {
+                item.buildingId = room.getFloor().getBuilding().getId();
+                item.buildingName = room.getFloor().getBuilding().getName() != null ? room.getFloor().getBuilding().getName() : "Main Building";
+            }
+        } else {
+            item.floorName = "Main Floor";
+        }
+        item.capacity = getCapacityFromRoom(room);
+        item.defaultUnitRate = 10.0;
+        item.defaultSplitMode = item.capacity == 1 ? "SINGLE_OCCUPANT" : "FAIR_PROPORTIONAL";
+
+        if (thisCycleReading != null) {
+            item.lastReadingValue = thisCycleReading.getPreviousReadingValue() != null 
+                    ? thisCycleReading.getPreviousReadingValue().doubleValue() 
+                    : (priorReading != null && priorReading.getReadingValue() != null ? priorReading.getReadingValue().doubleValue() : 0.0);
+            item.currentReadingValue = thisCycleReading.getReadingValue() != null 
+                    ? thisCycleReading.getReadingValue().doubleValue() 
+                    : item.lastReadingValue;
+            item.lastReadingDate = thisCycleReading.getReadingDate();
+            item.unitsConsumed = thisCycleReading.getUnitsConsumed() != null 
+                    ? thisCycleReading.getUnitsConsumed().doubleValue() 
+                    : Math.max(0, item.currentReadingValue - item.lastReadingValue);
+            item.defaultUnitRate = thisCycleReading.getUnitRate() != null 
+                    ? thisCycleReading.getUnitRate().doubleValue() 
+                    : item.defaultUnitRate;
+            item.totalAmount = thisCycleReading.getTotalAmount() != null 
+                    ? thisCycleReading.getTotalAmount().doubleValue() 
+                    : (item.unitsConsumed * item.defaultUnitRate);
+            item.freeAllowanceUnits = thisCycleReading.getFreeAllowanceUnits() != null 
+                    ? thisCycleReading.getFreeAllowanceUnits().doubleValue() 
+                    : 0.0;
+            item.defaultSplitMode = thisCycleReading.getSplitMode() != null 
+                    ? thisCycleReading.getSplitMode() 
+                    : item.defaultSplitMode;
+            item.photoUrl = thisCycleReading.getPhotoUrl();
+            item.status = thisCycleReading.getStatus();
+            item.hasSavedDraft = "UNBILLED".equalsIgnoreCase(thisCycleReading.getStatus());
+
+            if (thisCycleReading.getTenantSplitDetailsJson() != null && !thisCycleReading.getTenantSplitDetailsJson().isBlank()) {
+                try {
+                    List<TenantUtilitySplit> splits = objectMapper.readValue(
+                            thisCycleReading.getTenantSplitDetailsJson(),
+                            new TypeReference<List<TenantUtilitySplit>>() {}
+                    );
+                    item.tenantSplits = splits;
+                } catch (Exception ignored) {}
+            }
+        } else {
+            item.lastReadingValue = priorReading != null && priorReading.getReadingValue() != null 
+                    ? priorReading.getReadingValue().doubleValue() 
+                    : 0.0;
+            item.lastReadingDate = priorReading != null && priorReading.getReadingDate() != null 
+                    ? priorReading.getReadingDate() 
+                    : LocalDate.now().minusMonths(1);
+            item.currentReadingValue = null;
+            item.unitsConsumed = 0.0;
+            item.totalAmount = 0.0;
+            item.freeAllowanceUnits = 0.0;
+        }
+
+        List<Tenant> tenants = roomTenants != null ? roomTenants : Collections.emptyList();
+        item.occupiedCount = tenants.size();
+        for (Tenant t : tenants) {
+            Map<String, Object> occ = new HashMap<>();
+            occ.put("id", t.getId());
+            String fn = t.getFirstName() != null ? t.getFirstName() : "";
+            String ln = t.getLastName() != null ? t.getLastName() : "";
+            occ.put("name", (fn + " " + ln).trim());
+            occ.put("phone", t.getMobile() != null ? t.getMobile() : "");
+            occ.put("bedNumber", t.getBedNumber() != null ? t.getBedNumber() : "");
+            occ.put("checkInDate", parseTenantCheckIn(t).toString());
+            item.occupants.add(occ);
+        }
+
+        return item;
     }
 
     /**
@@ -688,8 +879,25 @@ public class UtilityBillingService {
             Room room = roomRepository.findById(calc.getRoomId()).orElse(null);
             if (room == null) continue;
 
-            MeterReading mr = new MeterReading();
-            mr.setRoom(room);
+            int billingMonth = req.containsKey("billingMonth") ? Integer.parseInt(req.get("billingMonth").toString()) : LocalDate.now().getMonthValue();
+            int billingYear = req.containsKey("billingYear") ? Integer.parseInt(req.get("billingYear").toString()) : LocalDate.now().getYear();
+
+            // Find existing reading for this room in this month & year
+            List<MeterReading> existingReadings = meterReadingRepository.findByRoomAndBillingMonthAndBillingYear(room, billingMonth, billingYear);
+            MeterReading mr = null;
+
+            if (existingReadings != null && !existingReadings.isEmpty()) {
+                mr = existingReadings.get(0);
+                // Self-heal: If historical duplicate drafts exist for this room cycle, delete extra orphan rows
+                if (existingReadings.size() > 1) {
+                    List<MeterReading> duplicates = new ArrayList<>(existingReadings.subList(1, existingReadings.size()));
+                    meterReadingRepository.deleteAll(duplicates);
+                }
+            } else {
+                mr = new MeterReading();
+                mr.setRoom(room);
+            }
+
             mr.setReadingDate(LocalDate.now());
             mr.setPreviousReadingValue(BigDecimal.valueOf(calc.getPreviousReading()));
             mr.setReadingValue(BigDecimal.valueOf(calc.getCurrentReading()));
@@ -698,8 +906,8 @@ public class UtilityBillingService {
             mr.setTotalAmount(BigDecimal.valueOf(calc.getTotalAmount()));
             mr.setSplitMode(calc.getSplitMode());
             mr.setFreeAllowanceUnits(BigDecimal.valueOf(calc.getFreeAllowanceUnits()));
-            mr.setBillingMonth(req.containsKey("billingMonth") ? Integer.parseInt(req.get("billingMonth").toString()) : LocalDate.now().getMonthValue());
-            mr.setBillingYear(req.containsKey("billingYear") ? Integer.parseInt(req.get("billingYear").toString()) : LocalDate.now().getYear());
+            mr.setBillingMonth(billingMonth);
+            mr.setBillingYear(billingYear);
             mr.setStatus(appendToRentInvoices ? "BILLED" : "UNBILLED");
 
             if (req.containsKey("photoUrl") && req.get("photoUrl") != null) {
@@ -729,16 +937,28 @@ public class UtilityBillingService {
                     String lineDesc = String.format("Electricity (%s units @ ₹%.2f/unit, Room %s)",
                             split.getUnits(), calc.getUnitRate(), calc.getRoomNumber());
 
-                    if (targetInv != null) {
+                    String utilInvNum = "UTIL-" + billingYear + String.format("%02d", billingMonth) + "-" + tenant.getId().toString().substring(0, 6).toUpperCase();
+                    Invoice existingUtilInv = invoices.stream()
+                            .filter(i -> utilInvNum.equalsIgnoreCase(i.getInvoiceNumber()))
+                            .findFirst().orElse(null);
+
+                    if (targetInv != null && !"PAID".equalsIgnoreCase(targetInv.getStatus())) {
                         InvoiceItem item = new InvoiceItem(targetInv, lineDesc, BigDecimal.valueOf(split.getAmount()));
                         targetInv.getItems().add(item);
                         targetInv.setAmountDue(targetInv.getAmountDue().add(BigDecimal.valueOf(split.getAmount())));
                         invoiceRepository.save(targetInv);
+                    } else if (existingUtilInv != null) {
+                        // Update existing dedicated utility invoice
+                        existingUtilInv.setAmountDue(BigDecimal.valueOf(split.getAmount()));
+                        existingUtilInv.getItems().clear();
+                        InvoiceItem item = new InvoiceItem(existingUtilInv, lineDesc, BigDecimal.valueOf(split.getAmount()));
+                        existingUtilInv.getItems().add(item);
+                        invoiceRepository.save(existingUtilInv);
                     } else {
                         // Create dedicated utility invoice
                         Invoice utilInv = new Invoice();
                         utilInv.setTenant(tenant);
-                        utilInv.setInvoiceNumber("UTIL-" + LocalDate.now().getYear() + String.format("%02d", mr.getBillingMonth()) + "-" + tenant.getId().toString().substring(0, 6).toUpperCase());
+                        utilInv.setInvoiceNumber(utilInvNum);
                         utilInv.setIssueDate(LocalDate.now());
                         utilInv.setDueDate(LocalDate.now().plusDays(5));
                         utilInv.setAmountDue(BigDecimal.valueOf(split.getAmount()));

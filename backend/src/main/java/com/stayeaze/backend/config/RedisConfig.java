@@ -96,6 +96,7 @@ public class RedisConfig {
                 // Properties cache: 15 min + jitter (rarely changes)
                 cacheConfigurations.put("properties", defaultConfig.entryTtl(Duration.ofMinutes(15).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("propertyDtos", defaultConfig.entryTtl(Duration.ofMinutes(15).plusSeconds(random.nextInt(60))));
+                cacheConfigurations.put("propertySummaries", defaultConfig.entryTtl(Duration.ofMinutes(15).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("minimalProperties", defaultConfig.entryTtl(Duration.ofMinutes(15).plusSeconds(random.nextInt(60))));
 
                 // Organization Profiles cache: 30 min + jitter (very rarely changes)
@@ -105,6 +106,7 @@ public class RedisConfig {
                 cacheConfigurations.put("buildings", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("floors", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("floors_v2", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
+                cacheConfigurations.put("building_floors", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("rooms", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("rooms_v3", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
                 cacheConfigurations.put("beds", defaultConfig.entryTtl(Duration.ofMinutes(5).plusSeconds(random.nextInt(30))));

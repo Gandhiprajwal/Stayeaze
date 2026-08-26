@@ -27,8 +27,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 import com.stayeaze.backend.models.Tenant;
 import com.stayeaze.backend.repository.TenantRepository;
@@ -190,7 +189,34 @@ public class BuildingController {
         }
 
         List<Building> buildings = buildingRepository.findByProperty(property);
-        buildings.forEach(this::populateBuildingStats);
+        try {
+            List<Object[]> rows = buildingRepository.getMetricsByBuildingForPropertyNative(property.getId());
+            Map<UUID, int[]> metricMap = new HashMap<>();
+            if (rows != null) {
+                for (Object[] r : rows) {
+                    if (r == null || r[0] == null) continue;
+                    UUID bId = UUID.fromString(r[0].toString());
+                    int flrs = r[1] != null ? ((Number) r[1]).intValue() : 0;
+                    int rms = r[2] != null ? ((Number) r[2]).intValue() : 0;
+                    int bds = r[3] != null ? ((Number) r[3]).intValue() : 0;
+                    int occ = r[4] != null ? ((Number) r[4]).intValue() : 0;
+                    metricMap.put(bId, new int[]{flrs, rms, bds, occ});
+                }
+            }
+            for (Building b : buildings) {
+                int[] m = metricMap.get(b.getId());
+                if (m != null) {
+                    b.setFloors(m[0]);
+                    b.setRooms(m[1]);
+                    b.setBeds(m[2]);
+                    b.setOccupied(m[3]);
+                } else {
+                    populateBuildingStats(b);
+                }
+            }
+        } catch (Exception e) {
+            buildings.forEach(this::populateBuildingStats);
+        }
         List<BuildingDTO> dtos = buildings.stream().map(BuildingDTO::fromEntity).collect(Collectors.toList());
         return ResponseEntity.ok(dtos);
     }

@@ -69,7 +69,7 @@ public class Room {
 
     public UUID getFloorId() {
         try {
-            return (floor != null && org.hibernate.Hibernate.isInitialized(floor)) ? floor.getId() : null;
+            return floor != null ? floor.getId() : null;
         } catch (Exception e) {
             return null;
         }
@@ -78,7 +78,7 @@ public class Room {
     // Walk hierarchy: Room -> Floor -> Building -> Property
     public UUID getBuildingId() {
         try {
-            return (floor != null && org.hibernate.Hibernate.isInitialized(floor) && floor.getBuilding() != null && org.hibernate.Hibernate.isInitialized(floor.getBuilding())) 
+            return (floor != null && floor.getBuilding() != null) 
                     ? floor.getBuilding().getId() : null;
         } catch (Exception e) {
             return null;
@@ -87,7 +87,7 @@ public class Room {
 
     public UUID getPropertyId() {
         try {
-            return (floor != null && org.hibernate.Hibernate.isInitialized(floor) && floor.getBuilding() != null && org.hibernate.Hibernate.isInitialized(floor.getBuilding()) && floor.getBuilding().getProperty() != null && org.hibernate.Hibernate.isInitialized(floor.getBuilding().getProperty()))
+            return (floor != null && floor.getBuilding() != null && floor.getBuilding().getProperty() != null)
                     ? floor.getBuilding().getProperty().getId() : null;
         } catch (Exception e) {
             return null;

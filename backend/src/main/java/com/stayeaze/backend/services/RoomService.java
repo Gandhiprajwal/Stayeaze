@@ -11,8 +11,7 @@ import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,24 +26,10 @@ public class RoomService {
     @Autowired
     private com.stayeaze.backend.repository.TenantRepository tenantRepository;
 
-    private Room populateRoomStats(Room room, Organization organization) {
+    private Room populateRoomStatsFast(Room room, List<com.stayeaze.backend.models.Bed> roomBeds, List<com.stayeaze.backend.models.Tenant> roomTenants) {
         if (room == null) return null;
-        List<com.stayeaze.backend.models.Bed> beds = bedRepository.findByRoom(room);
-
-        if (beds.isEmpty() && room.getSharing() != null && room.getSharing() > 0) {
-            for (int i = 1; i <= room.getSharing(); i++) {
-                com.stayeaze.backend.models.Bed b = new com.stayeaze.backend.models.Bed(room, "B" + i);
-                bedRepository.save(b);
-            }
-            beds = bedRepository.findByRoom(room);
-        }
-
+        List<com.stayeaze.backend.models.Bed> beds = roomBeds != null ? roomBeds : Collections.emptyList();
         room.setBeds(beds.size());
-
-        List<com.stayeaze.backend.models.Tenant> activeTenants = null;
-        try {
-            activeTenants = organization != null ? tenantRepository.findByOrganization(organization) : tenantRepository.findAll();
-        } catch (Exception ignored) {}
 
         int occ = 0;
         int res = 0;
@@ -52,14 +37,11 @@ public class RoomService {
             boolean isOccupied = "OCCUPIED".equalsIgnoreCase(b.getStatus());
             boolean isReserved = "RESERVED".equalsIgnoreCase(b.getStatus()) || "BOOKED".equalsIgnoreCase(b.getStatus());
 
-            if (!isOccupied && activeTenants != null) {
-                for (com.stayeaze.backend.models.Tenant t : activeTenants) {
+            if (!isOccupied && roomTenants != null) {
+                for (com.stayeaze.backend.models.Tenant t : roomTenants) {
                     boolean statusOk = t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus());
-                    if (statusOk && room.getRoomNumber() != null && room.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) 
-                            && b.getBedNumber() != null && b.getBedNumber().equalsIgnoreCase(t.getBedNumber())) {
+                    if (statusOk && b.getBedNumber() != null && b.getBedNumber().equalsIgnoreCase(t.getBedNumber())) {
                         isOccupied = true;
-                        b.setStatus("OCCUPIED");
-                        bedRepository.save(b);
                         break;
                     }
                 }
@@ -85,22 +67,55 @@ public class RoomService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "rooms_v3", key = "#organization != null ? #organization.id.toString() : 'all_super_admin'")
+    @Cacheable(value = "rooms_v4", key = "#organization != null ? #organization.id.toString() : 'all_super_admin'")
     public List<RoomDTO> getRoomsByOrg(Organization organization) {
         List<Room> list = organization == null ? roomRepository.findAllSuperAdmin()
-                : roomRepository.findByOrganizationId(organization.getId(), org.springframework.data.domain.Pageable.unpaged()).getContent();
+                : roomRepository.findByOrganizationId(organization.getId());
+        if (list == null || list.isEmpty()) return Collections.emptyList();
+
+        List<UUID> roomIds = list.stream().map(Room::getId).filter(Objects::nonNull).collect(Collectors.toList());
+        List<com.stayeaze.backend.models.Bed> allBeds = new ArrayList<>();
+        try {
+            allBeds = bedRepository.findByRoomIdIn(roomIds);
+        } catch (Exception ignored) {}
+        if (allBeds == null) allBeds = new ArrayList<>();
+
+        Map<UUID, List<com.stayeaze.backend.models.Bed>> bedsByRoomMap = new HashMap<>();
+        for (com.stayeaze.backend.models.Bed b : allBeds) {
+            if (b != null && b.getRoom() != null) {
+                bedsByRoomMap.computeIfAbsent(b.getRoom().getId(), k -> new ArrayList<>()).add(b);
+            }
+        }
+
+        List<com.stayeaze.backend.models.Tenant> allTenants = new ArrayList<>();
+        try {
+            allTenants = organization != null ? tenantRepository.findByOrganization(organization) : tenantRepository.findAll();
+        } catch (Exception ignored) {}
+        if (allTenants == null) allTenants = new ArrayList<>();
+
+        Map<String, List<com.stayeaze.backend.models.Tenant>> tenantsByRoomMap = new HashMap<>();
+        for (com.stayeaze.backend.models.Tenant t : allTenants) {
+            if (t != null && t.getRoomNumber() != null) {
+                tenantsByRoomMap.computeIfAbsent(t.getRoomNumber().trim().toLowerCase(), k -> new ArrayList<>()).add(t);
+            }
+        }
+
         return list.stream()
-                .map(r -> RoomDTO.fromEntity(populateRoomStats(r, organization)))
+                .map(r -> RoomDTO.fromEntity(populateRoomStatsFast(r, bedsByRoomMap.get(r.getId()), tenantsByRoomMap.get(r.getRoomNumber() != null ? r.getRoomNumber().trim().toLowerCase() : ""))))
                 .collect(Collectors.toList());
     }
 
     @Caching(evict = {
         @CacheEvict(value = "floors_v2", allEntries = true),
+        @CacheEvict(value = "building_floors", allEntries = true),
+        @CacheEvict(value = "rooms_v4", allEntries = true),
         @CacheEvict(value = "rooms_v3", allEntries = true),
+        @CacheEvict(value = "beds_v4", allEntries = true),
         @CacheEvict(value = "beds_v3", allEntries = true),
         @CacheEvict(value = "tenants", allEntries = true),
         @CacheEvict(value = "buildings", allEntries = true),
         @CacheEvict(value = "propertyDtos", allEntries = true),
+        @CacheEvict(value = "propertySummaries", allEntries = true),
         @CacheEvict(value = "minimalProperties", allEntries = true),
         @CacheEvict(value = "properties-minimal", allEntries = true),
         @CacheEvict(value = "tenants-minimal", allEntries = true)
@@ -123,11 +138,13 @@ public class RoomService {
 
     @Caching(evict = {
         @CacheEvict(value = "floors_v2", allEntries = true),
+        @CacheEvict(value = "building_floors", allEntries = true),
         @CacheEvict(value = "rooms_v3", allEntries = true),
         @CacheEvict(value = "beds_v3", allEntries = true),
         @CacheEvict(value = "tenants", allEntries = true),
         @CacheEvict(value = "buildings", allEntries = true),
         @CacheEvict(value = "propertyDtos", allEntries = true),
+        @CacheEvict(value = "propertySummaries", allEntries = true),
         @CacheEvict(value = "minimalProperties", allEntries = true),
         @CacheEvict(value = "properties-minimal", allEntries = true),
         @CacheEvict(value = "tenants-minimal", allEntries = true)

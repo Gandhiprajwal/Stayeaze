@@ -15,14 +15,15 @@ import java.util.UUID;
 
 @Repository
 public interface FloorRepository extends JpaRepository<Floor, UUID> {
-    List<Floor> findByBuilding(Building building);
+    @Query("SELECT f FROM Floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p WHERE f.building = :building")
+    List<Floor> findByBuilding(@Param("building") Building building);
 
-    @Query("SELECT f FROM Floor f WHERE f.building.id = :buildingId")
+    @Query("SELECT f FROM Floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p WHERE f.building.id = :buildingId")
     List<Floor> findByBuildingId(@Param("buildingId") UUID buildingId);
     Optional<Floor> findByIdAndBuilding(UUID id, Building building);
     Boolean existsByBuildingAndFloorNumber(Building building, Integer floorNumber);
 
-    @Query("SELECT f FROM Floor f WHERE f.building.property.organization.id = :orgId")
+    @Query("SELECT f FROM Floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p WHERE p.organization.id = :orgId")
     List<Floor> findByOrganizationId(@Param("orgId") UUID orgId);
 
     @Query("SELECT f FROM Floor f WHERE f.building.property.organization.id = :orgId")
@@ -31,8 +32,20 @@ public interface FloorRepository extends JpaRepository<Floor, UUID> {
     @Query(value = "SELECT building_id FROM floors WHERE id = :floorId", nativeQuery = true)
     UUID findBuildingIdByFloorId(@Param("floorId") UUID floorId);
 
-    @Query(value = "SELECT * FROM floors f ORDER BY f.floor_number ASC", nativeQuery = true)
+    @Query("SELECT f FROM Floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p ORDER BY f.floorNumber ASC")
     List<Floor> findAllSuperAdmin();
+
+    @Query(value = "SELECT " +
+                   "CAST(f.id AS text) as floorId, " +
+                   "COUNT(DISTINCT r.id) as totalRooms, " +
+                   "COUNT(b.id) as totalBeds, " +
+                   "COALESCE(SUM(CASE WHEN UPPER(b.status) = 'OCCUPIED' THEN 1 ELSE 0 END), 0) as occupiedBeds " +
+                   "FROM floors f " +
+                   "LEFT JOIN rooms r ON r.floor_id = f.id AND (r.status IS NULL OR UPPER(r.status) != 'ARCHIVED') " +
+                   "LEFT JOIN beds b ON b.room_id = r.id AND (b.status IS NULL OR UPPER(b.status) != 'ARCHIVED') " +
+                   "WHERE f.building_id = CAST(:buildingId AS uuid) AND (f.status IS NULL OR UPPER(f.status) != 'ARCHIVED') " +
+                   "GROUP BY f.id", nativeQuery = true)
+    List<Object[]> getMetricsByFloorForBuildingNative(@Param("buildingId") UUID buildingId);
 
     Page<Floor> findAll(Pageable pageable);
 }

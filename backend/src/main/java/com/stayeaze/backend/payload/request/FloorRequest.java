@@ -3,6 +3,7 @@ package com.stayeaze.backend.payload.request;
 import java.util.UUID;
 
 public class FloorRequest {
+    private UUID propertyId;
     private UUID buildingId;
     private String name;
     private Integer floorNumber;
@@ -10,6 +11,14 @@ public class FloorRequest {
     private String wifiPassword;
 
     public FloorRequest() {
+    }
+
+    public UUID getPropertyId() {
+        return propertyId;
+    }
+
+    public void setPropertyId(UUID propertyId) {
+        this.propertyId = propertyId;
     }
 
     public UUID getBuildingId() {

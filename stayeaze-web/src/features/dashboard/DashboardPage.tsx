@@ -34,53 +34,64 @@ export default function DashboardPage() {
   const { data: properties, isLoading: loadingProps } = useQuery({
     queryKey: ['dashboard', 'properties-minimal'],
     queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
+    staleTime: 60000,
   });
   const { data: buildings } = useQuery({
     queryKey: ['dashboard', 'buildings'],
     queryFn: () => api.get<{ data: any[] }>('/buildings').then((r) => r.data.data),
     enabled: user?.role !== 'SUPER_ADMIN',
+    staleTime: 60000,
   });
   const { data: floors } = useQuery({
     queryKey: ['dashboard', 'floors'],
     queryFn: () => api.get<{ data: any[] }>('/floors').then((r) => r.data.data),
     enabled: user?.role !== 'SUPER_ADMIN',
+    staleTime: 60000,
   });
   const { data: tenants } = useQuery({
     queryKey: ['dashboard', 'tenants'],
-    queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 50 } }).then((r) => r.data.data),
+    staleTime: 60000,
   });
   const { data: invoices } = useQuery({
     queryKey: ['dashboard', 'invoices'],
-    queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: { pageSize: 50 } }).then((r) => r.data.data),
+    staleTime: 60000,
   });
   const { data: payments } = useQuery({
     queryKey: ['dashboard', 'payments'],
-    queryFn: () => api.get<{ data: Payment[] }>('/payments', { params: { pageSize: 100 } }).then((r) => r.data?.data || []),
+    queryFn: () => api.get<{ data: Payment[] }>('/payments', { params: { pageSize: 50 } }).then((r) => r.data?.data || []),
+    staleTime: 60000,
   });
   const { data: complaints } = useQuery({
     queryKey: ['dashboard', 'complaints'],
     queryFn: () => api.get<{ data: Complaint[] }>('/complaints', { params: { pageSize: 5, sortBy: 'createdAt', sortOrder: 'desc' } }).then((r) => r.data.data),
+    staleTime: 60000,
   });
 
   // Dedicated Page-Based Server Stats
   const { data: propertyStats } = useQuery({
     queryKey: ['properties-stats'],
     queryFn: () => api.get('/properties/stats').then((r) => r.data || {}),
+    staleTime: 60000,
   });
 
   const { data: tenantStats } = useQuery({
     queryKey: ['tenants-stats'],
     queryFn: () => api.get('/tenants/stats').then((r) => r.data || {}),
+    staleTime: 60000,
   });
 
   const { data: invoiceStats } = useQuery({
     queryKey: ['invoices-stats'],
     queryFn: () => api.get('/invoices/stats').then((r) => r.data || {}),
+    staleTime: 60000,
   });
 
   const { data: complaintStats } = useQuery({
     queryKey: ['complaints-stats'],
     queryFn: () => api.get('/complaints/stats').then((r) => r.data || {}),
+    staleTime: 60000,
   });
 
   // Live SSE metrics with fallback to REST API stats
@@ -341,15 +352,21 @@ export default function DashboardPage() {
           title="SaaS Platform Admin Dashboard"
           description="Real-time multi-tenant system overview, subscription metrics, and infrastructure health."
           actions={
-            <div className="flex gap-3">
-              <Button asChild variant="outline">
+            <div className="flex items-center flex-wrap sm:flex-nowrap gap-2.5 shrink-0 w-full sm:w-auto">
+              <Button asChild variant="outline" className="rounded-xl h-10 text-xs sm:text-sm font-semibold gap-1.5 shrink-0 flex-1 sm:flex-none">
                 <Link to="/super-admin/integrations">
-                  <Key className="mr-1.5 h-4 w-4 text-primary" /> Configure API Gateways
+                  <Key className="h-4 w-4 text-primary shrink-0" />
+                  <span className="hidden sm:inline">Configure API Gateways</span>
+                  <span className="sm:hidden">API Gateways</span>
                 </Link>
               </Button>
 
-              <Button asChild>
-                <Link to="/users"><Users className="mr-1.5 h-4 w-4" /> User Accounts</Link>
+              <Button asChild className="rounded-xl h-10 text-xs sm:text-sm font-bold gap-1.5 shrink-0 flex-1 sm:flex-none shadow-xs">
+                <Link to="/users">
+                  <Users className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">User Accounts</span>
+                  <span className="sm:hidden">Users</span>
+                </Link>
               </Button>
             </div>
           }
@@ -616,9 +633,17 @@ export default function DashboardPage() {
         title={`Welcome back, ${user?.name?.split(' ')[0] ?? 'Admin'}`}
         description="Here's what's happening across your portfolio today."
         actions={
-          <Button asChild>
-            <Link to="/reports"><TrendingUp className="mr-1.5 h-4 w-4" /> View Reports</Link>
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="outline" asChild className="gap-1.5 rounded-xl h-10 text-xs font-semibold">
+              <Link to="/tenants"><Users className="h-4 w-4 text-primary" /> + Add Resident</Link>
+            </Button>
+            <Button variant="outline" asChild className="gap-1.5 rounded-xl h-10 text-xs font-semibold">
+              <Link to="/utilities"><Zap className="h-4 w-4 text-amber-500" /> + Sub-Meter</Link>
+            </Button>
+            <Button asChild className="gap-1.5 rounded-xl h-10 text-xs font-semibold shadow-xs">
+              <Link to="/reports"><TrendingUp className="h-4 w-4" /> View Reports</Link>
+            </Button>
+          </div>
         }
       />
 

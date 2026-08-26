@@ -181,27 +181,27 @@ export default function BackendLogsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="space-y-6 max-w-7xl mx-auto pb-16 sm:pb-8">
       <PageHeader
         title="Backend System & Server Console Logs"
         description="Real-time live application stream for Spring Boot server logs, security filter dispatches, database transactions, and system diagnostics."
         icon={Terminal}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
             <Button
               variant={isLiveStreaming ? 'default' : 'outline'}
               size="sm"
               onClick={() => setIsLiveStreaming(!isLiveStreaming)}
-              className={isLiveStreaming ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}
+              className={`rounded-xl h-9 text-xs font-semibold flex-1 sm:flex-none ${isLiveStreaming ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs' : ''}`}
             >
-              {isLiveStreaming ? <Pause className="mr-1.5 h-3.5 w-3.5" /> : <Play className="mr-1.5 h-3.5 w-3.5" />}
-              {isLiveStreaming ? 'Live Stream Active' : 'Resume Live Stream'}
+              {isLiveStreaming ? <Pause className="mr-1.5 h-3.5 w-3.5 shrink-0" /> : <Play className="mr-1.5 h-3.5 w-3.5 shrink-0" />}
+              <span>{isLiveStreaming ? 'Live Stream Active' : 'Resume Live Stream'}</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="rounded-xl h-9 text-xs font-semibold shrink-0">
               <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button variant="outline" size="sm" onClick={exportLogsJSON}>
+            <Button variant="outline" size="sm" onClick={exportLogsJSON} className="rounded-xl h-9 text-xs font-semibold shrink-0">
               <Download className="mr-1.5 h-3.5 w-3.5" /> Export Logs
             </Button>
           </div>
@@ -209,87 +209,99 @@ export default function BackendLogsPage() {
       />
 
       {/* Top Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="border shadow-sm">
-          <CardContent className="p-4 flex items-center justify-between">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="rounded-2xl border bg-card shadow-xs hover:shadow-md transition-shadow">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Total Streamed</p>
-              <h3 className="text-2xl font-bold font-mono">{totalCount}</h3>
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Streamed</p>
+              <h3 className="text-xl sm:text-2xl font-black font-mono mt-1 text-foreground">{totalCount}</h3>
             </div>
-            <Terminal className="h-7 w-7 text-indigo-500 opacity-80" />
+            <div className="h-10 w-10 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center shrink-0">
+              <Terminal className="h-5 w-5" />
+            </div>
           </CardContent>
         </Card>
-        <Card className="border shadow-sm">
-          <CardContent className="p-4 flex items-center justify-between">
+        <Card className="rounded-2xl border bg-card shadow-xs hover:shadow-md transition-shadow">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">INFO Logs</p>
-              <h3 className="text-2xl font-bold font-mono text-emerald-600">{infoCount}</h3>
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">INFO Logs</p>
+              <h3 className="text-xl sm:text-2xl font-black font-mono mt-1 text-emerald-600">{infoCount}</h3>
             </div>
-            <CheckCircle2 className="h-7 w-7 text-emerald-500 opacity-80" />
+            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
           </CardContent>
         </Card>
-        <Card className="border shadow-sm">
-          <CardContent className="p-4 flex items-center justify-between">
+        <Card className="rounded-2xl border bg-card shadow-xs hover:shadow-md transition-shadow">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Warnings</p>
-              <h3 className="text-2xl font-bold font-mono text-amber-600">{warnCount}</h3>
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Warnings</p>
+              <h3 className="text-xl sm:text-2xl font-black font-mono mt-1 text-amber-600">{warnCount}</h3>
             </div>
-            <AlertTriangle className="h-7 w-7 text-amber-500 opacity-80" />
+            <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
           </CardContent>
         </Card>
-        <Card className="border shadow-sm">
-          <CardContent className="p-4 flex items-center justify-between">
+        <Card className="rounded-2xl border bg-card shadow-xs hover:shadow-md transition-shadow">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Errors</p>
-              <h3 className="text-2xl font-bold font-mono text-red-600">{errorCount}</h3>
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Errors</p>
+              <h3 className="text-xl sm:text-2xl font-black font-mono mt-1 text-red-600">{errorCount}</h3>
             </div>
-            <ShieldAlert className="h-7 w-7 text-red-500 opacity-80" />
+            <div className="h-10 w-10 rounded-xl bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-muted/30 p-3 rounded-lg border">
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-          {['ALL', 'INFO', 'WARN', 'ERROR'].map((lvl) => (
-            <Button
-              key={lvl}
-              variant={levelFilter === lvl ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setLevelFilter(lvl)}
-              className="text-xs h-8 px-3 font-semibold"
-            >
-              {lvl}
-            </Button>
-          ))}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3.5 bg-card p-3.5 sm:p-4 rounded-2xl border shadow-xs">
+        <div className="w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex items-center gap-1.5 w-max">
+            {['ALL', 'INFO', 'WARN', 'ERROR'].map((lvl) => (
+              <Button
+                key={lvl}
+                variant={levelFilter === lvl ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setLevelFilter(lvl)}
+                className={`text-xs h-8.5 px-3.5 font-bold rounded-xl shrink-0 ${
+                  levelFilter === lvl ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {lvl}
+              </Button>
+            ))}
+          </div>
         </div>
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search log messages, logger, IP..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 text-xs h-9"
+            className="pl-9 text-xs sm:text-sm h-10 rounded-xl w-full"
           />
         </div>
       </div>
 
       {/* Terminal View */}
-      <Card className="border bg-slate-950 text-slate-100 shadow-xl overflow-hidden font-mono text-xs">
-        <CardHeader className="bg-slate-900 px-4 py-3 border-b border-slate-800 flex flex-row items-center justify-between space-y-0">
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1.5">
-              <div className="h-3 w-3 rounded-full bg-red-500" />
-              <div className="h-3 w-3 rounded-full bg-yellow-500" />
-              <div className="h-3 w-3 rounded-full bg-green-500" />
+      <Card className="border bg-slate-950 text-slate-100 shadow-xl overflow-hidden font-mono text-xs rounded-2xl">
+        <CardHeader className="bg-slate-900 px-4 py-3.5 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 space-y-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex gap-1.5 shrink-0">
+              <div className="h-3 w-3 rounded-full bg-rose-500" />
+              <div className="h-3 w-3 rounded-full bg-amber-500" />
+              <div className="h-3 w-3 rounded-full bg-emerald-500" />
             </div>
-            <span className="text-xs font-mono font-semibold text-slate-400 ml-2">
-              stayeaze-backend-server.log (Spring Boot 3.2.0 JVM)
+            <span className="text-xs font-mono font-semibold text-slate-400 truncate">
+              stayeaze-backend-server.log (Spring Boot JVM)
             </span>
           </div>
-          <div className="flex items-center gap-2 text-[11px] text-slate-400">
+          <div className="flex items-center gap-2 text-[11px] text-slate-400 shrink-0">
             {isLiveStreaming && (
-              <span className="flex items-center gap-1.5 text-emerald-400">
+              <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -299,7 +311,7 @@ export default function BackendLogsPage() {
             )}
           </div>
         </CardHeader>
-        <CardContent className="p-4 max-h-[600px] overflow-y-auto space-y-2">
+        <CardContent className="p-3.5 sm:p-5 max-h-[550px] overflow-y-auto space-y-2.5">
           {isLoading && (!logs || (logs as SystemLogEntry[]).length === 0) ? (
             <div className="py-12 text-center text-slate-500 space-y-2">
               <RefreshCw className="h-6 w-6 animate-spin mx-auto text-indigo-400" />
@@ -309,16 +321,16 @@ export default function BackendLogsPage() {
             logs.map((log) => (
               <div
                 key={log.id}
-                className="hover:bg-slate-900/80 p-2 rounded border border-transparent hover:border-slate-800 transition-colors leading-relaxed break-all"
+                className="hover:bg-slate-900/80 p-2.5 sm:p-3 rounded-xl border border-transparent hover:border-slate-800 transition-colors leading-relaxed break-all"
               >
                 <div className="flex items-start gap-2 flex-wrap text-slate-300">
                   <span className="text-slate-500 shrink-0">{formatDateTime(log.timestamp)}</span>
                   <span className="shrink-0">{getLevelBadge(log.level)}</span>
                   <span className="text-indigo-400 shrink-0 font-semibold">[{log.thread}]</span>
-                  <span className="text-teal-400 shrink-0 font-medium">{log.logger}</span>
+                  <span className="text-teal-400 shrink-0 font-medium truncate max-w-[200px] sm:max-w-none">{log.logger}</span>
                   <span className="text-slate-400 shrink-0 font-mono text-[11px]">(IP: {log.clientIp} · User: {log.user})</span>
                 </div>
-                <div className="mt-1 text-slate-200 pl-4 border-l-2 border-slate-700 font-sans text-xs whitespace-pre-wrap">
+                <div className="mt-1.5 text-slate-200 pl-3.5 border-l-2 border-slate-700 font-sans text-xs whitespace-pre-wrap leading-relaxed">
                   {log.message}
                 </div>
               </div>

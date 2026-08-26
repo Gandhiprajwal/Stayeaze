@@ -67,11 +67,11 @@ export const api = {
     return res.json();
   },
 
-  createFloor: async (token, propertyId, buildingId, floorNumber) => {
+  createFloor: async (token, propertyId, buildingId, floorNumber, name) => {
     const res = await fetch(`${API_BASE_URL}/properties/${propertyId}/buildings/${buildingId}/floors`, {
       method: 'POST',
       headers: getHeaders(token),
-      body: JSON.stringify({ floorNumber })
+      body: JSON.stringify({ floorNumber, name })
     });
     return res.json();
   },
@@ -94,6 +94,21 @@ export const api = {
   // Beds
   getBeds: async (token, roomId) => {
     const res = await fetch(`${API_BASE_URL}/rooms/${roomId}/beds`, { headers: getHeaders(token) });
+    return res.json();
+  },
+
+  getAllBedsFlat: async (token, page = 1, pageSize = 500) => {
+    const res = await fetch(`${API_BASE_URL}/beds?page=${page}&pageSize=${pageSize}`, { headers: getHeaders(token) });
+    return res.json();
+  },
+
+  getAllRoomsFlat: async (token, page = 1, pageSize = 500) => {
+    const res = await fetch(`${API_BASE_URL}/rooms?page=${page}&pageSize=${pageSize}`, { headers: getHeaders(token) });
+    return res.json();
+  },
+
+  getAllFloorsFlat: async (token, page = 1, pageSize = 500) => {
+    const res = await fetch(`${API_BASE_URL}/floors?page=${page}&pageSize=${pageSize}`, { headers: getHeaders(token) });
     return res.json();
   },
 

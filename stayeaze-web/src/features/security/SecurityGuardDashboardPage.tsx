@@ -92,7 +92,7 @@ export default function SecurityGuardDashboardPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-6">
       <PageHeader
         title="Security Gate Control Console"
         description="Gate pass verification, visitor photo records, and resident approval clearance."
@@ -101,7 +101,7 @@ export default function SecurityGuardDashboardPage() {
           <Button
             variant="destructive"
             onClick={() => setIncidentModalOpen(true)}
-            className="shadow-sm font-bold"
+            className="shadow-xs font-bold rounded-xl h-10 text-xs sm:text-sm w-full sm:w-auto"
           >
             <AlertTriangle className="mr-1.5 h-4 w-4" /> Report Gate Incident
           </Button>
@@ -109,24 +109,24 @@ export default function SecurityGuardDashboardPage() {
       />
 
       {/* Quick Search / Scan Box */}
-      <Card className="bg-slate-900 text-white border-slate-800 shadow-md">
-        <CardContent className="p-6">
+      <Card className="bg-slate-900 text-white border-slate-800 shadow-md rounded-2xl overflow-hidden">
+        <CardContent className="p-4 sm:p-6">
           <div className="max-w-xl mx-auto space-y-3 text-center">
-            <h3 className="text-lg font-bold text-slate-100 flex items-center justify-center gap-2">
-              <QrCode className="h-5 w-5 text-amber-400" />
+            <h3 className="text-base sm:text-lg font-bold text-slate-100 flex items-center justify-center gap-2">
+              <QrCode className="h-5 w-5 text-amber-400 shrink-0" />
               Verify Digital Gate Pass / QR Code
             </h3>
             <p className="text-xs text-slate-400">Enter 6-digit visitor passcode (e.g. 481920) or scan visitor QR pass.</p>
-            <div className="flex gap-2 pt-2">
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
               <Input
-                placeholder="Enter 6-digit passcode or QR data..."
-                className="bg-slate-950 border-slate-700 text-white text-base h-11 font-mono tracking-wider"
+                placeholder="Enter 6-digit passcode..."
+                className="bg-slate-950 border-slate-700 text-white text-sm sm:text-base h-11 font-mono tracking-wider rounded-xl"
                 value={searchCode}
                 onChange={(e) => setSearchCode(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleVerifyPass()}
               />
               <Button
-                className="h-11 px-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold"
+                className="h-11 px-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs sm:text-sm shrink-0"
                 onClick={handleVerifyPass}
                 disabled={verifying || !searchCode.trim()}
               >
@@ -136,7 +136,7 @@ export default function SecurityGuardDashboardPage() {
 
             {/* Verified Pass Result */}
             {verifiedPass && (
-              <div className="mt-4 p-4 rounded-xl border border-emerald-400/50 bg-emerald-950/40 text-left space-y-3">
+              <div className="mt-4 p-4 rounded-2xl border border-emerald-400/50 bg-emerald-950/40 text-left space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
                     <CheckCircle2 className="h-4 w-4" /> Verified Valid Pass
@@ -146,9 +146,9 @@ export default function SecurityGuardDashboardPage() {
 
                 <div className="flex items-center gap-3">
                   {verifiedPass.photoUrl ? (
-                    <img src={resolveFileUrl(verifiedPass.photoUrl)} alt="Visitor" className="h-14 w-14 rounded-xl object-cover border border-emerald-400" />
+                    <img src={resolveFileUrl(verifiedPass.photoUrl)} alt="Visitor" className="h-14 w-14 rounded-xl object-cover border border-emerald-400 shrink-0" />
                   ) : (
-                    <div className="h-14 w-14 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
+                    <div className="h-14 w-14 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
                       <User className="h-6 w-6" />
                     </div>
                   )}
@@ -163,11 +163,11 @@ export default function SecurityGuardDashboardPage() {
 
                 <div className="pt-2 border-t border-emerald-900/60 flex justify-end gap-2">
                   <Button
-                    onClick={() => checkInMutation.mutate(verifiedPass.visitor.id)}
+                    onClick={() => checkInMutation.mutate(verifiedPass.visitor?.id || verifiedPass.id)}
                     disabled={checkInMutation.isPending}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl h-10 text-xs sm:text-sm shadow-xs"
                   >
-                    <CheckCircle2 className="mr-1.5 h-4 w-4" /> Grant Entry & Check In Now
+                    <CheckCircle2 className="mr-1.5 h-4 w-4" /> Grant Entry &amp; Check In Now
                   </Button>
                 </div>
               </div>
@@ -177,65 +177,66 @@ export default function SecurityGuardDashboardPage() {
       </Card>
 
       {/* Gate Status Numbers */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-l-4 border-l-emerald-500 shadow-xs">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-muted-foreground">Inside Property Now</CardTitle>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <Card className="rounded-2xl border-l-4 border-l-emerald-500 shadow-xs">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Inside Property Now</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">{insideVisitors.length} Visitors</div>
+          <CardContent className="p-4 sm:p-5 pt-0">
+            <div className="text-xl sm:text-2xl font-black font-mono text-emerald-600">{insideVisitors.length} Visitors</div>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-indigo-500 shadow-xs">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-muted-foreground">Approved / Pre-Registered</CardTitle>
+        <Card className="rounded-2xl border-l-4 border-l-indigo-500 shadow-xs">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Approved / Pre-Registered</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-indigo-600">{readyForEntry.length} Ready for Entry</div>
+          <CardContent className="p-4 sm:p-5 pt-0">
+            <div className="text-xl sm:text-2xl font-black font-mono text-indigo-600">{readyForEntry.length} Ready for Entry</div>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-amber-500 shadow-xs">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-muted-foreground">Waiting Resident Approval</CardTitle>
+        <Card className="rounded-2xl border-l-4 border-l-amber-500 shadow-xs">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Waiting Resident Approval</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{awaitingResidentApproval.length} Pending</div>
+          <CardContent className="p-4 sm:p-5 pt-0">
+            <div className="text-xl sm:text-2xl font-black font-mono text-amber-600">{awaitingResidentApproval.length} Pending</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Approved Passes Ready for Entry */}
+      {/* Approved Passes Ready for Entry */}
       {readyForEntry.length > 0 && (
-        <Card className="border-2 border-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/20">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-indigo-600" /> Pre-Approved Visitors Ready at Gate ({readyForEntry.length})
+        <Card className="rounded-2xl border-2 border-indigo-300 bg-indigo-50/40 dark:bg-indigo-950/20 shadow-xs overflow-hidden">
+          <CardHeader className="p-4 sm:p-6 pb-3 border-b">
+            <CardTitle className="text-base sm:text-lg font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-indigo-600 shrink-0" /> Pre-Approved Visitors Ready at Gate ({readyForEntry.length})
             </CardTitle>
-            <CardDescription>Residents have pre-registered or approved these visitors. 1-tap grant entry.</CardDescription>
+            <CardDescription className="text-xs">Residents have pre-registered or approved these visitors. 1-tap grant entry.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="p-4 sm:p-6 space-y-3">
             {readyForEntry.map((v) => (
-              <div key={v.id} className="p-3.5 rounded-xl border bg-white dark:bg-slate-900 flex items-center justify-between gap-4 shadow-xs">
+              <div key={v.id} className="p-3.5 sm:p-4 rounded-2xl border bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 shadow-xs">
                 <div className="flex items-center gap-3">
                   {v.photoUrl ? (
-                    <img src={resolveFileUrl(v.photoUrl)} alt={v.visitorName} className="h-12 w-12 rounded-xl object-cover border" />
+                    <img src={resolveFileUrl(v.photoUrl)} alt={v.visitorName} className="h-12 w-12 rounded-xl object-cover border shrink-0" />
                   ) : (
-                    <div className="h-12 w-12 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 flex items-center justify-center font-bold">
+                    <div className="h-12 w-12 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 flex items-center justify-center font-bold shrink-0">
                       <QrCode className="h-6 w-6" />
                     </div>
                   )}
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-bold text-sm">{v.visitorName}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-bold text-sm text-foreground">{v.visitorName}</p>
                       {v.passCode && (
                         <Badge variant="outline" className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800">
                           #{v.passCode}
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       Visiting: <strong>{v.tenantName || 'Resident'}</strong> • 📞 {v.visitorPhone || v.mobileNumber}
                     </p>
                   </div>
@@ -245,7 +246,7 @@ export default function SecurityGuardDashboardPage() {
                   size="sm"
                   onClick={() => checkInMutation.mutate(v.id)}
                   disabled={checkInMutation.isPending}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl h-9 text-xs sm:text-sm self-end sm:self-auto w-full sm:w-auto shadow-xs"
                 >
                   <CheckCircle2 className="mr-1.5 h-4 w-4" /> Grant Entry
                 </Button>
@@ -256,12 +257,12 @@ export default function SecurityGuardDashboardPage() {
       )}
 
       {/* Active Passes Table (Inside Premises) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-bold">Current Active Visitors Inside Premises</CardTitle>
-          <CardDescription>Visitors verified and currently inside the property.</CardDescription>
+      <Card className="rounded-2xl shadow-xs overflow-hidden">
+        <CardHeader className="p-4 sm:p-6 pb-3 border-b">
+          <CardTitle className="text-base sm:text-lg font-bold">Current Active Visitors Inside Premises</CardTitle>
+          <CardDescription className="text-xs">Visitors verified and currently inside the property.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6">
           {isLoading ? (
             <div className="py-12 text-center text-sm text-muted-foreground">Loading gate passes...</div>
           ) : insideVisitors.length === 0 ? (
@@ -274,19 +275,19 @@ export default function SecurityGuardDashboardPage() {
               {insideVisitors.map((v) => (
                 <div
                   key={v.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border bg-card hover:bg-muted/40 transition"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border bg-card hover:bg-muted/40 transition shadow-xs"
                 >
                   <div className="flex items-center gap-3.5">
                     {v.photoUrl ? (
-                      <img src={resolveFileUrl(v.photoUrl)} alt={v.visitorName} className="h-12 w-12 rounded-xl object-cover border shadow-xs" />
+                      <img src={resolveFileUrl(v.photoUrl)} alt={v.visitorName} className="h-12 w-12 rounded-xl object-cover border shadow-xs shrink-0" />
                     ) : (
-                      <div className="h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                      <div className="h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
                         <User className="h-6 w-6" />
                       </div>
                     )}
                     <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-base">{v.visitorName}</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm sm:text-base text-foreground">{v.visitorName}</span>
                         <Badge className="bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
                           INSIDE
                         </Badge>
@@ -294,15 +295,15 @@ export default function SecurityGuardDashboardPage() {
                       <p className="text-xs text-muted-foreground">
                         Visiting: <strong>{v.tenantName || 'Resident'}</strong> • Phone: {v.visitorPhone || v.mobileNumber || 'N/A'}
                       </p>
-                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" /> Entry: {formatDateTime(v.checkInTime || '')}
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono">
+                        <Clock className="h-3 w-3 shrink-0" /> Entry: {formatDateTime(v.checkInTime || '')}
                       </p>
                     </div>
                   </div>
 
                   <Button
                     size="sm"
-                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9 px-4 shrink-0"
+                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9 px-4 rounded-xl text-xs sm:text-sm self-end sm:self-auto w-full sm:w-auto shadow-xs"
                     onClick={() => exitVisitorMutation.mutate(v.id)}
                     disabled={exitVisitorMutation.isPending}
                   >
@@ -317,35 +318,37 @@ export default function SecurityGuardDashboardPage() {
 
       {/* Incident Modal */}
       <Dialog open={incidentModalOpen} onOpenChange={setIncidentModalOpen}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl p-5 sm:p-6">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-rose-600">
-              <Siren className="h-5 w-5" /> Report Security Incident
+            <DialogTitle className="flex items-center gap-2 text-rose-600 text-base sm:text-lg font-bold">
+              <Siren className="h-5 w-5 shrink-0" /> Report Security Incident
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs">
               Submit an immediate security alert to the Property Manager and Owner.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label>Incident Type *</Label>
+              <Label className="text-xs font-semibold">Incident Type *</Label>
               <Input
                 placeholder="e.g. Unauthorized Entry / Noise Dispute / Gate Damage"
                 value={incidentForm.title}
                 onChange={(e) => setIncidentForm({ ...incidentForm, title: e.target.value })}
+                className="rounded-xl h-10 text-xs sm:text-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Incident Details / Guard Remarks *</Label>
+              <Label className="text-xs font-semibold">Incident Details / Guard Remarks *</Label>
               <Input
                 placeholder="Describe what occurred..."
                 value={incidentForm.notes}
                 onChange={(e) => setIncidentForm({ ...incidentForm, notes: e.target.value })}
+                className="rounded-xl h-10 text-xs sm:text-sm"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIncidentModalOpen(false)}>Cancel</Button>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+            <Button variant="outline" onClick={() => setIncidentModalOpen(false)} className="rounded-xl h-10 w-full sm:w-auto text-xs font-semibold">Cancel</Button>
             <Button
               variant="destructive"
               onClick={() => {
@@ -354,6 +357,7 @@ export default function SecurityGuardDashboardPage() {
                 setIncidentForm({ title: '', severity: 'MEDIUM', notes: '' });
               }}
               disabled={!incidentForm.title}
+              className="rounded-xl h-10 w-full sm:w-auto text-xs font-bold shadow-xs"
             >
               Broadcast Alert
             </Button>

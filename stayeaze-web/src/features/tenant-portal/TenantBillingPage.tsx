@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Receipt, CreditCard, Download, CheckCircle2, AlertCircle, Clock,
   Wallet, ShieldCheck, Printer, ArrowUpRight, Sparkles, Building2,
-  Banknote, Copy, Check, FileCheck, Hourglass, QrCode, FileText, Eye
+  Banknote, Copy, Check, FileCheck, Hourglass, QrCode, FileText, Eye,
+  Zap, Camera, Image as ImageIcon
 } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { formatCurrency, formatDate, numberToWords } from '@/lib/format';
+import { formatCurrency, formatDate, numberToWords, resolveFileUrl } from '@/lib/format';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import api from '@/lib/api';
 import { RefundAccountCard } from './RefundAccountCard';
@@ -32,6 +33,7 @@ export default function TenantBillingPage() {
   const [utrMethod, setUtrMethod] = useState<string>('UPI');
   const [isSubmittingUtr, setIsSubmittingUtr] = useState<boolean>(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [selectedMeterPhoto, setSelectedMeterPhoto] = useState<any>(null);
 
   const { data: overview } = useQuery({
     queryKey: ['tenant-overview'],
@@ -44,6 +46,11 @@ export default function TenantBillingPage() {
       const list = Array.isArray(r.data) ? r.data : (r.data as any).data || [];
       return list;
     }),
+  });
+
+  const { data: utilities = [] } = useQuery({
+    queryKey: ['tenant-utilities'],
+    queryFn: () => api.get('/tenant-portal/utilities').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
   });
 
   function copyToClipboard(text: string, field: string) {
@@ -168,7 +175,7 @@ export default function TenantBillingPage() {
   }, 0));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-6">
       <PageHeader
         title="Rent & Billing"
         description="View your monthly rental invoices, make secure online payments, and download official HRA rent receipts."
@@ -176,69 +183,69 @@ export default function TenantBillingPage() {
       />
 
       {/* 4 Top Financial Metric Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="shadow-xs border-slate-200 dark:border-slate-800">
-          <CardHeader className="pb-2">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="rounded-2xl shadow-xs border-slate-200 dark:border-slate-800">
+          <CardHeader className="p-4 sm:p-5 pb-2">
             <CardDescription className="text-xs font-semibold uppercase">Monthly Rent</CardDescription>
-            <CardTitle className="text-2xl font-extrabold text-slate-900 dark:text-white">
+            <CardTitle className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white font-mono">
               {formatCurrency(Number(overview?.rent || 8000))}
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
+          <CardContent className="p-4 sm:p-5 pt-0 text-xs text-muted-foreground">
             Room {overview?.roomNumber || '101'} • Bed {overview?.bedNumber || 'A'}
           </CardContent>
         </Card>
 
-        <Card className="shadow-xs border-slate-200 dark:border-slate-800">
-          <CardHeader className="pb-2">
+        <Card className="rounded-2xl shadow-xs border-slate-200 dark:border-slate-800">
+          <CardHeader className="p-4 sm:p-5 pb-2">
             <CardDescription className="text-xs font-semibold uppercase">Security Deposit</CardDescription>
-            <CardTitle className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400">
+            <CardTitle className="text-xl sm:text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
               {formatCurrency(Number(overview?.deposit || 10000))}
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-muted-foreground flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-medium">
+          <CardContent className="p-4 sm:p-5 pt-0 text-xs text-muted-foreground flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-medium">
             <ShieldCheck className="h-3.5 w-3.5" /> Refundable at checkout
           </CardContent>
         </Card>
 
-        <Card className="shadow-xs border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 dark:border-emerald-800">
-          <CardHeader className="pb-2">
+        <Card className="rounded-2xl shadow-xs border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 dark:border-emerald-800">
+          <CardHeader className="p-4 sm:p-5 pb-2">
             <CardDescription className="text-xs font-bold uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
-              <Wallet className="h-3.5 w-3.5" /> Advance Rent Credit
+              <Wallet className="h-3.5 w-3.5" /> Advance Credit
             </CardDescription>
-            <CardTitle className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+            <CardTitle className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
               {formatCurrency(Number(overview?.advanceBalance || 0))}
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-emerald-700 dark:text-emerald-300 font-medium">
-            {Number(overview?.advanceBalance || 0) > 0 ? 'Prepaid credit active' : 'No advance rent held'}
+          <CardContent className="p-4 sm:p-5 pt-0 text-xs text-emerald-700 dark:text-emerald-300 font-medium">
+            {Number(overview?.advanceBalance || 0) > 0 ? 'Prepaid credit active' : 'No advance held'}
           </CardContent>
         </Card>
 
-        <Card className="shadow-xs border-slate-200 dark:border-slate-800">
-          <CardHeader className="pb-2">
+        <Card className="rounded-2xl shadow-xs border-slate-200 dark:border-slate-800">
+          <CardHeader className="p-4 sm:p-5 pb-2">
             <CardDescription className="text-xs font-semibold uppercase">Outstanding Due</CardDescription>
-            <CardTitle className={`text-2xl font-extrabold ${totalPending > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
+            <CardTitle className={`text-xl sm:text-2xl font-extrabold font-mono ${totalPending > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
               {formatCurrency(totalPending)}
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
+          <CardContent className="p-4 sm:p-5 pt-0 text-xs text-muted-foreground">
             {totalPending > 0 ? 'Due immediately' : 'All dues cleared'}
           </CardContent>
         </Card>
       </div>
 
       {Number(overview?.advanceBalance) > 0 && (
-        <Card className="border-emerald-300 bg-emerald-50/90 dark:bg-emerald-950/50 dark:border-emerald-800 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between flex-wrap gap-3">
+        <Card className="rounded-2xl border-emerald-300 bg-emerald-50/90 dark:bg-emerald-950/50 dark:border-emerald-800 shadow-xs">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-xs">
+              <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow-xs shrink-0">
                 <Wallet className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
+                <h4 className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2 flex-wrap">
                   Advance Rent Credit: {formatCurrency(Number(overview.advanceBalance))}
-                  <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 font-bold">PREPAID CREDIT</Badge>
+                  <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 font-bold rounded-md">PREPAID CREDIT</Badge>
                 </h4>
                 <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-0.5">
                   You have prepaid advance rent recorded in your account. This credit balance automatically covers your upcoming monthly rental bills.
@@ -250,9 +257,9 @@ export default function TenantBillingPage() {
       )}
 
       {/* Invoices List */}
-      <Card className="shadow-xs border-slate-200 dark:border-slate-800">
-        <CardHeader>
-          <CardTitle className="text-lg font-bold">Monthly Rental Invoices</CardTitle>
+      <Card className="rounded-2xl shadow-xs border-slate-200 dark:border-slate-800 overflow-hidden">
+        <CardHeader className="p-4 sm:p-6 pb-3 border-b">
+          <CardTitle className="text-base sm:text-lg font-bold">Monthly Rental Invoices</CardTitle>
           <CardDescription className="text-xs">All past and current invoices issued for your accommodation</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -311,24 +318,24 @@ export default function TenantBillingPage() {
                         {isPendingApproval && <div className="text-[11px] text-amber-600 font-medium">Approval in progress</div>}
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setSelectedInvoiceForReceipt(inv)}
-                          className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-indigo-700 dark:text-indigo-400 shadow-xs"
+                          className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-indigo-700 dark:text-indigo-400 shadow-xs rounded-xl h-8.5"
                         >
                           <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" />
                           {isPaid ? 'Official HRA Receipt' : 'View Official Invoice'}
                         </Button>
 
                         {!isPaid && !isPendingApproval && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <Button
                               size="sm"
                               disabled={isPaying}
                               onClick={() => handlePayOnline(inv)}
-                              className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xs"
+                              className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-xs rounded-xl h-8.5"
                             >
                               <CreditCard className="mr-1.5 h-3.5 w-3.5" />
                               {isPaying ? 'Connecting...' : 'Pay Online'}
@@ -340,7 +347,7 @@ export default function TenantBillingPage() {
                                 setUtrModalInvoice(inv);
                                 setUtrNumber('');
                               }}
-                              className="border-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
+                              className="border-slate-300 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl h-8.5"
                             >
                               <Banknote className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
                               On-Desk / UTR
@@ -356,7 +363,7 @@ export default function TenantBillingPage() {
                               setUtrModalInvoice(inv);
                               setUtrNumber(inv.paymentReference?.replace('UTR: ', '') || '');
                             }}
-                            className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950 text-xs"
+                            className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950 text-xs rounded-xl h-8.5"
                           >
                             <FileCheck className="mr-1.5 h-3.5 w-3.5" /> Update Proof
                           </Button>
@@ -370,6 +377,135 @@ export default function TenantBillingPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Electric Sub-Meter Transparency & Dial Snapshot Proof */}
+      <Card className="shadow-xs border-amber-200/60 dark:border-amber-900/40 bg-gradient-to-br from-amber-500/5 via-background to-background">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <Zap className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  Electric Sub-Meter Transparency &amp; Dial Photos
+                  <Badge variant="outline" className="border-amber-400/50 text-amber-700 dark:text-amber-300 text-[10px]">
+                    Room {overview?.roomNumber || 'Assigned'}
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Inspect the physical sub-meter dial snapshot and units consumption logged by property management
+                </CardDescription>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {(!utilities || utilities.length === 0) ? (
+            <div className="p-6 text-center text-xs text-muted-foreground">
+              <Zap className="h-8 w-8 mx-auto mb-2 opacity-30 text-amber-500" />
+              No sub-meter readings recorded yet for Room {overview?.roomNumber || ''}. Readings logged by management will appear here with snapshot proofs.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {utilities.map((u: any) => {
+                const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const cycleLabel = u.billingMonth ? `${monthNames[u.billingMonth] || u.billingMonth} ${u.billingYear}` : formatDate(u.readingDate);
+                
+                return (
+                  <div key={u.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-amber-50/20 transition-colors">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-foreground">Cycle: {cycleLabel}</span>
+                        <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10px]">
+                          {u.unitsConsumed || 0} Net Units @ ₹{u.unitRate || 0}/unit
+                        </Badge>
+                        {u.status === 'BILLED' && (
+                          <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">
+                            Added to Invoice
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span>Meter Dial: <strong className="font-mono text-foreground">{u.previousReading || 0} ➔ {u.currentReading || 0}</strong></span>
+                        <span>Logged: {formatDate(u.readingDate)}</span>
+                        {u.freeAllowanceUnits > 0 && (
+                          <span className="text-emerald-600 font-medium">Free Allowance: {u.freeAllowanceUnits} units</span>
+                        )}
+                        <span>Room Total: <strong className="text-foreground">{formatCurrency(Number(u.totalAmount || 0))}</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {u.photoUrl ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedMeterPhoto(u)}
+                          className="border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950 text-amber-700 dark:text-amber-300 text-xs font-semibold gap-1.5 shadow-xs"
+                        >
+                          <Camera className="h-3.5 w-3.5" />
+                          View Meter Dial Photo
+                        </Button>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground italic flex items-center gap-1">
+                          <ImageIcon className="h-3.5 w-3.5 opacity-50" /> No Photo Attached
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Sub-Meter Photo Proof Dialog */}
+      <Dialog open={!!selectedMeterPhoto} onOpenChange={(open) => !open && setSelectedMeterPhoto(null)}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-white dark:bg-slate-950">
+          <DialogHeader className="p-4 border-b bg-muted/30">
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Camera className="h-4 w-4 text-amber-500" />
+              Sub-Meter Dial Snapshot Proof
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Room {selectedMeterPhoto?.roomNumber} • Reading: {selectedMeterPhoto?.previousReading} ➔ {selectedMeterPhoto?.currentReading} ({selectedMeterPhoto?.unitsConsumed} units)
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedMeterPhoto && (
+            <div className="p-4 space-y-3">
+              <div className="rounded-xl overflow-hidden border bg-slate-950 flex items-center justify-center max-h-[65vh]">
+                <img
+                  src={resolveFileUrl(selectedMeterPhoto.photoUrl)}
+                  alt="Sub-meter reading proof"
+                  className="max-h-[60vh] w-full object-contain"
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                <span>Cycle: {selectedMeterPhoto.billingMonth}/{selectedMeterPhoto.billingYear}</span>
+                <span>Date Logged: {formatDate(selectedMeterPhoto.readingDate)}</span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="p-3 bg-muted/20 border-t">
+            {selectedMeterPhoto?.photoUrl && (
+              <a
+                href={resolveFileUrl(selectedMeterPhoto.photoUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full"
+              >
+                <Button variant="outline" size="sm" className="w-full text-xs gap-1.5">
+                  <Eye className="h-3.5 w-3.5" /> Open Full-Size Image
+                </Button>
+              </a>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Security Deposit Refund Destination (Self-Service) */}
       <RefundAccountCard depositAmount={Number(overview?.deposit || 10000)} />
@@ -593,40 +729,40 @@ export default function TenantBillingPage() {
 
       {/* On-Desk / Direct UPI / UTR Submission Dialog */}
       <Dialog open={!!utrModalInvoice} onOpenChange={(o) => !o && setUtrModalInvoice(null)}>
-        <DialogContent className="max-w-md bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold flex items-center gap-2">
-              <Banknote className="h-5 w-5 text-emerald-600" />
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-emerald-600 shrink-0" />
               Submit On-Desk / Direct UPI Payment
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
               Pay via your own UPI app or directly at the reception desk, then submit your transaction reference number (UTR) for manager approval.
             </DialogDescription>
           </DialogHeader>
 
           {utrModalInvoice && (
-            <div className="space-y-4 pt-2">
+            <div className="space-y-4 pt-1">
               {/* Payment Target Box */}
-              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground font-semibold uppercase text-[10px]">Invoice</span>
                   <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{utrModalInvoice.invoiceNumber}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground font-semibold uppercase text-[10px]">Amount to Pay</span>
-                  <span className="text-lg font-black text-slate-900 dark:text-white">{formatCurrency(Number(utrModalInvoice.amountDue || 0))}</span>
+                  <span className="text-lg font-black text-slate-900 dark:text-white font-mono">{formatCurrency(Number(utrModalInvoice.amountDue || 0))}</span>
                 </div>
               </div>
 
               {/* Landlord Payment Instructions */}
-              <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 space-y-2 text-xs">
+              <div className="p-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 space-y-2 text-xs">
                 <div className="font-bold text-[11px] text-indigo-900 dark:text-indigo-300 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <Building2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    {overview?.bankDetails?.propertyName || overview?.propertyName || 'Property'} Bank &amp; UPI Details
+                    {overview?.bankDetails?.propertyName || overview?.propertyName || 'Property'} Bank &amp; UPI
                   </span>
-                  <Badge variant="outline" className="text-[9px] bg-white dark:bg-slate-900 border-indigo-200 text-indigo-700 font-semibold">
-                    {overview?.bankDetails?.accountName || 'Official Account'}
+                  <Badge variant="outline" className="text-[9px] bg-white dark:bg-slate-900 border-indigo-200 text-indigo-700 font-semibold rounded-md">
+                    {overview?.bankDetails?.accountName || 'Official'}
                   </Badge>
                 </div>
                 
@@ -634,19 +770,19 @@ export default function TenantBillingPage() {
                   {overview?.bankDetails?.accountName && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Beneficiary:</span>
-                      <span className="font-semibold text-slate-900 dark:text-white">{overview.bankDetails.accountName}</span>
+                      <span className="font-semibold text-slate-900 dark:text-white truncate">{overview.bankDetails.accountName}</span>
                     </div>
                   )}
 
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">UPI ID:</span>
-                    <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 dark:text-white">
-                      <span>{overview?.bankDetails?.upiId || 'Contact Desk for QR'}</span>
+                    <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 dark:text-white truncate">
+                      <span className="truncate">{overview?.bankDetails?.upiId || 'Contact Desk for QR'}</span>
                       {overview?.bankDetails?.upiId && (
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-5 w-5"
+                          className="h-5 w-5 shrink-0"
                           onClick={() => copyToClipboard(overview?.bankDetails?.upiId, 'UPI ID')}
                         >
                           {copiedField === 'UPI ID' ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
@@ -657,13 +793,13 @@ export default function TenantBillingPage() {
 
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Account No:</span>
-                    <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 dark:text-white">
-                      <span>{overview?.bankDetails?.accountNumber || 'Contact Reception Desk'}</span>
+                    <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 dark:text-white truncate">
+                      <span className="truncate">{overview?.bankDetails?.accountNumber || 'Contact Reception Desk'}</span>
                       {overview?.bankDetails?.accountNumber && overview?.bankDetails?.accountNumber !== 'Contact Reception Desk' && (
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-5 w-5"
+                          className="h-5 w-5 shrink-0"
                           onClick={() => copyToClipboard(overview?.bankDetails?.accountNumber, 'Account Number')}
                         >
                           {copiedField === 'Account Number' ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
@@ -680,7 +816,7 @@ export default function TenantBillingPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-5 w-5"
+                          className="h-5 w-5 shrink-0"
                           onClick={() => copyToClipboard(overview?.bankDetails?.ifsc, 'IFSC Code')}
                         >
                           {copiedField === 'IFSC Code' ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
@@ -692,7 +828,7 @@ export default function TenantBillingPage() {
                   {overview?.bankDetails?.bankName && overview?.bankDetails?.bankName !== 'Primary Bank Account' && (
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5">
                       <span>Bank:</span>
-                      <span>{overview.bankDetails.bankName}</span>
+                      <span className="truncate">{overview.bankDetails.bankName}</span>
                     </div>
                   )}
                 </div>
@@ -703,13 +839,13 @@ export default function TenantBillingPage() {
                 <div className="space-y-1">
                   <Label htmlFor="paymentMethod" className="text-xs font-semibold">Payment Mode</Label>
                   <Select value={utrMethod} onValueChange={setUtrMethod}>
-                    <SelectTrigger id="paymentMethod" className="h-9 text-xs">
+                    <SelectTrigger id="paymentMethod" className="h-10 rounded-xl text-xs sm:text-sm">
                       <SelectValue placeholder="Select Payment Mode" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="UPI">UPI App (GPay, PhonePe, Paytm, BHIM)</SelectItem>
-                      <SelectItem value="BANK_TRANSFER">Direct Bank Transfer (IMPS / NEFT / RTGS)</SelectItem>
-                      <SelectItem value="ON_DESK">Cash Handed Over at Reception Desk</SelectItem>
+                      <SelectItem value="UPI" className="text-xs">UPI App (GPay, PhonePe, Paytm, BHIM)</SelectItem>
+                      <SelectItem value="BANK_TRANSFER" className="text-xs">Direct Bank Transfer (IMPS / NEFT / RTGS)</SelectItem>
+                      <SelectItem value="ON_DESK" className="text-xs">Cash Handed Over at Reception Desk</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -721,7 +857,7 @@ export default function TenantBillingPage() {
                   <Input
                     id="utrNumber"
                     placeholder={utrMethod === 'ON_DESK' ? 'e.g. Handed to Receptionist John' : 'e.g. 423987123456 or TXN98765432'}
-                    className="h-9 text-xs font-mono"
+                    className="h-10 rounded-xl text-xs sm:text-sm font-mono"
                     value={utrNumber}
                     onChange={(e) => setUtrNumber(e.target.value)}
                   />
@@ -733,21 +869,19 @@ export default function TenantBillingPage() {
                 </div>
               </div>
 
-              <DialogFooter className="pt-2">
+              <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
                 <Button
                   variant="outline"
-                  size="sm"
+                  className="rounded-xl h-10 w-full sm:w-auto text-xs"
                   onClick={() => setUtrModalInvoice(null)}
                   disabled={isSubmittingUtr}
-                  className="text-xs"
                 >
                   Cancel
                 </Button>
                 <Button
-                  size="sm"
+                  className="rounded-xl h-10 w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs"
                   onClick={handleSubmitUtr}
                   disabled={isSubmittingUtr || !utrNumber.trim()}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs"
                 >
                   {isSubmittingUtr ? 'Submitting...' : 'Submit for Verification'}
                 </Button>

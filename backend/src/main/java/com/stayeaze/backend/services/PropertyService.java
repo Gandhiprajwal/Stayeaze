@@ -52,59 +52,69 @@ public class PropertyService {
     public Property populatePropertyStats(Property p) {
         if (p == null) return null;
         try {
-            List<com.stayeaze.backend.models.Building> buildings = buildingRepository.findByProperty(p);
-            if (buildings == null || buildings.isEmpty()) {
-                if (p.getTotalBeds() == null) p.setTotalBeds(0);
-                if (p.getOccupiedBeds() == null) p.setOccupiedBeds(0);
-                if (p.getTotalRooms() == null) p.setTotalRooms(0);
-                if (p.getTotalBuildings() == null) p.setTotalBuildings(0);
-                return p;
+            List<Object[]> rows = bedRepository.getMetricsByPropertyIdsNative(List.of(p.getId()));
+            if (rows != null && !rows.isEmpty() && rows.get(0) != null) {
+                Object[] r = rows.get(0);
+                p.setTotalBuildings(r[1] != null ? ((Number) r[1]).intValue() : 0);
+                p.setTotalRooms(r[2] != null ? ((Number) r[2]).intValue() : 0);
+                p.setTotalBeds(r[3] != null ? ((Number) r[3]).intValue() : 0);
+                p.setOccupiedBeds(r[4] != null ? ((Number) r[4]).intValue() : 0);
+            } else {
+                p.setTotalBuildings(0);
+                p.setTotalRooms(0);
+                p.setTotalBeds(0);
+                p.setOccupiedBeds(0);
             }
-
-            int activeBuildings = 0;
-            int totalRooms = 0;
-            int totalBeds = 0;
-            int occupiedBeds = 0;
-
-            for (com.stayeaze.backend.models.Building b : buildings) {
-                if (b.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(b.getStatus())) {
-                    activeBuildings++;
-                    List<com.stayeaze.backend.models.Floor> floors = floorRepository.findByBuilding(b);
-                    for (com.stayeaze.backend.models.Floor f : floors) {
-                        if (f.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(f.getStatus())) {
-                            List<com.stayeaze.backend.models.Room> rooms = roomRepository.findByFloor(f);
-                            for (com.stayeaze.backend.models.Room r : rooms) {
-                                if (r.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(r.getStatus())) {
-                                    totalRooms++;
-                                    List<com.stayeaze.backend.models.Bed> beds = bedRepository.findByRoomId(r.getId());
-                                    int bCount = beds.size();
-                                    if (bCount == 0 && r.getSharing() != null && r.getSharing() > 0) {
-                                        bCount = r.getSharing();
-                                    }
-                                    totalBeds += bCount;
-                                    for (com.stayeaze.backend.models.Bed bed : beds) {
-                                        if ("OCCUPIED".equalsIgnoreCase(bed.getStatus())) {
-                                            occupiedBeds++;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            p.setTotalBuildings(activeBuildings);
-            p.setTotalRooms(totalRooms);
-            p.setTotalBeds(totalBeds);
-            p.setOccupiedBeds(occupiedBeds);
         } catch (Exception e) {
             if (p.getTotalBeds() == null) p.setTotalBeds(0);
             if (p.getOccupiedBeds() == null) p.setOccupiedBeds(0);
+            if (p.getTotalRooms() == null) p.setTotalRooms(0);
+            if (p.getTotalBuildings() == null) p.setTotalBuildings(0);
         }
         return p;
     }
 
+    public List<Property> populatePropertiesStats(List<Property> props) {
+        if (props == null || props.isEmpty()) return props;
+        List<UUID> ids = props.stream().map(Property::getId).filter(Objects::nonNull).collect(Collectors.toList());
+        if (ids.isEmpty()) return props;
+
+        try {
+            List<Object[]> rows = bedRepository.getMetricsByPropertyIdsNative(ids);
+            Map<UUID, int[]> metricsMap = new HashMap<>();
+            if (rows != null) {
+                for (Object[] r : rows) {
+                    if (r == null || r[0] == null) continue;
+                    UUID pId = UUID.fromString(r[0].toString());
+                    int bldgs = r[1] != null ? ((Number) r[1]).intValue() : 0;
+                    int rms = r[2] != null ? ((Number) r[2]).intValue() : 0;
+                    int bds = r[3] != null ? ((Number) r[3]).intValue() : 0;
+                    int occ = r[4] != null ? ((Number) r[4]).intValue() : 0;
+                    metricsMap.put(pId, new int[]{bldgs, rms, bds, occ});
+                }
+            }
+
+            for (Property p : props) {
+                int[] m = metricsMap.get(p.getId());
+                if (m != null) {
+                    p.setTotalBuildings(m[0]);
+                    p.setTotalRooms(m[1]);
+                    p.setTotalBeds(m[2]);
+                    p.setOccupiedBeds(m[3]);
+                } else {
+                    p.setTotalBuildings(0);
+                    p.setTotalRooms(0);
+                    p.setTotalBeds(0);
+                    p.setOccupiedBeds(0);
+                }
+            }
+        } catch (Exception e) {
+            props.forEach(this::populatePropertyStats);
+        }
+        return props;
+    }
+
+    @Cacheable(value = "propertyOverallStats", key = "'p:' + #propertyId + ':o:' + #orgId")
     @Transactional(readOnly = true)
     public Map<String, Object> getPropertyOverallStats(UUID propertyId, UUID orgId) {
         List<Object[]> rows = bedRepository.getOverallMetricsAggregateNative(propertyId, orgId);
@@ -215,9 +225,27 @@ public class PropertyService {
         return views.stream().map(MinimalPropertyDTO::fromProjection).collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    @Cacheable(value = "propertySummaries", key = "#organization != null ? #organization.id.toString() : 'all_super_admin'")
+    public List<com.stayeaze.backend.payload.response.PropertySummaryDTO> getPropertySummariesByOrganization(Organization organization) {
+        List<Property> props;
+        if (organization == null) {
+            props = propertyRepository.findAllSuperAdmin();
+        } else {
+            props = propertyRepository.findByOrganizationIdNative(organization.getId());
+        }
+        if (props == null || props.isEmpty()) return new ArrayList<>();
+        props = populatePropertiesStats(props);
+        return props.stream()
+                .map(com.stayeaze.backend.payload.response.PropertySummaryDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
     @Caching(evict = {
         @CacheEvict(value = "propertyDtos", allEntries = true),
-        @CacheEvict(value = "minimalProperties", allEntries = true)
+        @CacheEvict(value = "propertySummaries", allEntries = true),
+        @CacheEvict(value = "minimalProperties", allEntries = true),
+        @CacheEvict(value = "propertyOverallStats", allEntries = true)
     })
     public Property saveProperty(Property property) {
         return propertyRepository.save(property);
@@ -225,7 +253,9 @@ public class PropertyService {
 
     @Caching(evict = {
         @CacheEvict(value = "propertyDtos", allEntries = true),
-        @CacheEvict(value = "minimalProperties", allEntries = true)
+        @CacheEvict(value = "propertySummaries", allEntries = true),
+        @CacheEvict(value = "minimalProperties", allEntries = true),
+        @CacheEvict(value = "propertyOverallStats", allEntries = true)
     })
     public void deleteProperty(UUID propertyId) {
         propertyRepository.deleteById(propertyId);

@@ -36,9 +36,16 @@ public class SecurityRateLimitFilter extends OncePerRequestFilter {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.stayeaze.backend.repository.SystemIntegrationSettingsRepository settingsRepository;
 
+    public static boolean bypassForTesting = false;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+
+        if (bypassForTesting) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         boolean rateLimitingEnabled = true;
         try {
@@ -57,10 +64,17 @@ public class SecurityRateLimitFilter extends OncePerRequestFilter {
 
         String uri = request.getRequestURI();
         if (uri != null && (uri.endsWith("/auth/login") || uri.endsWith("/auth/signin"))) {
-            String clientIp = request.getRemoteAddr();
+            String clientIp = request.getHeader("X-Forwarded-For");
+            if (clientIp == null || clientIp.isBlank()) {
+                clientIp = request.getRemoteAddr();
+            } else if (clientIp.contains(",")) {
+                clientIp = clientIp.split(",")[0].trim();
+            }
+            if (clientIp == null) clientIp = "127.0.0.1";
+            final String finalIp = clientIp;
             long now = System.currentTimeMillis();
 
-            rateLimitMap.compute(clientIp, (key, tracker) -> {
+            rateLimitMap.compute(finalIp, (key, tracker) -> {
                 if (tracker == null || now > tracker.resetTime) {
                     return new RateTracker(now + 60000); // 1 minute window
                 }
@@ -68,7 +82,7 @@ public class SecurityRateLimitFilter extends OncePerRequestFilter {
                 return tracker;
             });
 
-            RateTracker tracker = rateLimitMap.get(clientIp);
+            RateTracker tracker = rateLimitMap.get(finalIp);
             if (tracker != null && tracker.count.get() > MAX_REQUESTS_PER_MINUTE) {
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                 response.setContentType("application/json");

@@ -728,19 +728,19 @@ export default function SubscribersPage() {
   };
 
   return (
-    <div className="space-y-6 pb-12 max-w-[1600px] mx-auto px-1 sm:px-2">
+    <div className="space-y-6 pb-12 sm:pb-6 max-w-[1600px] mx-auto px-1 sm:px-2">
       {/* Header with Export & Refresh */}
       <PageHeader
         title="SaaS Subscriber Organizations"
         description="Multi-tenant governance hub: inspect subscriber organizations, property portfolios, staff directories, bed capacity, and plan quotas."
         icon={Building2}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => exportToCSV('saas-organizations', rawSubscribers)}
-              className="shadow-xs hover:bg-muted font-semibold text-xs h-9 px-3"
+              className="shadow-xs hover:bg-muted font-semibold text-xs h-9 px-3 rounded-xl"
             >
               <Download className="mr-1.5 h-4 w-4" /> Export CSV
             </Button>
@@ -748,7 +748,7 @@ export default function SubscribersPage() {
               variant="outline"
               size="sm"
               onClick={() => queryClient.invalidateQueries({ queryKey: ['super-admin-subscribers'] })}
-              className="shadow-xs h-9 w-9 p-0"
+              className="shadow-xs h-9 w-9 p-0 rounded-xl"
               title="Refresh Data"
             >
               <RefreshCw className="h-4 w-4" />
@@ -758,113 +758,115 @@ export default function SubscribersPage() {
       />
 
       {/* KPI Cards with Clean Typography & Symmetrical Padding */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="rounded-xl p-4 bg-card border shadow-xs flex items-center justify-between">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-3.5">
+        <div className="rounded-2xl p-4 sm:p-5 bg-card border shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Organizations</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Organizations</p>
             {statsLoading ? (
               <div className="h-7 w-16 rounded-md bg-muted animate-pulse mt-1" />
             ) : (
-              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{totalSubscribers ?? '—'}</p>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">{totalSubscribers ?? '—'}</p>
             )}
-            <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">Active workspaces</p>
+            <p className="text-[10px] sm:text-[11px] text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">Active workspaces</p>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-100 dark:border-indigo-900/50 shrink-0">
-            <Building2 className="h-5 w-5" />
+          <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-100 dark:border-indigo-900/50 shrink-0">
+            <Building2 className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         </div>
 
-        <div className="rounded-xl p-4 bg-card border shadow-xs flex items-center justify-between">
+        <div className="rounded-2xl p-4 sm:p-5 bg-card border shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Active Clients</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Active Clients</p>
             {statsLoading ? (
               <div className="h-7 w-12 rounded-md bg-muted animate-pulse mt-1" />
             ) : (
-              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{activeSubscribers ?? '—'}</p>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">{activeSubscribers ?? '—'}</p>
             )}
-            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">Paying subscribers</p>
+            <p className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">Paying subscribers</p>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-100 dark:border-emerald-900/50 shrink-0">
-            <CheckCircle2 className="h-5 w-5" />
+          <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-100 dark:border-emerald-900/50 shrink-0">
+            <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         </div>
 
-        <div className="rounded-xl p-4 bg-card border shadow-xs flex items-center justify-between">
+        <div className="rounded-2xl p-4 sm:p-5 bg-card border shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">14-Day Trials</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">14-Day Trials</p>
             {statsLoading ? (
               <div className="h-7 w-10 rounded-md bg-muted animate-pulse mt-1" />
             ) : (
-              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{trialSubscribers ?? '—'}</p>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">{trialSubscribers ?? '—'}</p>
             )}
-            <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">Trial conversions</p>
+            <p className="text-[10px] sm:text-[11px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">Trial conversions</p>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-100 dark:border-amber-900/50 shrink-0">
-            <Sparkles className="h-5 w-5" />
+          <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-100 dark:border-amber-900/50 shrink-0">
+            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         </div>
 
-        <div className="rounded-xl p-4 bg-card border shadow-xs flex items-center justify-between">
+        <div className="rounded-2xl p-4 sm:p-5 bg-card border shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Properties</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Properties</p>
             {statsLoading ? (
               <div className="h-7 w-12 rounded-md bg-muted animate-pulse mt-1" />
             ) : (
-              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{totalProperties ?? '—'}</p>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">{totalProperties ?? '—'}</p>
             )}
-            <p className="text-[11px] text-blue-600 dark:text-blue-400 font-medium mt-0.5">
-              {statsLoading ? '…' : `${totalBeds ?? '—'} total beds`}
+            <p className="text-[10px] sm:text-[11px] text-blue-600 dark:text-blue-400 font-medium mt-0.5">
+              {statsLoading ? '…' : `${totalBeds ?? '—'} beds`}
             </p>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-100 dark:border-blue-900/50 shrink-0">
-            <Layers className="h-5 w-5" />
+          <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-100 dark:border-blue-900/50 shrink-0">
+            <Layers className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         </div>
 
-        <div className="rounded-xl p-4 bg-card border shadow-xs flex items-center justify-between">
+        <div className="col-span-2 sm:col-span-1 rounded-2xl p-4 sm:p-5 bg-card border shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Monthly MRR</p>
+            <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Monthly MRR</p>
             {statsLoading ? (
               <div className="h-7 w-20 rounded-md bg-muted animate-pulse mt-1" />
             ) : (
-              <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{totalSaaSRev != null ? formatCurrency(totalSaaSRev) : '—'}</p>
+              <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono">{totalSaaSRev != null ? formatCurrency(totalSaaSRev) : '—'}</p>
             )}
-            <p className="text-[11px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">Recurring revenue</p>
+            <p className="text-[10px] sm:text-[11px] text-purple-600 dark:text-purple-400 font-medium mt-0.5">Recurring revenue</p>
           </div>
-          <div className="h-11 w-11 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-100 dark:border-purple-900/50 shrink-0">
-            <Wallet className="h-5 w-5" />
+          <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-100 dark:border-purple-900/50 shrink-0">
+            <Wallet className="h-4 w-4 sm:h-5 sm:w-5" />
           </div>
         </div>
       </div>
 
       {/* Top Tab Switcher: Subscribers Directory vs Validity Extension Approvals Hub vs Refunds & Diagnostics (Super Admin Only) */}
       {isSuperAdmin && (
-        <div className="flex items-center justify-between border-b pb-3 pt-1">
+        <div className="border-b pb-3 pt-1 w-full">
           <Tabs value={mainTab} onValueChange={(v: any) => setMainTab(v)} className="w-full">
-            <TabsList className="grid w-full sm:w-auto grid-cols-3 max-w-xl h-10 bg-muted/60 p-1 rounded-xl">
-              <TabsTrigger value="subscribers" className="text-xs font-bold gap-2">
-                <Building2 className="h-4 w-4 text-indigo-600" />
-                Subscribers ({totalSubscribers})
-              </TabsTrigger>
-              <TabsTrigger value="approvals" className="text-xs font-bold gap-2 relative">
-                <Clock className="h-4 w-4 text-amber-600" />
-                Approvals Hub
-                {pendingRequests.length > 0 && (
-                  <Badge className="bg-amber-600 hover:bg-amber-600 text-white text-[10px] px-1.5 py-0 h-4 rounded-full">
-                    {pendingRequests.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="refunds" className="text-xs font-bold gap-2 relative">
-                <Receipt className="h-4 w-4 text-emerald-600" />
-                Refunds & Diagnostics
-                {onboardingFailures.length > 0 && (
-                  <Badge className="bg-rose-600 hover:bg-rose-600 text-white text-[10px] px-1.5 py-0 h-4 rounded-full">
-                    {onboardingFailures.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-            </TabsList>
+            <div className="w-full overflow-x-auto pb-1 scrollbar-none">
+              <TabsList className="flex items-center gap-1.5 w-max min-w-full sm:w-auto h-11 bg-muted/60 p-1 rounded-xl">
+                <TabsTrigger value="subscribers" className="text-xs font-bold gap-2 px-3.5 py-1.5 rounded-lg shrink-0 whitespace-nowrap">
+                  <Building2 className="h-4 w-4 text-indigo-600 shrink-0" />
+                  <span>Subscribers ({totalSubscribers})</span>
+                </TabsTrigger>
+                <TabsTrigger value="approvals" className="text-xs font-bold gap-2 px-3.5 py-1.5 rounded-lg shrink-0 whitespace-nowrap relative">
+                  <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>Approvals Hub</span>
+                  {pendingRequests.length > 0 && (
+                    <Badge className="bg-amber-600 hover:bg-amber-600 text-white text-[10px] px-1.5 py-0 h-4 rounded-full ml-1">
+                      {pendingRequests.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="refunds" className="text-xs font-bold gap-2 px-3.5 py-1.5 rounded-lg shrink-0 whitespace-nowrap relative">
+                  <Receipt className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>Refunds &amp; Diagnostics</span>
+                  {onboardingFailures.length > 0 && (
+                    <Badge className="bg-rose-600 hover:bg-rose-600 text-white text-[10px] px-1.5 py-0 h-4 rounded-full ml-1">
+                      {onboardingFailures.length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </div>
           </Tabs>
         </div>
       )}
@@ -1012,7 +1014,7 @@ export default function SubscribersPage() {
         </div>
 
         {/* Filter Pills with Generous Sizing, Optimal Padding & Modern Pill Badges */}
-        <div className="flex items-center gap-2.5 overflow-x-auto pt-2 pb-1 scrollbar-none">
+        <div className="flex items-center gap-2.5 overflow-x-auto pt-2 pb-1 scrollbar-none w-full">
           {[
             { id: 'ALL', label: 'All Organizations', count: totalSubscribers },
             { id: 'PENDING_APPROVAL', label: '⏳ Pending Approval', count: pendingApprovals },
@@ -1027,7 +1029,7 @@ export default function SubscribersPage() {
                 setStatusFilter(pill.id);
                 setCurrentPage(1);
               }}
-              className={`h-9.5 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap shadow-xs ${
+              className={`h-9.5 px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap shadow-xs shrink-0 ${
                 statusFilter === pill.id
                   ? 'bg-indigo-600 text-white ring-2 ring-indigo-600/20 shadow-sm'
                   : 'bg-muted/60 hover:bg-muted text-slate-600 dark:text-slate-300 hover:text-foreground border border-border/40'
@@ -1037,7 +1039,7 @@ export default function SubscribersPage() {
                 <RefreshCw className="h-3 w-3 animate-spin shrink-0" />
               ) : null}
               {pill.label}
-              <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-black shrink-0 ${
                 statusFilter === pill.id ? 'bg-white/20 text-white' : 'bg-background/80 text-muted-foreground border border-border/30'
               }`}>
                 {statsLoading ? (
@@ -1070,31 +1072,31 @@ export default function SubscribersPage() {
         </div>
       ) : viewMode === 'grid' ? (
         /* 1. BALANCED GRID CARD VIEW */
-        <div className="grid gap-4.5 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-5 sm:gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
           {paginatedSubscribers.map((s) => {
             const occupancyPct = s.totalBeds > 0 ? Math.round(((s.occupiedBeds || 0) / s.totalBeds) * 100) : 0;
             return (
               <div
                 key={s.id}
-                className="group rounded-xl border bg-card p-5 shadow-xs hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-800 transition-all flex flex-col justify-between"
+                className="group rounded-2xl border bg-card p-5 sm:p-6 shadow-xs hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-800 transition-all flex flex-col justify-between"
               >
                 <div className="space-y-3.5">
                   {/* Top Header Row */}
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-black text-base flex items-center justify-center shadow-xs shrink-0">
                         {initials(s.name) || 'PG'}
                       </div>
-                      <div className="space-y-0.5 min-w-0">
+                      <div className="space-y-0.5 min-w-0 flex-1">
                         <button
                           onClick={() => openOverview(s)}
-                          className="font-bold text-sm sm:text-base text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 text-left transition truncate max-w-[200px] block"
+                          className="font-bold text-sm sm:text-base text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 text-left transition truncate block w-full"
                           title={s.name}
                         >
                           {s.name}
                         </button>
                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
-                          <span className="truncate max-w-[150px]">{s.subdomain}.stayeaze.com</span>
+                          <span className="truncate max-w-[130px] sm:max-w-[170px]">{s.subdomain}.stayeaze.com</span>
                           <button
                             onClick={() => copyToClipboard(`${s.subdomain}.stayeaze.com`, 'Subdomain URL')}
                             className="hover:text-indigo-600 shrink-0"
@@ -1117,7 +1119,7 @@ export default function SubscribersPage() {
                   </div>
 
                   {/* Plan & MRR Pill */}
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border text-xs">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-muted/40 border text-xs gap-2">
                     <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 truncate">
                       <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                       <span className="truncate">{s.planName || 'Starter PG Plan'}</span>
@@ -1128,10 +1130,10 @@ export default function SubscribersPage() {
                   </div>
 
                   {/* Capacity & Live Occupancy Gauge */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs">
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
                       <span className="font-medium text-muted-foreground">Capacity Occupancy</span>
-                      <span className="font-bold text-slate-900 dark:text-white">
+                      <span className="font-bold text-slate-900 dark:text-white shrink-0">
                         {s.occupiedBeds || 0} / {s.totalBeds || 0} Beds ({occupancyPct}%)
                       </span>
                     </div>
@@ -1139,15 +1141,15 @@ export default function SubscribersPage() {
                   </div>
 
                   {/* Properties & Owner Details */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/30 border">
                       <Building2 className="h-4 w-4 text-indigo-500 shrink-0" />
                       <div className="min-w-0">
                         <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{s.propertyCount || 1} Property(s)</p>
                         <p className="text-[10px] text-muted-foreground">Branches</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/30 border">
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/30 border">
                       <Users className="h-4 w-4 text-emerald-500 shrink-0" />
                       <div className="min-w-0">
                         <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{s.ownerName || 'Owner'}</p>
@@ -1171,7 +1173,7 @@ export default function SubscribersPage() {
                         size="sm"
                         onClick={() => openVerificationModal(s)}
                         disabled={approveSubscriberMut.isPending}
-                        className="flex-1 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs h-9 px-3 rounded-xl shadow-md shadow-emerald-600/20 hover:shadow-emerald-600/30 transition-all active:scale-[0.98]"
+                        className="flex-1 bg-gradient-to-r from-emerald-600 via-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs h-9.5 px-3 rounded-xl shadow-md shadow-emerald-600/20 hover:shadow-emerald-600/30 transition-all active:scale-[0.98]"
                       >
                         <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Approve &amp; Activate
                       </Button>
@@ -1180,7 +1182,7 @@ export default function SubscribersPage() {
                         variant="outline"
                         onClick={() => openRejectionModal(s)}
                         disabled={rejectSubscriberMut.isPending}
-                        className="h-9 px-3 text-xs font-bold rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-all active:scale-[0.98]"
+                        className="h-9.5 px-3 text-xs font-bold rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50/50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-all active:scale-[0.98]"
                       >
                         <XCircle className="mr-1 h-3.5 w-3.5" /> Reject
                       </Button>
@@ -1188,7 +1190,7 @@ export default function SubscribersPage() {
                         size="sm"
                         variant="outline"
                         onClick={() => openOverview(s)}
-                        className="h-9 px-2.5 rounded-xl text-xs"
+                        className="h-9.5 px-2.5 rounded-xl text-xs"
                         title="Review Application Details"
                       >
                         <Eye className="h-4 w-4" />
@@ -1196,13 +1198,14 @@ export default function SubscribersPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="pt-4 mt-4 border-t border-border/50 flex items-center justify-between gap-2.5">
+                  <div className="pt-3.5 mt-4 border-t border-border/60 flex items-center justify-between gap-2">
                     <Button
                       size="sm"
                       onClick={() => openOverview(s)}
-                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9 px-3.5 rounded-xl shadow-xs transition-all hover:shadow"
+                      className="flex-1 min-w-0 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9 px-3 rounded-xl shadow-xs transition-all hover:shadow flex items-center justify-center gap-1.5"
                     >
-                      <Eye className="mr-1.5 h-3.5 w-3.5" /> View Portfolio
+                      <Eye className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">View Portfolio</span>
                     </Button>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
@@ -1330,36 +1333,36 @@ export default function SubscribersPage() {
                         </Button>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                         <Button
                           size="sm"
                           onClick={() => openOverview(s)}
-                          className="text-xs h-8 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-xs"
+                          className="text-xs h-8.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xs inline-flex items-center justify-center gap-1.5 shrink-0"
                         >
-                          <Eye className="mr-1 h-3.5 w-3.5" /> View Portfolio
+                          <Eye className="h-3.5 w-3.5 shrink-0" /> View Portfolio
                         </Button>
                         <button
                           type="button"
                           onClick={() => openBrandingModal(s)}
-                          className="h-8 w-8 rounded-lg border border-purple-200 text-purple-700 bg-purple-50/60 hover:bg-purple-100 flex items-center justify-center transition"
+                          className="h-8.5 w-8.5 rounded-xl border border-purple-200 dark:border-purple-900/60 text-purple-700 dark:text-purple-300 bg-purple-50/60 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 flex items-center justify-center transition shadow-2xs shrink-0"
                           title="White-Label Branding"
                         >
-                          <Palette className="h-3.5 w-3.5 text-purple-600" />
+                          <Palette className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
                         </button>
                         <button
                           type="button"
                           onClick={() => setExtendTarget(s)}
-                          className="h-8 w-8 rounded-lg border border-blue-200 text-blue-700 bg-blue-50/60 hover:bg-blue-100 flex items-center justify-center transition"
+                          className="h-8.5 w-8.5 rounded-xl border border-blue-200 dark:border-blue-900/60 text-blue-700 dark:text-blue-300 bg-blue-50/60 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition shadow-2xs shrink-0"
                           title="Extend Validity"
                         >
-                          <Clock className="h-3.5 w-3.5 text-blue-500" />
+                          <Clock className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
                         </button>
                         <button
                           type="button"
                           onClick={() => impersonateMut.mutate(s.id)}
                           disabled={impersonateMut.isPending}
-                          className="h-8 w-8 rounded-lg border bg-muted/40 hover:bg-muted text-slate-600 hover:text-blue-600 flex items-center justify-center transition disabled:opacity-50"
-                          title="Support Login"
+                          className="h-8.5 w-8.5 rounded-xl border border-border bg-muted/40 hover:bg-muted text-slate-600 dark:text-slate-300 hover:text-indigo-600 flex items-center justify-center transition disabled:opacity-50 shadow-2xs shrink-0"
+                          title="Support Diagnostic Login"
                         >
                           <LogIn className="h-3.5 w-3.5" />
                         </button>
@@ -1440,11 +1443,11 @@ export default function SubscribersPage() {
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap overflow-x-auto w-full sm:w-auto scrollbar-none pb-1">
             <Button
               size="sm"
               variant={approvalStatusFilter === 'PENDING' ? 'default' : 'outline'}
-              className={approvalStatusFilter === 'PENDING' ? 'bg-amber-600 hover:bg-amber-700 text-white text-xs h-8' : 'text-xs h-8'}
+              className={approvalStatusFilter === 'PENDING' ? 'bg-amber-600 hover:bg-amber-700 text-white text-xs h-8.5 rounded-xl font-bold px-3 shrink-0' : 'text-xs h-8.5 rounded-xl font-medium px-3 shrink-0'}
               onClick={() => setApprovalStatusFilter('PENDING')}
             >
               Pending ({pendingRequests.length})
@@ -1452,7 +1455,7 @@ export default function SubscribersPage() {
             <Button
               size="sm"
               variant={approvalStatusFilter === 'APPROVED' ? 'default' : 'outline'}
-              className={approvalStatusFilter === 'APPROVED' ? 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8' : 'text-xs h-8'}
+              className={approvalStatusFilter === 'APPROVED' ? 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8.5 rounded-xl font-bold px-3 shrink-0' : 'text-xs h-8.5 rounded-xl font-medium px-3 shrink-0'}
               onClick={() => setApprovalStatusFilter('APPROVED')}
             >
               Approved
@@ -1460,7 +1463,7 @@ export default function SubscribersPage() {
             <Button
               size="sm"
               variant={approvalStatusFilter === 'REJECTED' ? 'default' : 'outline'}
-              className={approvalStatusFilter === 'REJECTED' ? 'bg-rose-600 hover:bg-rose-700 text-white text-xs h-8' : 'text-xs h-8'}
+              className={approvalStatusFilter === 'REJECTED' ? 'bg-rose-600 hover:bg-rose-700 text-white text-xs h-8.5 rounded-xl font-bold px-3 shrink-0' : 'text-xs h-8.5 rounded-xl font-medium px-3 shrink-0'}
               onClick={() => setApprovalStatusFilter('REJECTED')}
             >
               Rejected
@@ -1468,7 +1471,7 @@ export default function SubscribersPage() {
             <Button
               size="sm"
               variant={approvalStatusFilter === 'ALL' ? 'default' : 'outline'}
-              className="text-xs h-8"
+              className="text-xs h-8.5 rounded-xl font-medium px-3 shrink-0"
               onClick={() => setApprovalStatusFilter('ALL')}
             >
               All Requests
@@ -2166,35 +2169,35 @@ export default function SubscribersPage() {
 
       {/* 1. FULL ORGANIZATION INTELLIGENCE DOSSIER (MODAL) */}
       <Dialog open={!!selectedOrgId} onOpenChange={(open) => !open && setSelectedOrgId(null)}>
-        <DialogContent className="max-w-4xl max-h-[92vh] p-0 rounded-2xl overflow-hidden border bg-card gap-0 flex flex-col shadow-2xl" hideCloseButton>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-4xl max-h-[88vh] p-0 rounded-2xl overflow-hidden border bg-card gap-0 flex flex-col shadow-2xl" hideCloseButton>
           {/* Hero Header Ribbon */}
-          <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white p-6 shrink-0">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="h-14 w-14 rounded-xl bg-white/10 backdrop-blur-md text-white font-black text-2xl flex items-center justify-center border border-white/20 shadow-lg shrink-0">
+          <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white p-4 sm:p-6 shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl bg-white/10 backdrop-blur-md text-white font-black text-xl sm:text-2xl flex items-center justify-center border border-white/20 shadow-lg shrink-0">
                   {initials(selectedOrgName) || 'PG'}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-xl font-black text-white">{selectedOrgName || 'Organization Portfolio'}</h2>
-                    <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-xs">
+                    <h2 className="text-lg sm:text-xl font-black text-white truncate max-w-[220px] sm:max-w-md">{selectedOrgName || 'Organization Portfolio'}</h2>
+                    <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-400/30 text-[10px] font-bold">
                       {orgOverview?.billingProfile?.subscriptionStatus || 'ACTIVE'}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-indigo-200 mt-1 font-mono">
-                    <span>{orgOverview?.organization?.subdomain}.stayeaze.com</span>
+                  <div className="flex items-center gap-2 sm:gap-3 text-xs text-indigo-200 mt-1 font-mono flex-wrap">
+                    <span className="truncate max-w-[140px] sm:max-w-none">{orgOverview?.organization?.subdomain}.stayeaze.com</span>
                     <span>•</span>
                     <span>Created: {formatDate(orgOverview?.organization?.createdAt)}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => selectedOrgId && handleExportOrgJson(selectedOrgId, selectedOrgName)}
-                  className="text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 font-semibold"
+                  className="text-xs bg-white/10 hover:bg-white/20 text-white border-white/20 font-semibold rounded-xl h-9"
                 >
                   <FileJson className="mr-1.5 h-3.5 w-3.5 text-emerald-400" /> Export JSON
                 </Button>
@@ -2202,7 +2205,7 @@ export default function SubscribersPage() {
                   size="sm"
                   onClick={() => selectedOrgId && impersonateMut.mutate(selectedOrgId)}
                   disabled={impersonateMut.isPending}
-                  className="bg-white text-indigo-950 hover:bg-white/90 font-bold text-xs shadow-md"
+                  className="bg-white text-indigo-950 hover:bg-white/90 font-bold text-xs shadow-md rounded-xl h-9"
                 >
                   <LogIn className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> Support Login
                 </Button>
@@ -2210,7 +2213,7 @@ export default function SubscribersPage() {
             </div>
           </div>
 
-          <div className="p-6 space-y-6 overflow-y-auto flex-1">
+          <div className="p-4 sm:p-6 space-y-5 overflow-y-auto max-h-[calc(88vh-140px)] flex-1">
             {loadingOverview ? (
               <div className="py-16 text-center text-sm text-muted-foreground space-y-2">
                 <RefreshCw className="h-7 w-7 animate-spin mx-auto text-indigo-600" />
@@ -2223,68 +2226,70 @@ export default function SubscribersPage() {
             ) : (
               <>
                 {/* 5-Column Stat Card Metrics */}
-                <div className="grid gap-3 sm:grid-cols-5">
-                  <div className="p-3.5 rounded-xl border bg-indigo-50/50 dark:bg-indigo-950/20 text-center">
+                <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                  <div className="p-3 rounded-xl border bg-indigo-50/50 dark:bg-indigo-950/20 text-center">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">Properties</p>
-                    <p className="text-2xl font-black text-indigo-700 dark:text-indigo-300 mt-0.5">
+                    <p className="text-xl sm:text-2xl font-black text-indigo-700 dark:text-indigo-300 mt-0.5">
                       {orgOverview.stats?.totalProperties || 0}
                     </p>
                     <p className="text-[10px] text-muted-foreground">Max limit: {orgOverview.quotas?.maxProperties || 5}</p>
                   </div>
 
-                  <div className="p-3.5 rounded-xl border bg-emerald-50/50 dark:bg-emerald-950/20 text-center">
+                  <div className="p-3 rounded-xl border bg-emerald-50/50 dark:bg-emerald-950/20 text-center">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Beds</p>
-                    <p className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
+                    <p className="text-xl sm:text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
                       {orgOverview.stats?.totalBeds || 0}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{orgOverview.stats?.occupiedBeds || 0} Occupied ({orgOverview.stats?.occupancyPercent || 0}%)</p>
                   </div>
 
-                  <div className="p-3.5 rounded-xl border bg-blue-50/50 dark:bg-blue-950/20 text-center">
+                  <div className="p-3 rounded-xl border bg-blue-50/50 dark:bg-blue-950/20 text-center">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Rooms</p>
-                    <p className="text-2xl font-black text-blue-700 dark:text-blue-300 mt-0.5">
+                    <p className="text-xl sm:text-2xl font-black text-blue-700 dark:text-blue-300 mt-0.5">
                       {orgOverview.stats?.totalRooms || 0}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">Across all buildings</p>
+                    <p className="text-[10px] text-muted-foreground">Across buildings</p>
                   </div>
 
-                  <div className="p-3.5 rounded-xl border bg-amber-50/50 dark:bg-amber-950/20 text-center">
+                  <div className="p-3 rounded-xl border bg-amber-50/50 dark:bg-amber-950/20 text-center">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">Staff Accounts</p>
-                    <p className="text-2xl font-black text-amber-700 dark:text-amber-300 mt-0.5">
+                    <p className="text-xl sm:text-2xl font-black text-amber-700 dark:text-amber-300 mt-0.5">
                       {orgOverview.stats?.totalStaffCount || 0}
                     </p>
                     <p className="text-[10px] text-muted-foreground">Staff & managers</p>
                   </div>
 
-                  <div className="p-3.5 rounded-xl border bg-purple-50/50 dark:bg-purple-950/20 text-center">
+                  <div className="p-3 rounded-xl border bg-purple-50/50 dark:bg-purple-950/20 text-center col-span-2 sm:col-span-1">
                     <p className="text-[10px] font-bold text-muted-foreground uppercase">Boarded Residents</p>
-                    <p className="text-2xl font-black text-purple-700 dark:text-purple-300 mt-0.5">
+                    <p className="text-xl sm:text-2xl font-black text-purple-700 dark:text-purple-300 mt-0.5">
                       {orgOverview.stats?.totalTenantsCount || 0}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">Active resident tenants</p>
+                    <p className="text-[10px] text-muted-foreground">Active residents</p>
                   </div>
                 </div>
 
-                {/* Tabs Hub with Clean Lucide React Icons */}
+                {/* Tabs Hub with Scrollable Track */}
                 <Tabs defaultValue="properties" className="w-full">
-                  <TabsList className="grid grid-cols-4 w-full h-11 bg-muted/60 p-1 rounded-xl">
-                    <TabsTrigger value="properties" className="text-xs font-bold rounded-lg flex items-center justify-center gap-2">
-                      <Building2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                      <span>Properties ({orgOverview.properties?.length || 0})</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="staff" className="text-xs font-bold rounded-lg flex items-center justify-center gap-2">
-                      <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      <span>Staff Directory ({orgOverview.staff?.length || 0})</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="quotas" className="text-xs font-bold rounded-lg flex items-center justify-center gap-2">
-                      <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                      <span>Plan Quotas &amp; Health</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="governance" className="text-xs font-bold rounded-lg flex items-center justify-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                      <span>Governance &amp; Plan</span>
-                    </TabsTrigger>
-                  </TabsList>
+                  <div className="w-full overflow-x-auto pb-1 scrollbar-none">
+                    <TabsList className="flex items-center gap-1.5 w-max min-w-full h-11 bg-muted/60 p-1 rounded-xl">
+                      <TabsTrigger value="properties" className="text-xs font-bold rounded-lg flex items-center justify-center gap-2 px-3.5 py-1.5 shrink-0 whitespace-nowrap">
+                        <Building2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                        <span>Properties ({orgOverview.properties?.length || 0})</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="staff" className="text-xs font-bold rounded-lg flex items-center justify-center gap-2 px-3.5 py-1.5 shrink-0 whitespace-nowrap">
+                        <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>Staff Directory ({orgOverview.staff?.length || 0})</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="quotas" className="text-xs font-bold rounded-lg flex items-center justify-center gap-2 px-3.5 py-1.5 shrink-0 whitespace-nowrap">
+                        <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span>Plan Quotas &amp; Health</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="governance" className="text-xs font-bold rounded-lg flex items-center justify-center gap-2 px-3.5 py-1.5 shrink-0 whitespace-nowrap">
+                        <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                        <span>Governance &amp; Plan</span>
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
 
                   {/* TAB 1: PROPERTIES BREAKDOWN */}
                   <TabsContent value="properties" className="space-y-3 pt-3">
@@ -2532,25 +2537,31 @@ export default function SubscribersPage() {
 
       {/* Enterprise White-Label Branding Dialog */}
       <Dialog open={!!brandingTarget} onOpenChange={(open) => !open && setBrandingTarget(null)}>
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-              <Palette className="h-5 w-5 text-purple-600" />
-              Enterprise White-Label Custom Branding
-            </DialogTitle>
-            <DialogDescription>
-              Customize the portal theme, logo, brand name, and color scheme for <strong>{brandingTarget?.name}</strong>.
-            </DialogDescription>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-xl max-h-[85vh] p-0 flex flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl">
+          <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-purple-500/10 text-purple-600 shrink-0">
+                <Palette className="h-5 w-5 sm:h-6 sm:w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-base sm:text-lg font-bold">
+                  Enterprise White-Label Custom Branding
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Customize the portal theme, logo, brand name, and color scheme for <strong>{brandingTarget?.name}</strong>.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-5 py-3">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[calc(85vh-140px)] flex-1">
             {/* Active Toggle */}
             <div className="flex items-center justify-between p-4 rounded-xl border bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800">
               <div className="space-y-0.5">
-                <Label className="text-sm font-bold text-purple-950 dark:text-purple-200">
+                <Label className="text-xs sm:text-sm font-bold text-purple-950 dark:text-purple-200">
                   Enable White-Label Custom Branding
                 </Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Transform this subscriber's dashboard and public pages into their custom-branded portal.
                 </p>
               </div>
@@ -2568,7 +2579,7 @@ export default function SubscribersPage() {
                   value={brandingForm.brandName}
                   onChange={(e) => setBrandingForm((f) => ({ ...f, brandName: e.target.value }))}
                   placeholder="e.g. Starlight Residences & Co-Living"
-                  className="rounded-lg"
+                  className="rounded-xl"
                 />
               </div>
 
@@ -2578,7 +2589,7 @@ export default function SubscribersPage() {
                   value={brandingForm.brandTagline}
                   onChange={(e) => setBrandingForm((f) => ({ ...f, brandTagline: e.target.value }))}
                   placeholder="e.g. Premium Executive Living & Hospitality"
-                  className="rounded-lg"
+                  className="rounded-xl"
                 />
               </div>
 
@@ -2588,7 +2599,7 @@ export default function SubscribersPage() {
                   value={brandingForm.brandLogoUrl}
                   onChange={(e) => setBrandingForm((f) => ({ ...f, brandLogoUrl: e.target.value }))}
                   placeholder="https://example.com/logo.png"
-                  className="rounded-lg"
+                  className="rounded-xl"
                 />
               </div>
 
@@ -2598,7 +2609,7 @@ export default function SubscribersPage() {
                   value={brandingForm.brandFaviconUrl}
                   onChange={(e) => setBrandingForm((f) => ({ ...f, brandFaviconUrl: e.target.value }))}
                   placeholder="https://example.com/favicon.ico"
-                  className="rounded-lg"
+                  className="rounded-xl"
                 />
               </div>
             </div>
@@ -2611,13 +2622,13 @@ export default function SubscribersPage() {
                   type="color"
                   value={brandingForm.brandPrimaryColor}
                   onChange={(e) => setBrandingForm((f) => ({ ...f, brandPrimaryColor: e.target.value }))}
-                  className="h-10 w-14 rounded-lg border cursor-pointer p-0.5 bg-transparent"
+                  className="h-10 w-14 rounded-xl border cursor-pointer p-0.5 bg-transparent shrink-0"
                 />
                 <Input
                   value={brandingForm.brandPrimaryColor}
                   onChange={(e) => setBrandingForm((f) => ({ ...f, brandPrimaryColor: e.target.value }))}
                   placeholder="#4f46e5"
-                  className="font-mono text-xs max-w-[120px] rounded-lg"
+                  className="font-mono text-xs max-w-[120px] rounded-xl"
                 />
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {colorPresets.map((c) => (
@@ -2641,17 +2652,17 @@ export default function SubscribersPage() {
                 value={brandingForm.customFooterText}
                 onChange={(e) => setBrandingForm((f) => ({ ...f, customFooterText: e.target.value }))}
                 placeholder="© 2026 Your Organization. All rights reserved."
-                className="rounded-lg"
+                className="rounded-xl"
               />
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBrandingTarget(null)} className="rounded-lg">Cancel</Button>
+          <DialogFooter className="p-4 border-t border-border/60 bg-muted/20 flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 sm:gap-2 shrink-0">
+            <Button variant="ghost" onClick={() => setBrandingTarget(null)} className="rounded-xl h-9.5 text-xs font-semibold">Cancel</Button>
             <Button
               onClick={() => brandingTarget && updateBrandingMut.mutate({ id: brandingTarget.id, payload: brandingForm })}
               disabled={updateBrandingMut.isPending}
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg"
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl h-9.5 text-xs sm:text-sm shadow-xs"
             >
               {updateBrandingMut.isPending ? 'Saving...' : 'Save White-Label Branding'}
             </Button>
@@ -2661,22 +2672,28 @@ export default function SubscribersPage() {
 
       {/* Extend Validity Dialog */}
       <Dialog open={!!extendTarget} onOpenChange={(open) => !open && setExtendTarget(null)}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-              <Clock className="h-5 w-5 text-blue-600" />
-              Extend Subscription Validity
-            </DialogTitle>
-            <DialogDescription>
-              Grant additional validity days to <strong>{extendTarget?.name}</strong>.
-            </DialogDescription>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[85vh] p-0 flex flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl">
+          <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-blue-500/10 text-blue-600 shrink-0">
+                <Clock className="h-5 w-5 sm:h-6 sm:w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-base sm:text-lg font-bold">
+                  Extend Subscription Validity
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Grant additional validity days to <strong>{extendTarget?.name}</strong>.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[calc(85vh-140px)] flex-1">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Extend by (Days)</Label>
               <Select value={String(extendDays)} onValueChange={(v) => setExtendDays(Number(v))}>
-                <SelectTrigger className="rounded-lg"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="rounded-xl h-10 text-xs sm:text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="7">7 Days (+1 Week)</SelectItem>
                   <SelectItem value="15">15 Days (+Half Month)</SelectItem>
@@ -2689,12 +2706,12 @@ export default function SubscribersPage() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExtendTarget(null)} className="rounded-lg">Cancel</Button>
+          <DialogFooter className="p-4 border-t border-border/60 bg-muted/20 flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 sm:gap-2 shrink-0">
+            <Button variant="ghost" onClick={() => setExtendTarget(null)} className="rounded-xl h-9.5 text-xs font-semibold">Cancel</Button>
             <Button
               onClick={() => extendTarget && extendMut.mutate({ id: extendTarget.id, days: extendDays })}
               disabled={extendMut.isPending}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl h-9.5 text-xs sm:text-sm shadow-xs"
             >
               {extendMut.isPending ? 'Extending...' : `Extend by ${extendDays} Days`}
             </Button>

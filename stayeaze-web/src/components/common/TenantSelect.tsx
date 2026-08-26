@@ -146,6 +146,13 @@ export function TenantSelect({
                     <div className="truncate space-y-1">
                       <div className="flex items-center gap-2">
                         <p className="font-extrabold text-slate-900 dark:text-slate-100 text-xs truncate">{t.name}</p>
+                        {((t as any).propertyName || (t as any).buildingName) && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-medium border border-slate-200 dark:border-slate-700">
+                            {(t as any).propertyName ? `${(t as any).propertyName}` : ''}
+                            {(t as any).propertyName && (t as any).buildingName ? ' • ' : ''}
+                            {(t as any).buildingName ? `${(t as any).buildingName}` : ''}
+                          </span>
+                        )}
                         {t.roomNumber && (
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800">
                             <Home className="h-3 w-3 text-indigo-600" />

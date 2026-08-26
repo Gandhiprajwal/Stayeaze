@@ -59,58 +59,9 @@ public class BedController {
     @Transactional(readOnly = true)
     public Bed populateBedDetails(Bed bed) {
         if (bed == null) return bed;
-        String roomNum = null;
-        try {
-            if (bed.getRoom() != null) {
-                roomNum = bed.getRoom().getRoomNumber();
-            }
-        } catch (Exception ignored) {}
-
         try {
             Organization org = getLoggedUserOrg();
-            List<Tenant> activeTenants = org != null ? tenantRepository.findByOrganization(org) : tenantRepository.findAll();
-            if (activeTenants != null) {
-                for (Tenant t : activeTenants) {
-                    boolean statusOk = t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()) || "NOTICE_PERIOD".equalsIgnoreCase(t.getStatus());
-                    if (statusOk) {
-                        boolean roomMatch = roomNum != null && roomNum.equalsIgnoreCase(t.getRoomNumber());
-                        boolean bedMatch = bed.getBedNumber() != null && bed.getBedNumber().equalsIgnoreCase(t.getBedNumber());
-                        if (roomMatch && bedMatch) {
-                            bed.setStatus("OCCUPIED");
-                            bed.setTenantId(t.getId().toString());
-                            bed.setTenantName(t.getName());
-                            return bed;
-                        }
-                    }
-                }
-            }
-
-            // Check bookings for reserved bed
-            List<Booking> activeBookings = org != null ? bookingRepository.findByOrganizationId(org.getId()) : bookingRepository.findAll();
-            if (activeBookings != null) {
-                for (Booking b : activeBookings) {
-                    boolean statusOk = b.getStatus() == null || "CONFIRMED".equalsIgnoreCase(b.getStatus()) || "CHECKED_IN".equalsIgnoreCase(b.getStatus()) || "PENDING".equalsIgnoreCase(b.getStatus());
-                    if (statusOk) {
-                        boolean roomMatch = roomNum != null && roomNum.equalsIgnoreCase(b.getRoomNumber());
-                        boolean bedMatch = bed.getBedNumber() != null && bed.getBedNumber().equalsIgnoreCase(b.getBedNumber());
-                        boolean directBedMatch = b.getBed() != null && b.getBed().getId().equals(bed.getId());
-                        if (directBedMatch || (roomMatch && bedMatch)) {
-                            if ("CHECKED_IN".equalsIgnoreCase(b.getStatus())) {
-                                bed.setStatus("OCCUPIED");
-                            } else {
-                                bed.setStatus("RESERVED");
-                            }
-                            if (b.getTenant() != null) {
-                                bed.setTenantId(b.getTenant().getId().toString());
-                                bed.setTenantName(b.getTenant().getName());
-                            } else if (b.getTenantName() != null) {
-                                bed.setTenantName(b.getTenantName());
-                            }
-                            return bed;
-                        }
-                    }
-                }
-            }
+            return bedService.populateBedDetails(bed, org);
         } catch (Exception ignored) {}
         return bed;
     }
@@ -124,6 +75,18 @@ public class BedController {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private boolean isRoomAuthorizedForUser(Room room) {
+        if (room == null || room.getId() == null) return false;
+        try {
+            Organization org = getLoggedUserOrg();
+            if (org == null) return false;
+            if (room.getFloor() != null && room.getFloor().getBuilding() != null && room.getFloor().getBuilding().getProperty() != null && room.getFloor().getBuilding().getProperty().getOrganization() != null) {
+                return room.getFloor().getBuilding().getProperty().getOrganization().getId().equals(org.getId());
+            }
+        } catch (Exception ignored) {}
+        return true;
     }
 
     private Room getAuthorizedRoom(UUID roomId) {
@@ -193,8 +156,8 @@ public class BedController {
             bed.setQrCode(request.getQrCode());
         }
 
-        Bed saved = bedRepository.save(bed);
-        return new ResponseEntity<>(populateBedDetails(saved), HttpStatus.CREATED);
+        Bed saved = bedService.saveBed(bed);
+        return new ResponseEntity<>(com.stayeaze.backend.payload.response.BedDTO.fromEntity(populateBedDetails(saved)), HttpStatus.CREATED);
     }
 
     @GetMapping("/rooms/{roomId}/beds")
@@ -254,10 +217,18 @@ public class BedController {
         if (roomId == null) {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: roomId is required!"));
         }
-        Organization organization = getLoggedUserOrg();
         Room room = roomRepository.findById(roomId).orElse(null);
-        if (room == null || !room.getFloor().getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (room == null || !isRoomAuthorizedForUser(room)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Room not found or unauthorized"));
+        }
+        if (request.getFloorId() != null && room.getFloor() != null && !room.getFloor().getId().equals(request.getFloorId())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Specified room does not belong to the selected floor!"));
+        }
+        if (request.getBuildingId() != null && room.getFloor() != null && room.getFloor().getBuilding() != null && !room.getFloor().getBuilding().getId().equals(request.getBuildingId())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Specified room/floor does not belong to the selected building!"));
+        }
+        if (request.getPropertyId() != null && room.getFloor() != null && room.getFloor().getBuilding() != null && room.getFloor().getBuilding().getProperty() != null && !room.getFloor().getBuilding().getProperty().getId().equals(request.getPropertyId())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Specified room/building does not belong to the selected property!"));
         }
 
         String bedNum = request.getBedNumber();
@@ -285,19 +256,18 @@ public class BedController {
             bed.setQrCode(request.getQrCode());
         }
 
-        Bed saved = bedRepository.save(bed);
+        Bed saved = bedService.saveBed(bed);
         occupancySyncService.syncStatsForRoom(room);
-        return new ResponseEntity<>(populateBedDetails(saved), HttpStatus.CREATED);
+        return new ResponseEntity<>(com.stayeaze.backend.payload.response.BedDTO.fromEntity(populateBedDetails(saved)), HttpStatus.CREATED);
     }
 
     @GetMapping("/beds/{id}")
     public ResponseEntity<?> getFlatBedById(@PathVariable UUID id) {
-        Organization organization = getLoggedUserOrg();
         Bed bed = bedRepository.findById(id).orElse(null);
-        if (bed == null || !bed.getRoom().getFloor().getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (bed == null || bed.getRoom() == null || !isRoomAuthorizedForUser(bed.getRoom())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Bed not found."));
         }
-        return ResponseEntity.ok(populateBedDetails(bed));
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.BedDTO.fromEntity(populateBedDetails(bed)));
     }
 
     @PutMapping("/rooms/{roomId}/beds/{id}")
@@ -330,7 +300,7 @@ public class BedController {
             bed.setQrCode(request.getQrCode());
         }
 
-        Bed updated = bedRepository.save(bed);
+        Bed updated = bedService.saveBed(bed);
         occupancySyncService.syncStatsForRoom(bed.getRoom());
         return ResponseEntity.ok(updated);
     }
@@ -351,7 +321,7 @@ public class BedController {
         }
 
         bed.setStatus("ARCHIVED");
-        bedRepository.save(bed);
+        bedService.saveBed(bed);
         occupancySyncService.syncStatsForRoom(room);
 
         return ResponseEntity.ok(new MessageResponse("Bed successfully archived."));
@@ -360,9 +330,8 @@ public class BedController {
     @PutMapping("/beds/{id}")
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
     public ResponseEntity<?> updateFlatBed(@PathVariable UUID id, @RequestBody BedRequest request) {
-        Organization organization = getLoggedUserOrg();
         Bed bed = bedRepository.findById(id).orElse(null);
-        if (bed == null || !bed.getRoom().getFloor().getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (bed == null || bed.getRoom() == null || !isRoomAuthorizedForUser(bed.getRoom())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Bed not found."));
         }
 
@@ -380,21 +349,20 @@ public class BedController {
             bed.setQrCode(request.getQrCode());
         }
 
-        Bed saved = bedRepository.save(bed);
+        Bed saved = bedService.saveBed(bed);
         occupancySyncService.syncStatsForRoom(bed.getRoom());
-        return ResponseEntity.ok(saved);
+        return ResponseEntity.ok(com.stayeaze.backend.payload.response.BedDTO.fromEntity(populateBedDetails(saved)));
     }
 
     @DeleteMapping("/beds/{id}")
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
     public ResponseEntity<?> deleteFlatBed(@PathVariable UUID id) {
-        Organization organization = getLoggedUserOrg();
         Bed bed = bedRepository.findById(id).orElse(null);
-        if (bed == null || !bed.getRoom().getFloor().getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
+        if (bed == null || bed.getRoom() == null || !isRoomAuthorizedForUser(bed.getRoom())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Bed not found."));
         }
         bed.setStatus("ARCHIVED");
-        bedRepository.save(bed);
+        bedService.saveBed(bed);
         occupancySyncService.syncStatsForRoom(bed.getRoom());
         return ResponseEntity.ok(new MessageResponse("Bed deleted successfully."));
     }

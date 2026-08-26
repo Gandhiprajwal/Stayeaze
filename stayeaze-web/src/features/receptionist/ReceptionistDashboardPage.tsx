@@ -113,17 +113,17 @@ export default function ReceptionistDashboardPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-6">
       <PageHeader
         title="Front Desk & Reception Desk"
         description="Daily visitor logging, resident key handover desk, and parcel collection."
         icon={ConciergeBell}
         actions={
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setVisitorModalOpen(true)} className="bg-primary shadow-xs">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+            <Button onClick={() => setVisitorModalOpen(true)} className="rounded-xl h-10 text-xs sm:text-sm font-semibold bg-primary shadow-xs flex-1 sm:flex-none">
               <Plus className="mr-1.5 h-4 w-4" /> Log Visitor Pass
             </Button>
-            <Button variant="outline" onClick={() => setParcelModalOpen(true)} className="border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+            <Button variant="outline" onClick={() => setParcelModalOpen(true)} className="rounded-xl h-10 text-xs sm:text-sm font-semibold border-indigo-200 text-indigo-600 hover:bg-indigo-50 flex-1 sm:flex-none">
               <Package className="mr-1.5 h-4 w-4" /> Log Parcel
             </Button>
           </div>
@@ -131,59 +131,59 @@ export default function ReceptionistDashboardPage() {
       />
 
       {/* Overview Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-l-4 border-l-indigo-500 shadow-xs">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-muted-foreground flex items-center justify-between">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <Card className="rounded-2xl border-l-4 border-l-indigo-500 shadow-xs">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
               Visitors In Property
-              <Users className="h-4 w-4 text-indigo-500" />
+              <Users className="h-4 w-4 text-indigo-500 shrink-0" />
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeVisitors.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Currently on-site</p>
+          <CardContent className="p-4 sm:p-5 pt-0">
+            <div className="text-xl sm:text-2xl font-black font-mono text-foreground">{activeVisitors.length}</div>
+            <p className="text-[11px] text-muted-foreground mt-1">Currently on-site</p>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-emerald-500 shadow-xs">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-muted-foreground flex items-center justify-between">
+        <Card className="rounded-2xl border-l-4 border-l-emerald-500 shadow-xs">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
               Check-ins Pending Handover
-              <LogIn className="h-4 w-4 text-emerald-500" />
+              <LogIn className="h-4 w-4 text-emerald-500 shrink-0" />
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">{checkIns.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Keys ready for resident</p>
+          <CardContent className="p-4 sm:p-5 pt-0">
+            <div className="text-xl sm:text-2xl font-black font-mono text-emerald-600">{checkIns.length}</div>
+            <p className="text-[11px] text-muted-foreground mt-1">Keys ready for resident</p>
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-amber-500 shadow-xs">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase text-muted-foreground flex items-center justify-between">
+        <Card className="rounded-2xl border-l-4 border-l-amber-500 shadow-xs">
+          <CardHeader className="p-4 sm:p-5 pb-2">
+            <CardTitle className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
               Scheduled Move-Outs
-              <LogOut className="h-4 w-4 text-amber-500" />
+              <LogOut className="h-4 w-4 text-amber-500 shrink-0" />
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{checkOuts.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Pending key return</p>
+          <CardContent className="p-4 sm:p-5 pt-0">
+            <div className="text-xl sm:text-2xl font-black font-mono text-amber-600">{checkOuts.length}</div>
+            <p className="text-[11px] text-muted-foreground mt-1">Pending key return</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Main Visitor List */}
-      <Card>
-        <CardHeader>
+      <Card className="rounded-2xl shadow-xs overflow-hidden">
+        <CardHeader className="p-4 sm:p-6 pb-3 border-b">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-bold">Live Visitor Gate Passes</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => setVisitorModalOpen(true)} className="text-xs">
+            <CardTitle className="text-base sm:text-lg font-bold">Live Visitor Gate Passes</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setVisitorModalOpen(true)} className="rounded-xl h-8.5 text-xs font-semibold">
               <Plus className="h-3 w-3 mr-1" /> Quick Log
             </Button>
           </div>
-          <CardDescription>Recent visitor check-ins, guest passes, and exit status.</CardDescription>
+          <CardDescription className="text-xs">Recent visitor check-ins, guest passes, and exit status.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6">
           {loadingVisitors ? (
             <div className="py-12 text-center text-sm text-muted-foreground">Loading visitor records...</div>
           ) : visitors.length === 0 ? (
@@ -196,19 +196,19 @@ export default function ReceptionistDashboardPage() {
               {visitors.slice(0, 10).map((v) => (
                 <div
                   key={v.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border bg-card hover:bg-muted/40 transition"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border bg-card hover:bg-muted/40 transition shadow-xs"
                 >
                   <div className="flex items-center gap-3.5">
                     {v.photoUrl ? (
-                      <img src={resolveFileUrl(v.photoUrl)} alt={v.visitorName} className="h-12 w-12 rounded-xl object-cover border shadow-xs" />
+                      <img src={resolveFileUrl(v.photoUrl)} alt={v.visitorName} className="h-12 w-12 rounded-xl object-cover border shadow-xs shrink-0" />
                     ) : (
-                      <div className="h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                      <div className="h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 shrink-0">
                         <User className="h-6 w-6" />
                       </div>
                     )}
                     <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm">{v.visitorName}</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm sm:text-base text-foreground">{v.visitorName}</span>
                         {v.passCode && (
                           <Badge variant="outline" className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800">
                             #{v.passCode}
@@ -219,8 +219,8 @@ export default function ReceptionistDashboardPage() {
                       <p className="text-xs text-muted-foreground">
                         Visiting: <strong>{v.tenantName || 'Resident'}</strong> • Phone: {v.visitorPhone || v.mobileNumber || 'N/A'} • <span className="capitalize">{v.purpose}</span>
                       </p>
-                      <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" /> Arrived: {v.checkInTime ? formatDateTime(v.checkInTime) : '—'}
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1 font-mono">
+                        <Clock className="h-3 w-3 shrink-0" /> Arrived: {v.checkInTime ? formatDateTime(v.checkInTime) : '—'}
                       </p>
                     </div>
                   </div>
@@ -229,7 +229,7 @@ export default function ReceptionistDashboardPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs font-semibold h-8"
+                      className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs font-semibold h-9 rounded-xl self-end sm:self-auto w-full sm:w-auto"
                       onClick={() => markVisitorExitMutation.mutate(v.id)}
                     >
                       <LogOut className="h-3.5 w-3.5 mr-1" /> Mark Exit
@@ -244,24 +244,24 @@ export default function ReceptionistDashboardPage() {
 
       {/* New Visitor Modal with Photo Capture */}
       <Dialog open={visitorModalOpen} onOpenChange={setVisitorModalOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl p-5 sm:p-6">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Camera className="h-5 w-5 text-indigo-600" /> Log Visitor Pass (Front Desk)
+            <DialogTitle className="flex items-center gap-2 text-base sm:text-lg font-bold">
+              <Camera className="h-5 w-5 text-indigo-600 shrink-0" /> Log Visitor Pass (Front Desk)
             </DialogTitle>
-            <DialogDescription>Capture photo and enter guest details to issue an entry pass.</DialogDescription>
+            <DialogDescription className="text-xs">Capture photo and enter guest details to issue an entry pass.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-3.5 py-2">
             {/* Photo upload */}
             <div className="p-3 border rounded-xl bg-slate-50 dark:bg-slate-900/40 text-center space-y-2">
               {visitorForm.photoUrl ? (
                 <div className="space-y-1.5">
                   <img src={resolveFileUrl(visitorForm.photoUrl)} alt="Visitor" className="h-20 w-20 rounded-xl object-cover mx-auto border" />
-                  <Button size="sm" variant="ghost" className="text-xs text-rose-500" onClick={() => setVisitorForm({ ...visitorForm, photoUrl: '' })}>Remove Photo</Button>
+                  <Button size="sm" variant="ghost" className="text-xs text-rose-500 h-7" onClick={() => setVisitorForm({ ...visitorForm, photoUrl: '' })}>Remove Photo</Button>
                 </div>
               ) : (
                 <div>
-                  <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto} className="rounded-xl h-9 text-xs">
                     <Camera className="mr-1.5 h-3.5 w-3.5" /> {uploadingPhoto ? 'Uploading...' : 'Take / Upload Photo'}
                   </Button>
                 </div>
@@ -270,43 +270,48 @@ export default function ReceptionistDashboardPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Visitor Name *</Label>
+              <Label className="text-xs font-semibold">Visitor Name *</Label>
               <Input
                 placeholder="e.g. Rahul Sharma"
                 value={visitorForm.visitorName}
                 onChange={(e) => setVisitorForm({ ...visitorForm, visitorName: e.target.value })}
+                className="rounded-xl h-10 text-xs sm:text-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Visitor Phone *</Label>
+              <Label className="text-xs font-semibold">Visitor Phone *</Label>
               <Input
                 placeholder="e.g. +91 98765 43210"
                 value={visitorForm.visitorPhone}
                 onChange={(e) => setVisitorForm({ ...visitorForm, visitorPhone: e.target.value })}
+                className="rounded-xl h-10 text-xs sm:text-sm font-mono"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Resident Being Visited</Label>
+              <Label className="text-xs font-semibold">Resident Being Visited</Label>
               <Input
                 placeholder="e.g. Room 204 - Amit Kumar"
                 value={visitorForm.tenantName}
                 onChange={(e) => setVisitorForm({ ...visitorForm, tenantName: e.target.value })}
+                className="rounded-xl h-10 text-xs sm:text-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Purpose of Visit</Label>
+              <Label className="text-xs font-semibold">Purpose of Visit</Label>
               <Input
                 placeholder="e.g. Family / Delivery / Maintenance"
                 value={visitorForm.purpose}
                 onChange={(e) => setVisitorForm({ ...visitorForm, purpose: e.target.value })}
+                className="rounded-xl h-10 text-xs sm:text-sm"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setVisitorModalOpen(false)}>Cancel</Button>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+            <Button variant="outline" onClick={() => setVisitorModalOpen(false)} className="rounded-xl h-10 w-full sm:w-auto text-xs font-semibold">Cancel</Button>
             <Button
               onClick={() => createVisitorMutation.mutate(visitorForm)}
               disabled={!visitorForm.visitorName || !visitorForm.visitorPhone || createVisitorMutation.isPending}
+              className="rounded-xl h-10 w-full sm:w-auto text-xs font-bold shadow-xs"
             >
               {createVisitorMutation.isPending ? 'Logging…' : 'Issue Visitor Pass'}
             </Button>
@@ -316,39 +321,42 @@ export default function ReceptionistDashboardPage() {
 
       {/* Log Parcel Modal */}
       <Dialog open={parcelModalOpen} onOpenChange={setParcelModalOpen}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl p-5 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Log Incoming Parcel / Courier</DialogTitle>
-            <DialogDescription>Record a delivery parcel and send a 4-digit pickup code to the tenant.</DialogDescription>
+            <DialogTitle className="text-base sm:text-lg font-bold">Log Incoming Parcel / Courier</DialogTitle>
+            <DialogDescription className="text-xs">Record a delivery parcel and send a 4-digit pickup code to the tenant.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-3.5 py-2">
             <div className="space-y-1.5">
-              <Label>Recipient Resident Name / Room *</Label>
+              <Label className="text-xs font-semibold">Recipient Resident Name / Room *</Label>
               <Input
                 placeholder="e.g. Room 301 - Priya Nair"
                 value={parcelForm.tenantName}
                 onChange={(e) => setParcelForm({ ...parcelForm, tenantName: e.target.value })}
+                className="rounded-xl h-10 text-xs sm:text-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Courier / Delivery Provider</Label>
+              <Label className="text-xs font-semibold">Courier / Delivery Provider</Label>
               <Input
                 placeholder="e.g. Amazon / Flipkart / BlueDart"
                 value={parcelForm.courierCompany}
                 onChange={(e) => setParcelForm({ ...parcelForm, courierCompany: e.target.value })}
+                className="rounded-xl h-10 text-xs sm:text-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Tracking / AWB Number</Label>
+              <Label className="text-xs font-semibold">Tracking / AWB Number</Label>
               <Input
                 placeholder="e.g. AMZ-98765432"
                 value={parcelForm.trackingNumber}
                 onChange={(e) => setParcelForm({ ...parcelForm, trackingNumber: e.target.value })}
+                className="rounded-xl h-10 text-xs sm:text-sm font-mono"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setParcelModalOpen(false)}>Cancel</Button>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+            <Button variant="outline" onClick={() => setParcelModalOpen(false)} className="rounded-xl h-10 w-full sm:w-auto text-xs font-semibold">Cancel</Button>
             <Button
               onClick={() => {
                 toast({ title: 'Parcel Logged', description: `Pickup OTP generated and SMS sent to ${parcelForm.tenantName}.` });
@@ -356,8 +364,9 @@ export default function ReceptionistDashboardPage() {
                 setParcelForm({ tenantName: '', courierCompany: 'Amazon', trackingNumber: '' });
               }}
               disabled={!parcelForm.tenantName}
+              className="rounded-xl h-10 w-full sm:w-auto text-xs font-bold shadow-xs"
             >
-              Record & Notify Resident
+              Record &amp; Notify Resident
             </Button>
           </DialogFooter>
         </DialogContent>

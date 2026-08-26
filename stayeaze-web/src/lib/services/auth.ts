@@ -14,19 +14,6 @@ export interface AuthSession {
   user: User;
 }
 
-// Fallback accounts
-const demoAccounts: Record<string, { password: string; user: User }> = {
-  'superadmin@stayeaze.com': { password: 'Friend@2010', user: mockUser('user-1', 'Super Admin', 'superadmin@stayeaze.com', 'SUPER_ADMIN') },
-};
-
-function mockUser(id: string, name: string, email: string, role: UserRole): User {
-  return {
-    id, name, email, phone: '+91 98000 00000', role, status: 'active',
-    propertyIds: role === 'SUPER_ADMIN' ? [] : role === 'ADMIN' ? ['prop-1', 'prop-2'] : ['prop-1'],
-    lastActive: new Date().toISOString(), createdAt: '2024-01-01T00:00:00Z',
-  };
-}
-
 function extractUserRole(data: any): UserRole {
   const roles: string[] = Array.isArray(data?.roles) ? data.roles : [];
   const singleRole: string = data?.role || '';
@@ -197,12 +184,6 @@ export const authService = {
     localStorage.removeItem('stayeaze_refresh_token');
     localStorage.removeItem('stayeaze-auth');
   },
-
-  demoAccounts: [
-    { role: 'Super Admin', email: 'admin@stayeaze.com', password: 'admin123' },
-    { role: 'Admin (Owner)', email: 'owner@stayeaze.com', password: 'owner123' },
-    { role: 'Property Manager', email: 'manager@stayeaze.com', password: 'manager123' },
-  ],
 
   // keep import used
   _api: api,

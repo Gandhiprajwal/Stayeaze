@@ -92,13 +92,13 @@ export default function SuperAdminApiMetricsPage() {
   ].filter((d) => d.value > 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-6">
       <PageHeader
         title="Live Backend API Hit Metrics"
         description="Real-time HTTP traffic monitoring, latency performance, status codes, and endpoint leaderboards."
         icon={Activity}
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full sm:w-auto">
             {isLiveStreaming ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs">
                 <span className="relative flex h-2 w-2">
@@ -116,7 +116,7 @@ export default function SuperAdminApiMetricsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="text-xs h-8"
+              className="text-xs h-9 rounded-xl"
               onClick={() => queryClient.invalidateQueries({ queryKey: ['super-admin-api-metrics'] })}
             >
               <RefreshCw className="mr-1.5 h-3.5 w-3.5 text-primary" /> Refresh
@@ -125,7 +125,7 @@ export default function SuperAdminApiMetricsPage() {
             <Button
               variant="outline"
               size="sm"
-              className="text-rose-600 border-rose-200 dark:border-rose-900 hover:bg-rose-50 dark:hover:bg-rose-950"
+              className="text-rose-600 border-rose-200 dark:border-rose-900 hover:bg-rose-50 dark:hover:bg-rose-950 text-xs h-9 rounded-xl"
               disabled={resetMetricsMut.isPending}
               onClick={() => {
                 if (confirm('Reset all API hit counters and statistics?')) {
@@ -140,62 +140,62 @@ export default function SuperAdminApiMetricsPage() {
       />
 
       {/* Primary Metric KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/40 via-white to-white dark:from-indigo-950/20 dark:via-slate-900 dark:to-slate-900 shadow-sm">
-          <CardContent className="p-4 flex items-center justify-between">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        <Card className="rounded-2xl border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/40 via-white to-white dark:from-indigo-950/20 dark:via-slate-900 dark:to-slate-900 shadow-xs">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total API Hits</p>
-              <p className="text-2xl font-extrabold font-mono text-indigo-600 dark:text-indigo-400">{totalHits.toLocaleString()}</p>
+              <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total API Hits</p>
+              <p className="text-xl sm:text-2xl font-extrabold font-mono text-indigo-600 dark:text-indigo-400">{totalHits.toLocaleString()}</p>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center shrink-0">
               <Zap className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-emerald-200 dark:border-emerald-900/60 shadow-sm">
-          <CardContent className="p-4 flex items-center justify-between">
+        <Card className="rounded-2xl border-emerald-200 dark:border-emerald-900/60 shadow-xs">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Req / Min (RPM)</p>
-              <p className="text-2xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">{rpm}</p>
+              <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Req / Min (RPM)</p>
+              <p className="text-xl sm:text-2xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">{rpm}</p>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
               <Activity className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-blue-200 dark:border-blue-900/60 shadow-sm">
-          <CardContent className="p-4 flex items-center justify-between">
+        <Card className="rounded-2xl border-blue-200 dark:border-blue-900/60 shadow-xs">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Avg Latency</p>
-              <p className="text-2xl font-extrabold font-mono text-blue-600 dark:text-blue-400">{avgLatency} ms</p>
+              <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Avg Latency</p>
+              <p className="text-xl sm:text-2xl font-extrabold font-mono text-blue-600 dark:text-blue-400">{avgLatency} ms</p>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center shrink-0">
               <Clock className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-amber-200 dark:border-amber-900/60 shadow-sm">
-          <CardContent className="p-4 flex items-center justify-between">
+        <Card className="rounded-2xl border-amber-200 dark:border-amber-900/60 shadow-xs">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Active Concurrency</p>
-              <p className="text-2xl font-extrabold font-mono text-amber-600 dark:text-amber-400">{activeRequests}</p>
+              <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Active Concurrency</p>
+              <p className="text-xl sm:text-2xl font-extrabold font-mono text-amber-600 dark:text-amber-400">{activeRequests}</p>
             </div>
-            <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
               <Server className="h-5 w-5" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className={errorRate > 5 ? 'border-rose-400 dark:border-rose-800 bg-rose-50/20 shadow-sm' : 'border-slate-200 dark:border-slate-800 shadow-sm'}>
-          <CardContent className="p-4 flex items-center justify-between">
+        <Card className={`rounded-2xl col-span-2 sm:col-span-1 shadow-xs ${errorRate > 5 ? 'border-rose-400 dark:border-rose-800 bg-rose-50/20' : 'border-slate-200 dark:border-slate-800'}`}>
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Error Rate</p>
-              <p className={`text-2xl font-extrabold font-mono ${errorRate > 5 ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300'}`}>{errorRate}%</p>
+              <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Error Rate</p>
+              <p className={`text-xl sm:text-2xl font-extrabold font-mono ${errorRate > 5 ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300'}`}>{errorRate}%</p>
             </div>
-            <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${errorRate > 5 ? 'bg-rose-500/10 text-rose-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+            <div className={`h-10 w-10 sm:h-11 sm:w-11 rounded-xl flex items-center justify-center shrink-0 ${errorRate > 5 ? 'bg-rose-500/10 text-rose-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
               <AlertTriangle className="h-5 w-5" />
             </div>
           </CardContent>

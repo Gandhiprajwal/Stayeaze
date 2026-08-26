@@ -26,8 +26,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -65,14 +64,16 @@ public class RoomController {
 
         // If no beds exist for this room yet, auto-create beds based on sharing capacity
         if ((beds == null || beds.isEmpty()) && room.getSharing() != null && room.getSharing() > 0) {
+            List<Bed> newBeds = new ArrayList<>();
             for (int i = 1; i <= room.getSharing(); i++) {
-                String bedNo = "B" + i;
-                if (!Boolean.TRUE.equals(bedRepository.existsByRoomIdAndBedNumber(room.getId(), bedNo))) {
-                    Bed b = new Bed(room, bedNo);
-                    try { bedRepository.save(b); } catch (Exception ignored) {}
-                }
+                newBeds.add(new Bed(room, "B" + i));
             }
-            beds = bedRepository.findByRoomId(room.getId());
+            try {
+                bedRepository.saveAllAndFlush(newBeds);
+                beds = newBeds;
+            } catch (Exception ignored) {
+                beds = bedRepository.findByRoomId(room.getId());
+            }
         }
         if (beds == null) beds = java.util.Collections.emptyList();
 
@@ -347,6 +348,12 @@ public class RoomController {
             if (!floor.getBuilding().getProperty().getOrganization().getId().equals(organization.getId())) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Floor not found or unauthorized"));
             }
+        }
+        if (request.getBuildingId() != null && floor.getBuilding() != null && !floor.getBuilding().getId().equals(request.getBuildingId())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Specified floor does not belong to the selected building!"));
+        }
+        if (request.getPropertyId() != null && floor.getBuilding() != null && floor.getBuilding().getProperty() != null && !floor.getBuilding().getProperty().getId().equals(request.getPropertyId())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Specified floor does not belong to the selected property!"));
         }
 
         String roomNum = request.getRoomNumber();

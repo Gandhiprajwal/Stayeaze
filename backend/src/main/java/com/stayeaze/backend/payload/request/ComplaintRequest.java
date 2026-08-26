@@ -10,10 +10,22 @@ public class ComplaintRequest {
     @NotBlank
     private String description;
 
+    private UUID propertyId;
+    private UUID buildingId;
+    private UUID floorId;
     private UUID roomId;
 
     public ComplaintRequest() {
     }
+
+    public UUID getPropertyId() { return propertyId; }
+    public void setPropertyId(UUID propertyId) { this.propertyId = propertyId; }
+
+    public UUID getBuildingId() { return buildingId; }
+    public void setBuildingId(UUID buildingId) { this.buildingId = buildingId; }
+
+    public UUID getFloorId() { return floorId; }
+    public void setFloorId(UUID floorId) { this.floorId = floorId; }
 
     public String getCategory() {
         return category;

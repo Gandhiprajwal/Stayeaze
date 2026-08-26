@@ -215,14 +215,14 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val) resetModal(); onOpenChange(val); }}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="p-6 pb-4 border-b bg-muted/30">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
+        <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
               <FileSpreadsheet className="h-6 w-6" />
             </div>
             <div>
-              <DialogTitle className="text-xl font-bold">Existing Resident Bulk Onboarding</DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl font-bold">Existing Resident Bulk Onboarding</DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
                 Import multiple residents from Excel/CSV with historical check-in dates, deposit accounting, and automated login credentials.
               </DialogDescription>
@@ -230,7 +230,7 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-h-[calc(85vh-130px)]">
           {step === 'upload' && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -424,27 +424,31 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
           )}
         </div>
 
-        <DialogFooter className="p-4 border-t bg-muted/20 flex items-center justify-between">
+        <DialogFooter className="p-4 border-t border-border/60 bg-muted/20 flex flex-row items-center justify-between gap-2 shrink-0">
           {step === 'upload' && (
             <>
-              <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
-                <Upload className="h-4 w-4" /> Select File
+              <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl h-9 text-xs font-semibold">
+                Cancel
+              </Button>
+              <Button onClick={() => fileInputRef.current?.click()} className="gap-2 rounded-xl h-9 text-xs font-bold shadow-xs">
+                <Upload className="h-4 w-4" /> Select CSV File
               </Button>
             </>
           )}
 
           {step === 'preview' && (
             <>
-              <Button variant="outline" onClick={() => setStep('upload')}>Back</Button>
-              <Button onClick={executeBulkImport} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+              <Button variant="outline" onClick={() => setStep('upload')} className="rounded-xl h-9 text-xs font-semibold">
+                Back
+              </Button>
+              <Button onClick={executeBulkImport} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl h-9 text-xs shadow-xs">
                 Confirm & Import {parsedRows.filter(r => r.isValid).length} Residents <ArrowRight className="h-4 w-4" />
               </Button>
             </>
           )}
 
           {step === 'summary' && (
-            <Button onClick={() => onOpenChange(false)} className="w-full">
+            <Button onClick={() => onOpenChange(false)} className="w-full rounded-xl h-9.5 text-xs font-bold">
               Done & View Tenants
             </Button>
           )}

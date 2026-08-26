@@ -256,7 +256,7 @@ export default function SuperAdminEscalationsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-6">
       <PageHeader
         title="Super Admin Support Escalations Desk"
         description="High-priority triage console to review technical findings, execute database reconciliations, and override quotas on subscriber tickets escalated by Platform Engineers."
@@ -264,60 +264,73 @@ export default function SuperAdminEscalationsPage() {
       />
 
       {/* KPI Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4 border-amber-500/30 bg-amber-500/5 shadow-2xs">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="p-4 sm:p-5 rounded-2xl border-amber-500/30 bg-amber-500/5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">Active Escalations</span>
-            <AlertTriangle className="h-4 w-4 text-amber-600 animate-pulse" />
+            <span className="text-[10px] sm:text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">Active Escalations</span>
+            <AlertTriangle className="h-4 w-4 text-amber-600 animate-pulse shrink-0" />
           </div>
-          <p className="text-2xl font-black text-amber-600 mt-2">{stats?.escalatedTickets ?? 0}</p>
-          <span className="text-[11px] text-muted-foreground">Pending Super Admin Decision</span>
+          <p className="text-xl sm:text-2xl font-black text-amber-600 mt-2 font-mono">{stats?.escalatedTickets ?? 0}</p>
+          <span className="text-[10px] sm:text-[11px] text-muted-foreground">Pending Decision</span>
         </Card>
 
-        <Card className="p-4 shadow-2xs">
+        <Card className="p-4 sm:p-5 rounded-2xl shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Open Ticket Queue</span>
-            <Activity className="h-4 w-4 text-indigo-600" />
+            <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider">Open Queue</span>
+            <Activity className="h-4 w-4 text-indigo-600 shrink-0" />
           </div>
-          <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-2">{stats?.openTickets ?? 0}</p>
-          <span className="text-[11px] text-muted-foreground">Total Open Inquiries</span>
+          <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 mt-2 font-mono">{stats?.openTickets ?? 0}</p>
+          <span className="text-[10px] sm:text-[11px] text-muted-foreground">Open Inquiries</span>
         </Card>
 
-        <Card className="p-4 shadow-2xs">
+        <Card className="p-4 sm:p-5 rounded-2xl shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Resolved Tickets</span>
-            <CheckCircle className="h-4 w-4 text-emerald-600" />
+            <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider">Resolved</span>
+            <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
           </div>
-          <p className="text-2xl font-black text-emerald-600 mt-2">{stats?.resolvedTickets ?? 0}</p>
-          <span className="text-[11px] text-muted-foreground">Successfully Closed Issues</span>
+          <p className="text-xl sm:text-2xl font-black text-emerald-600 mt-2 font-mono">{stats?.resolvedTickets ?? 0}</p>
+          <span className="text-[10px] sm:text-[11px] text-muted-foreground">Closed Issues</span>
         </Card>
 
-        <Card className="p-4 shadow-2xs">
+        <Card className="p-4 sm:p-5 rounded-2xl shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Platform Tickets</span>
-            <Sparkles className="h-4 w-4 text-purple-600" />
+            <span className="text-[10px] sm:text-xs font-bold text-muted-foreground uppercase tracking-wider">Platform Total</span>
+            <Sparkles className="h-4 w-4 text-purple-600 shrink-0" />
           </div>
-          <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-2">{stats?.totalTickets ?? 0}</p>
-          <span className="text-[11px] text-muted-foreground">Lifetime Platform Threads</span>
+          <p className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 mt-2 font-mono">{stats?.totalTickets ?? 0}</p>
+          <span className="text-[10px] sm:text-[11px] text-muted-foreground">Lifetime Threads</span>
         </Card>
       </div>
 
       {/* Filter Toolbar */}
-      <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3">
+      <Card className="rounded-2xl shadow-xs overflow-hidden">
+        <CardHeader className="p-4 sm:p-6 pb-3 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <CardTitle className="text-base font-bold flex items-center gap-2">
+            <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-600" />
               Escalated Support Tickets Queue
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs">
               Showing {tickets.length} of {totalElements} escalated cases
             </CardDescription>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-56 md:w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search ticket #, title, org..."
+                className="pl-8 text-xs h-9 rounded-xl w-full"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-36 text-xs h-9">
+              <SelectTrigger className="w-full sm:w-36 text-xs h-9 rounded-xl">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -329,23 +342,10 @@ export default function SuperAdminEscalationsPage() {
               </SelectContent>
             </Select>
 
-            <div className="relative w-48 sm:w-60">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search ticket #, title, org..."
-                className="pl-8 text-xs h-9"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </div>
-
             <Button
               size="sm"
               variant="outline"
-              className="h-9 px-2.5 text-xs font-semibold gap-1.5 border-border hover:bg-muted"
+              className="h-9 px-2.5 text-xs font-semibold gap-1.5 border-border hover:bg-muted rounded-xl shrink-0"
               disabled={isRefreshing || loadingTickets}
               onClick={handleManualRefresh}
               title="Refresh queue"
@@ -498,15 +498,15 @@ export default function SuperAdminEscalationsPage() {
 
       {/* DETAILED SUPER ADMIN RESOLUTION & DIAGNOSTICS MODAL */}
       <Dialog open={!!activeTicket} onOpenChange={(open) => !open && setActiveTicket(null)}>
-        <DialogContent className="max-w-3xl max-h-[92vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="p-4 border-b bg-muted/20">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-3xl max-h-[92vh] flex flex-col p-0 overflow-hidden rounded-2xl">
+          <DialogHeader className="p-4 sm:p-5 border-b bg-muted/20">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-xs font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded border border-amber-200">
                     {activeTicket?.ticketNumber}
                   </span>
-                  <DialogTitle className="text-base font-bold">{activeTicket?.title}</DialogTitle>
+                  <DialogTitle className="text-base sm:text-lg font-bold">{activeTicket?.title}</DialogTitle>
                   {activeTicket && getStatusBadge(activeTicket.status)}
                 </div>
                 <DialogDescription className="text-xs">
@@ -517,20 +517,22 @@ export default function SuperAdminEscalationsPage() {
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={(val: any) => setActiveTab(val)} className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="grid grid-cols-4 mx-4 mt-2 mb-1 bg-muted/70">
-              <TabsTrigger value="action" className="text-xs font-semibold gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-amber-600" /> Admin Action
-              </TabsTrigger>
-              <TabsTrigger value="chat" className="text-xs font-semibold gap-1.5">
-                <MessageCircle className="h-3.5 w-3.5" /> Ticket Thread
-              </TabsTrigger>
-              <TabsTrigger value="health" className="text-xs font-semibold gap-1.5">
-                <Building2 className="h-3.5 w-3.5" /> Org Health & Quotas
-              </TabsTrigger>
-              <TabsTrigger value="telemetry" className="text-xs font-semibold gap-1.5">
-                <Activity className="h-3.5 w-3.5" /> Telemetry Trace
-              </TabsTrigger>
-            </TabsList>
+            <div className="px-4 pt-2 pb-1 overflow-x-auto scrollbar-none">
+              <TabsList className="flex items-center gap-1 w-max min-w-full sm:w-auto h-10 bg-muted/70 p-1 rounded-xl">
+                <TabsTrigger value="action" className="text-xs font-semibold gap-1.5 px-3 rounded-lg shrink-0">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-600 shrink-0" /> Admin Action
+                </TabsTrigger>
+                <TabsTrigger value="chat" className="text-xs font-semibold gap-1.5 px-3 rounded-lg shrink-0">
+                  <MessageCircle className="h-3.5 w-3.5 shrink-0" /> Ticket Thread
+                </TabsTrigger>
+                <TabsTrigger value="health" className="text-xs font-semibold gap-1.5 px-3 rounded-lg shrink-0">
+                  <Building2 className="h-3.5 w-3.5 shrink-0" /> Org Health &amp; Quotas
+                </TabsTrigger>
+                <TabsTrigger value="telemetry" className="text-xs font-semibold gap-1.5 px-3 rounded-lg shrink-0">
+                  <Activity className="h-3.5 w-3.5 shrink-0" /> Telemetry Trace
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* TAB 1: Super Admin Action & Resolution Execution */}
             <TabsContent value="action" className="flex-1 overflow-y-auto p-4 space-y-4 m-0">

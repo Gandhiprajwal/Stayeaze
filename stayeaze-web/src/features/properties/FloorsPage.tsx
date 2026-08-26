@@ -40,6 +40,16 @@ export default function FloorsPage() {
   const [editing, setEditing] = useState<Floor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Floor | null>(null);
 
+  const { data: properties } = useQuery({
+    queryKey: ['floors-properties'],
+    queryFn: () => api.get<any[]>('/properties', { params: { pageSize: 100 } }).then((r) => {
+      const payload = r.data as unknown;
+      if (Array.isArray(payload)) return payload;
+      return (payload as { data: any[] })?.data ?? [];
+    }),
+  });
+  const propMap = new Map((properties ?? []).map((p: any) => [p.id, p.name]));
+
   const { data: buildings } = useQuery({
     queryKey: ['floors-buildings'],
     queryFn: () => api.get<BuildingType[]>('/buildings', { params: { pageSize: 100 } }).then((r) => {
@@ -55,9 +65,19 @@ export default function FloorsPage() {
   const deleteMut = useDelete(ENDPOINT, 'Floor');
   const form = useForm(emptyForm);
 
-  function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
+  const [selectedPropId, setSelectedPropId] = useState<string>('');
+
+  function openCreate() {
+    setEditing(null);
+    setSelectedPropId('');
+    form.reset(emptyForm);
+    setDialogOpen(true);
+  }
   function openEdit(row: Floor) {
     setEditing(row);
+    const bld = (buildings ?? []).find((b) => b.id === row.buildingId);
+    const pId = row.propertyId || bld?.propertyId || '';
+    setSelectedPropId(pId);
     form.reset({
       name: row.name,
       number: row.number || (row as any).floorNumber || 1,
@@ -85,7 +105,24 @@ export default function FloorsPage() {
         <div><p className="font-medium">{r.name}</p><p className="text-xs text-muted-foreground">Level {r.number}</p></div>
       </div>
     )},
-    { key: 'buildingId', header: 'Building', sortable: true, cell: (r) => <span className="text-sm">{r.buildingName || buildingMap.get(r.buildingId) || '—'}</span> },
+    { key: 'buildingId', header: 'Building', sortable: true, cell: (r) => {
+      const bldObj = (buildings ?? []).find((b) => b.id === r.buildingId);
+      const bldName = r.buildingName || bldObj?.name || buildingMap.get(r.buildingId) || '—';
+      const propName = r.propertyName || (bldObj ? (bldObj.propertyName || propMap.get(bldObj.propertyId)) : undefined) || '';
+      return (
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5 font-medium text-sm text-foreground">
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>{bldName}</span>
+          </div>
+          {propName && (
+            <span className="text-xs text-muted-foreground pl-5 font-normal">
+              {propName}
+            </span>
+          )}
+        </div>
+      );
+    }},
     { key: 'rooms', header: 'Rooms', sortable: true, cell: (r) => <span className="tabular-nums">{r.rooms}</span> },
     { key: 'beds', header: 'Beds', sortable: true, cell: (r) => <span className="tabular-nums">{r.beds}</span> },
     { key: 'occupied', header: 'Occupancy', sortable: true, cell: (r) => {
@@ -117,6 +154,11 @@ export default function FloorsPage() {
     }
   };
 
+  const filteredBuildingsForForm = useMemo(() => {
+    if (!selectedPropId) return buildings ?? [];
+    return (buildings ?? []).filter((b) => b.propertyId === selectedPropId);
+  }, [buildings, selectedPropId]);
+
   return (
     <div className="space-y-6">
       <PageHeader title="Floors" description="Manage floors within buildings." icon={Layers}
@@ -137,23 +179,48 @@ export default function FloorsPage() {
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Floor' : 'Add Floor'} onSubmit={submit}
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput label="Floor Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} placeholder="e.g. Ground Floor, 1st Floor, Terrace" />
-          <FormInput label="Floor Number / Level" type="number" id="number" value={String(form.values.number)} onChange={(e) => form.setValue('number', Number(e.target.value))} />
           <div className="space-y-1.5 sm:col-span-2">
-            <Label required>Building</Label>
+            <Label>1. Property</Label>
             <SearchableSelect
-              options={(buildings ?? []).map((b) => ({
+              options={(properties ?? []).map((p: any) => ({
+                value: p.id,
+                label: p.name,
+                sublabel: p.address || p.city || 'Property',
+              }))}
+              value={selectedPropId}
+              onChange={(val) => {
+                setSelectedPropId(val);
+                form.setValue('buildingId', '');
+              }}
+              placeholder="Choose Property..."
+              searchPlaceholder="Search properties..."
+            />
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label required>2. Building</Label>
+            <SearchableSelect
+              options={filteredBuildingsForForm.map((b) => ({
                 value: b.id,
                 label: b.name,
-                sublabel: b.code || 'Building',
+                sublabel: `${b.propertyName || propMap.get(b.propertyId) || 'Property'} • ${b.code || 'Building'}`,
               }))}
               value={form.values.buildingId}
-              onChange={(v) => form.setValue('buildingId', v)}
-              placeholder="Search & select building..."
+              onChange={(v) => {
+                form.setValue('buildingId', v);
+                const matchedBld = (buildings ?? []).find((b) => b.id === v);
+                if (matchedBld && matchedBld.propertyId && !selectedPropId) {
+                  setSelectedPropId(matchedBld.propertyId);
+                }
+              }}
+              placeholder={selectedPropId ? "Select building in selected property..." : "Select building..."}
               searchPlaceholder="Search buildings by name..."
             />
             {form.errors.buildingId && <p className="text-xs text-destructive">{form.errors.buildingId}</p>}
           </div>
+
+          <FormInput label="Floor Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} placeholder="e.g. Ground Floor, 1st Floor, Terrace" />
+          <FormInput label="Floor Number / Level" type="number" id="number" value={String(form.values.number)} onChange={(e) => form.setValue('number', Number(e.target.value))} />
         </div>
       </FormDialog>
       <ConfirmDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)} title="Delete Floor" variant="destructive"

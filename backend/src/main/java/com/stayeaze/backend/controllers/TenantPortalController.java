@@ -57,6 +57,9 @@ public class TenantPortalController {
     private CheckOutRepository checkOutRepository;
 
     @Autowired
+    private MeterReadingRepository meterReadingRepository;
+
+    @Autowired
     private OrganizationBillingProfileRepository organizationBillingProfileRepository;
 
     @Autowired
@@ -911,5 +914,63 @@ public class TenantPortalController {
         res.put("refundIfsc", tenant.getRefundIfsc());
         res.put("refundBankName", tenant.getRefundBankName());
         return ResponseEntity.ok(res);
+    }
+
+    @GetMapping("/utilities")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> getTenantUtilities() {
+        Tenant tenant = getAuthenticatedTenant();
+        if (tenant == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new MessageResponse("Unauthorized tenant"));
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (tenant.getPropertyId() == null || tenant.getRoomNumber() == null || tenant.getRoomNumber().isBlank()) {
+            return ResponseEntity.ok(result);
+        }
+
+        List<Room> propRooms = roomRepository.findByPropertyIdNative(tenant.getPropertyId());
+        Room tenantRoom = propRooms.stream()
+                .filter(r -> r.getRoomNumber() != null && r.getRoomNumber().equalsIgnoreCase(tenant.getRoomNumber()))
+                .findFirst().orElse(null);
+
+        if (tenantRoom == null) {
+            return ResponseEntity.ok(result);
+        }
+
+        List<MeterReading> readings = meterReadingRepository.findByRoom(tenantRoom);
+        readings.sort((a, b) -> {
+            int yCmp = Integer.compare(b.getBillingYear() != null ? b.getBillingYear() : 0, a.getBillingYear() != null ? a.getBillingYear() : 0);
+            if (yCmp != 0) return yCmp;
+            return Integer.compare(b.getBillingMonth() != null ? b.getBillingMonth() : 0, a.getBillingMonth() != null ? a.getBillingMonth() : 0);
+        });
+
+        Set<String> seenCycles = new HashSet<>();
+        for (MeterReading mr : readings) {
+            String cycleKey = (mr.getBillingYear() != null ? mr.getBillingYear() : 0) + "_" + (mr.getBillingMonth() != null ? mr.getBillingMonth() : 0);
+            if (!seenCycles.add(cycleKey)) {
+                continue; // Skip historical duplicates for the same cycle
+            }
+
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", mr.getId());
+            map.put("roomNumber", tenantRoom.getRoomNumber());
+            map.put("readingDate", mr.getReadingDate());
+            map.put("billingMonth", mr.getBillingMonth());
+            map.put("billingYear", mr.getBillingYear());
+            map.put("previousReading", mr.getPreviousReadingValue());
+            map.put("currentReading", mr.getReadingValue());
+            map.put("unitsConsumed", mr.getUnitsConsumed());
+            map.put("unitRate", mr.getUnitRate());
+            map.put("totalAmount", mr.getTotalAmount());
+            map.put("freeAllowanceUnits", mr.getFreeAllowanceUnits());
+            map.put("splitMode", mr.getSplitMode());
+            map.put("status", mr.getStatus());
+            map.put("photoUrl", mr.getPhotoUrl());
+            map.put("tenantSplitDetails", mr.getTenantSplitDetailsJson());
+            result.add(map);
+        }
+
+        return ResponseEntity.ok(result);
     }
 }

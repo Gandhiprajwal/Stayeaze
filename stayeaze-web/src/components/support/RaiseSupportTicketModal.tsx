@@ -323,26 +323,24 @@ export const RaiseSupportTicketModal = forwardRef<HTMLDivElement, RaiseSupportTi
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="max-w-2xl sm:max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                <LifeBuoy className="h-5 w-5" />
-              </div>
-              <div>
-                <DialogTitle className="text-lg font-bold">StayEaze Platform Helpdesk</DialogTitle>
-                <DialogDescription className="text-xs">
-                  Direct channel to platform engineers & billing specialists for application issues.
-                </DialogDescription>
-              </div>
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
+        <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
+              <LifeBuoy className="h-5 w-5 sm:h-6 sm:w-6" />
+            </div>
+            <div>
+              <DialogTitle className="text-base sm:text-lg font-bold">StayEaze Platform Helpdesk</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                Direct channel to platform engineers & billing specialists for application issues.
+              </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         {/* IF A SPECIFIC TICKET IS SELECTED FOR CHAT */}
         {selectedTicketForChat ? (
-          <div className="space-y-4 pt-2">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[calc(85vh-130px)]">
             <div className="flex items-center justify-between p-3 rounded-xl border bg-muted/40 gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -448,20 +446,20 @@ export const RaiseSupportTicketModal = forwardRef<HTMLDivElement, RaiseSupportTi
               <div ref={chatEndRef} />
             </div>
 
-            {/* Chat Composer */}
+            {/* Chat Send Input Box */}
             <form onSubmit={handleSendChatMessage} className="flex gap-2">
               <Input
                 value={chatMessage}
                 onChange={(e) => setChatMessage(e.target.value)}
-                placeholder={isExpired ? 'Ticket closed (window expired)' : 'Type your reply or question...'}
+                placeholder={isExpired ? 'Ticket closed permanently.' : 'Type your message to support...'}
                 disabled={isExpired || sendMessageMutation.isPending}
-                className="text-xs h-9"
+                className="text-xs h-9.5 rounded-xl"
               />
               <Button
                 type="submit"
                 size="sm"
                 disabled={!chatMessage.trim() || isExpired || sendMessageMutation.isPending}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs h-9 px-4 shrink-0"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl h-9.5 px-4"
               >
                 <Send className="mr-1.5 h-3.5 w-3.5" />
                 {sendMessageMutation.isPending ? 'Sending...' : 'Send'}
@@ -469,24 +467,26 @@ export const RaiseSupportTicketModal = forwardRef<HTMLDivElement, RaiseSupportTi
             </form>
           </div>
         ) : (
-          <Tabs value={tab} onValueChange={(v: any) => setTab(v)} className="w-full mt-2">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="raise" className="text-xs">
-                <Plus className="mr-1.5 h-3.5 w-3.5" /> Raise New Ticket
-              </TabsTrigger>
-              <TabsTrigger value="history" className="text-xs">
-                <Clock className="mr-1.5 h-3.5 w-3.5" /> My Tickets ({tickets.length})
-              </TabsTrigger>
-            </TabsList>
+          <Tabs value={tab} onValueChange={(v: any) => setTab(v)} className="w-full flex-1 flex flex-col min-h-0 overflow-hidden">
+            <div className="p-4 sm:p-6 pb-2 shrink-0">
+              <TabsList className="grid w-full grid-cols-2 h-10 p-1 rounded-xl bg-muted/60 border border-border/60">
+                <TabsTrigger value="raise" className="text-xs font-semibold rounded-lg">
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Raise New Ticket
+                </TabsTrigger>
+                <TabsTrigger value="history" className="text-xs font-semibold rounded-lg">
+                  <Clock className="mr-1.5 h-3.5 w-3.5" /> My Tickets ({tickets.length})
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {/* TAB 1: RAISE TICKET */}
-            <TabsContent value="raise" className="space-y-4 pt-3">
+            <TabsContent value="raise" className="flex-1 overflow-y-auto p-4 sm:p-6 pt-0 space-y-4 max-h-[calc(85vh-190px)] mt-0">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold">Issue Category</Label>
                     <Select value={category} onValueChange={setCategory}>
-                      <SelectTrigger className="text-xs h-9">
+                      <SelectTrigger className="text-xs h-9.5 rounded-xl">
                         <SelectValue placeholder="Select Category" />
                       </SelectTrigger>
                       <SelectContent>
@@ -502,7 +502,7 @@ export const RaiseSupportTicketModal = forwardRef<HTMLDivElement, RaiseSupportTi
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold">Priority / Urgency</Label>
                     <Select value={priority} onValueChange={setPriority}>
-                      <SelectTrigger className="text-xs h-9">
+                      <SelectTrigger className="text-xs h-9.5 rounded-xl">
                         <SelectValue placeholder="Select Priority" />
                       </SelectTrigger>
                       <SelectContent>
@@ -528,7 +528,7 @@ export const RaiseSupportTicketModal = forwardRef<HTMLDivElement, RaiseSupportTi
                     onChange={(e) => setTitle(e.target.value)}
                     onBlur={() => markTouched('title')}
                     placeholder="e.g. Need assistance setting up custom rent invoices"
-                    className={`text-xs h-9 ${touched.title && errors.title ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
+                    className={`text-xs h-9.5 rounded-xl ${touched.title && errors.title ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
                     maxLength={150}
                   />
                   {touched.title && errors.title && (
@@ -552,7 +552,7 @@ export const RaiseSupportTicketModal = forwardRef<HTMLDivElement, RaiseSupportTi
                     onBlur={() => markTouched('description')}
                     placeholder="Provide details about the issue, steps to reproduce, or questions..."
                     rows={4}
-                    className={`text-xs ${touched.description && errors.description ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
+                    className={`text-xs rounded-xl ${touched.description && errors.description ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
                   />
                   {touched.description && errors.description && (
                     <p className="text-[11px] font-medium text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
@@ -573,7 +573,7 @@ export const RaiseSupportTicketModal = forwardRef<HTMLDivElement, RaiseSupportTi
                       onChange={(e) => setContactEmail(e.target.value)}
                       onBlur={() => markTouched('contactEmail')}
                       placeholder="owner@myproperty.com"
-                      className={`text-xs h-9 ${touched.contactEmail && errors.contactEmail ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
+                      className={`text-xs h-9.5 rounded-xl ${touched.contactEmail && errors.contactEmail ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
                     />
                     {touched.contactEmail && errors.contactEmail && (
                       <p className="text-[11px] font-medium text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
@@ -587,11 +587,14 @@ export const RaiseSupportTicketModal = forwardRef<HTMLDivElement, RaiseSupportTi
                       Callback Phone <span className="text-muted-foreground font-normal text-[10px]">(Optional)</span>
                     </Label>
                     <Input
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
                       value={contactPhone}
-                      onChange={(e) => setContactPhone(e.target.value)}
+                      onChange={(e) => setContactPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       onBlur={() => markTouched('contactPhone')}
-                      placeholder="+91 98765 43210"
-                      className={`text-xs h-9 ${touched.contactPhone && errors.contactPhone ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
+                      placeholder="e.g. 9876543210"
+                      className={`text-xs h-9.5 rounded-xl ${touched.contactPhone && errors.contactPhone ? 'border-red-500 focus-visible:ring-red-500/30' : ''}`}
                     />
                     {touched.contactPhone && errors.contactPhone && (
                       <p className="text-[11px] font-medium text-red-600 dark:text-red-400 mt-1 flex items-center gap-1">
@@ -602,22 +605,30 @@ export const RaiseSupportTicketModal = forwardRef<HTMLDivElement, RaiseSupportTi
                   </div>
                 </div>
 
-                <DialogFooter className="pt-2">
+                <div className="sticky bottom-0 bg-background/95 backdrop-blur-md pt-3 pb-1 border-t border-border/60 flex items-center justify-between gap-2 mt-4">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setIsOpen(false)}
+                    className="rounded-xl h-9 text-xs font-semibold"
+                  >
+                    Cancel
+                  </Button>
                   <Button
                     type="submit"
                     size="sm"
                     disabled={!isFormValid || createTicketMutation.isPending}
-                    className="text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold transition-all"
+                    className="text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl h-9.5 px-4 shadow-xs transition-all"
                   >
                     <Send className="mr-1.5 h-3.5 w-3.5" />
                     {createTicketMutation.isPending ? 'Submitting...' : 'Submit Ticket'}
                   </Button>
-                </DialogFooter>
+                </div>
               </form>
             </TabsContent>
 
             {/* TAB 2: TICKET HISTORY */}
-            <TabsContent value="history" className="space-y-3 pt-3">
+            <TabsContent value="history" className="space-y-3 pt-3 flex-1 overflow-y-auto p-4 sm:p-6 pt-0 mt-0">
               {loadingTickets ? (
                 <div className="py-12 text-center text-xs text-muted-foreground">Loading your support tickets...</div>
               ) : tickets.length === 0 ? (

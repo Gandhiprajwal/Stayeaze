@@ -365,17 +365,30 @@ export default function SupportTicketsPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b">
           <div>
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <LifeBuoy className="h-4 w-4 text-indigo-600" />
+            <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+              <LifeBuoy className="h-4 w-4 text-indigo-600 shrink-0" />
               {isStaff ? 'Platform Support Queue' : 'My Support Tickets'}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs">
               Showing {tickets.length} of {totalElements} tickets
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-56 md:w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search ticket #, title..."
+                className="pl-8 text-xs h-9 rounded-xl w-full"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+
             <Select
               value={appTicketStatus}
               onValueChange={(val) => {
@@ -383,7 +396,7 @@ export default function SupportTicketsPage() {
                 setPage(1);
               }}
             >
-              <SelectTrigger className="w-36 text-xs h-9">
+              <SelectTrigger className="w-full sm:w-36 text-xs h-9 rounded-xl">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -396,23 +409,10 @@ export default function SupportTicketsPage() {
               </SelectContent>
             </Select>
 
-            <div className="relative w-48 sm:w-60">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search ticket #, title..."
-                className="pl-8 text-xs h-9"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </div>
-
             <Button
               size="sm"
               variant="outline"
-              className="h-9 px-2.5 text-xs font-semibold gap-1.5 border-border hover:bg-muted"
+              className="h-9 px-2.5 text-xs font-semibold gap-1.5 border-border hover:bg-muted rounded-xl shrink-0"
               disabled={isRefreshing || loadingTickets}
               onClick={handleManualRefresh}
               title="Refresh queue"

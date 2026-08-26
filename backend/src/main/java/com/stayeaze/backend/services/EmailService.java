@@ -97,8 +97,20 @@ public class EmailService {
         """, bgHex, textHex, label, textHex, amountFormatted);
     }
 
+    private volatile JavaMailSender cachedMailSender = null;
+    private volatile String cachedMailConfigHash = null;
+
+    /**
+     * Invalidates the in-memory JavaMailSender cache (e.g. when SystemConfig SMTP changes).
+     */
+    public void invalidateMailSenderCache() {
+        this.cachedMailSender = null;
+        this.cachedMailConfigHash = null;
+    }
+
     /**
      * Resolves or dynamically instantiates JavaMailSender with active SMTP credentials.
+     * Caches the instance in memory to avoid redundant allocations and DB hits on bulk dispatches.
      */
     public JavaMailSender getActiveMailSender() {
         String host = defaultHost;
@@ -129,6 +141,11 @@ public class EmailService {
             return null; // Return null so we log in Dev Log Mode rather than hanging on unauthenticated socket timeouts
         }
 
+        String currentConfigHash = host + ":" + port + ":" + username + ":" + password.hashCode();
+        if (cachedMailSender != null && currentConfigHash.equals(cachedMailConfigHash)) {
+            return cachedMailSender;
+        }
+
         JavaMailSenderImpl dynamicSender = new JavaMailSenderImpl();
         dynamicSender.setHost(host);
         dynamicSender.setPort(port);
@@ -150,6 +167,9 @@ public class EmailService {
         props.put("mail.smtp.connectiontimeout", "5000");
         props.put("mail.smtp.timeout", "5000");
         props.put("mail.smtp.writetimeout", "5000");
+
+        this.cachedMailConfigHash = currentConfigHash;
+        this.cachedMailSender = dynamicSender;
 
         return dynamicSender;
     }

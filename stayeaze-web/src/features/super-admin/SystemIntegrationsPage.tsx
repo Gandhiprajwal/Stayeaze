@@ -219,13 +219,18 @@ export default function SystemIntegrationsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-24">
+    <div className="space-y-6 max-w-5xl mx-auto pb-28 sm:pb-12">
       <PageHeader
         title="Cloud Infrastructure & API Gateways"
         description="Unified management for Redis L2 Caching, AWS S3 Bucket Storage, Twilio SMS, SMTP Email Relay, Bucket4j Rate Limiting, and Razorpay Gateways."
         icon={Server}
         actions={
-          <Button type="button" onClick={handleSubmit} disabled={saveMut.isPending} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-sm">
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saveMut.isPending}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-xs rounded-xl h-10 text-xs sm:text-sm font-bold w-full sm:w-auto"
+          >
             <Save className="h-4 w-4" /> Save All Credentials
           </Button>
         }
@@ -233,18 +238,18 @@ export default function SystemIntegrationsPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* 1. SaaS Onboarding Policy & Waitlist Control */}
-        <Card className="border shadow-sm overflow-hidden border-l-4 border-l-blue-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
+        <Card className="rounded-2xl border shadow-xs overflow-hidden border-l-4 border-l-blue-500">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 pb-3 sm:pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
             <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <UserCheck className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                SaaS Self-Registration Policy & Waitlist Controls
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <UserCheck className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                SaaS Self-Registration Policy &amp; Waitlist Controls
               </CardTitle>
-              <CardDescription className="text-xs mt-1">
+              <CardDescription className="text-xs mt-1 leading-relaxed">
                 Control how prospective PG Owners onboard onto StayEaze (Open instant signup, Queue for approval, or Invite-Only).
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
                 form.onboardingMode === 'ENABLED'
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
@@ -256,29 +261,29 @@ export default function SystemIntegrationsPage() {
               </span>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 grid gap-4 sm:grid-cols-2">
+          <CardContent className="p-4 sm:p-5 grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Onboarding Access Mode</Label>
               <Select
                 value={form.onboardingMode}
                 onValueChange={(v) => setForm({ ...form, onboardingMode: v })}
               >
-                <SelectTrigger className="text-xs h-9">
+                <SelectTrigger className="text-xs sm:text-sm h-10 rounded-xl">
                   <SelectValue placeholder="Select Mode" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ENABLED" className="text-xs font-medium">
-                    🟢 ENABLED — Instant Open Onboarding (Active immediately)
+                    🟢 ENABLED — Instant Open Onboarding
                   </SelectItem>
                   <SelectItem value="WAITLIST" className="text-xs font-medium">
-                    🟡 WAITLIST — Approval Required (Enters Super Admin Queue)
+                    🟡 WAITLIST — Approval Required
                   </SelectItem>
                   <SelectItem value="DISABLED" className="text-xs font-medium">
-                    🔴 DISABLED — Invite Only (Captures VIP Leads)
+                    🔴 DISABLED — Invite Only
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
                 {form.onboardingMode === 'ENABLED' && 'Anyone can register and start managing their PG immediately without waiting.'}
                 {form.onboardingMode === 'WAITLIST' && 'New signups are placed in PENDING_APPROVAL status until approved, unless they provide a VIP pass.'}
                 {form.onboardingMode === 'DISABLED' && 'Public registration is closed. Registrations capture leads for sales outreach.'}
@@ -291,16 +296,16 @@ export default function SystemIntegrationsPage() {
                 value={form.vipInviteCodes}
                 onChange={(e) => setForm({ ...form, vipInviteCodes: e.target.value.toUpperCase() })}
                 placeholder="STAYVIP, EARLYBIRD, LAUNCH2026"
-                className="text-xs font-mono"
+                className="text-xs sm:text-sm font-mono h-10 rounded-xl"
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
                 Comma-separated codes that allow invited proprietors to bypass waitlists and activate instantly.
               </p>
             </div>
           </CardContent>
-          <CardFooter className="bg-slate-50/50 dark:bg-slate-900/50 border-t flex justify-between items-center py-2.5 px-4">
-            <p className="text-[11px] text-slate-500">
-              Changes take effect immediately across all landing & registration pages.
+          <CardFooter className="bg-slate-50/50 dark:bg-slate-900/50 border-t flex flex-col sm:flex-row justify-between items-center gap-3 p-4">
+            <p className="text-[11px] text-muted-foreground text-center sm:text-left">
+              Changes take effect immediately across all landing &amp; registration pages.
             </p>
             <Button
               type="button"
@@ -310,7 +315,7 @@ export default function SystemIntegrationsPage() {
                 onboardingMode: form.onboardingMode,
                 vipInviteCodes: form.vipInviteCodes,
               })}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 gap-1.5 shadow-sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold h-9 px-3.5 rounded-xl gap-1.5 shadow-xs w-full sm:w-auto"
             >
               <Save className="h-3.5 w-3.5" />
               {saveOnboardingPolicyMut.isPending ? 'Saving Policy...' : 'Save Onboarding Policy'}
@@ -319,18 +324,18 @@ export default function SystemIntegrationsPage() {
         </Card>
 
         {/* 2. Redis L2 Cache Cluster Configuration */}
-        <Card className="border shadow-sm overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
+        <Card className="rounded-2xl border shadow-xs overflow-hidden">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 pb-3 sm:pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
             <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Database className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <Database className="h-5 w-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
                 Redis L2 Cache Cluster Settings (1,000+ RPS Scale)
               </CardTitle>
-              <CardDescription className="text-xs mt-1">
+              <CardDescription className="text-xs mt-1 leading-relaxed">
                 Distributed in-memory L2 caching for high-concurrency property, tenant, and billing profile queries.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${form.redisEnabled ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
                 {form.redisEnabled ? 'ACTIVE' : 'DISABLED'}
               </span>
@@ -344,13 +349,14 @@ export default function SystemIntegrationsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 grid gap-4 sm:grid-cols-3">
+          <CardContent className="p-4 sm:p-5 grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Redis Host / URI</Label>
               <Input
                 value={form.redisHost}
                 onChange={(e) => setForm({ ...form, redisHost: e.target.value })}
                 placeholder="redis.internal or 127.0.0.1"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -360,6 +366,7 @@ export default function SystemIntegrationsPage() {
                 value={form.redisPort}
                 onChange={(e) => setForm({ ...form, redisPort: Number(e.target.value) })}
                 placeholder="6379"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -369,24 +376,25 @@ export default function SystemIntegrationsPage() {
                 value={form.redisPassword}
                 onChange={(e) => setForm({ ...form, redisPassword: e.target.value })}
                 placeholder="Enter Redis Password"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
           </CardContent>
         </Card>
 
-        {/* 2. AWS S3 Cloud Storage Configuration */}
-        <Card className="border shadow-sm overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
+        {/* 3. AWS S3 Cloud Storage Configuration */}
+        <Card className="rounded-2xl border shadow-xs overflow-hidden">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 pb-3 sm:pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
             <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Cloud className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <Cloud className="h-5 w-5 text-sky-600 dark:text-sky-400 shrink-0" />
                 AWS S3 Cloud Storage Credentials
               </CardTitle>
-              <CardDescription className="text-xs mt-1">
+              <CardDescription className="text-xs mt-1 leading-relaxed">
                 Secure cloud bucket storage for tenant KYC documents, property photos, and digital receipt PDFs.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${form.awsS3Enabled ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
                 {form.awsS3Enabled ? 'ACTIVE' : 'DISABLED'}
               </span>
@@ -400,13 +408,14 @@ export default function SystemIntegrationsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 grid gap-4 sm:grid-cols-2">
+          <CardContent className="p-4 sm:p-5 grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">AWS Access Key ID</Label>
               <Input
                 value={form.awsAccessKey}
                 onChange={(e) => setForm({ ...form, awsAccessKey: e.target.value })}
                 placeholder="AKIA..."
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -416,6 +425,7 @@ export default function SystemIntegrationsPage() {
                 value={form.awsSecretKey}
                 onChange={(e) => setForm({ ...form, awsSecretKey: e.target.value })}
                 placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -424,6 +434,7 @@ export default function SystemIntegrationsPage() {
                 value={form.awsRegion}
                 onChange={(e) => setForm({ ...form, awsRegion: e.target.value })}
                 placeholder="ap-south-1"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -432,24 +443,25 @@ export default function SystemIntegrationsPage() {
                 value={form.awsBucketName}
                 onChange={(e) => setForm({ ...form, awsBucketName: e.target.value })}
                 placeholder="stayeaze-media-storage"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
           </CardContent>
         </Card>
 
-        {/* 3. Twilio SMS / OTP Gateway */}
-        <Card className="border shadow-sm overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
+        {/* 4. Twilio SMS / OTP Gateway */}
+        <Card className="rounded-2xl border shadow-xs overflow-hidden">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 pb-3 sm:pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
             <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                Twilio SMS & OTP Gateway Credentials
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <MessageSquare className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                Twilio SMS &amp; OTP Gateway Credentials
               </CardTitle>
-              <CardDescription className="text-xs mt-1">
+              <CardDescription className="text-xs mt-1 leading-relaxed">
                 SMS gateway credentials for sending tenant check-in OTPs, booking confirmations, and notice alerts.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${form.twilioEnabled ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
                 {form.twilioEnabled ? 'ACTIVE' : 'DISABLED'}
               </span>
@@ -463,13 +475,14 @@ export default function SystemIntegrationsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 grid gap-4 sm:grid-cols-2">
+          <CardContent className="p-4 sm:p-5 grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Twilio Account SID</Label>
               <Input
                 value={form.twilioSid}
                 onChange={(e) => setForm({ ...form, twilioSid: e.target.value })}
                 placeholder="ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -479,24 +492,25 @@ export default function SystemIntegrationsPage() {
                 value={form.twilioAuthToken}
                 onChange={(e) => setForm({ ...form, twilioAuthToken: e.target.value })}
                 placeholder="Enter Auth Token"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
           </CardContent>
         </Card>
 
-        {/* 4. SMTP Email Dispatcher Relay */}
-        <Card className="border shadow-sm overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
+        {/* 5. SMTP Email Dispatcher Relay */}
+        <Card className="rounded-2xl border shadow-xs overflow-hidden">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 pb-3 sm:pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
             <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Mail className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <Mail className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 Email Dispatcher Relay (SMTP Server)
               </CardTitle>
-              <CardDescription className="text-xs mt-1">
+              <CardDescription className="text-xs mt-1 leading-relaxed">
                 SMTP relay server details for automated PDF tax invoice dispatches, rent receipts, and password resets.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${form.smtpEnabled ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
                 {form.smtpEnabled ? 'ACTIVE' : 'DISABLED'}
               </span>
@@ -510,13 +524,14 @@ export default function SystemIntegrationsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 grid gap-4 sm:grid-cols-2">
+          <CardContent className="p-4 sm:p-5 grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">SMTP Server Host</Label>
               <Input
                 value={form.smtpHost}
                 onChange={(e) => setForm({ ...form, smtpHost: e.target.value })}
                 placeholder="smtp.gmail.com or smtp.sendgrid.net"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -525,6 +540,7 @@ export default function SystemIntegrationsPage() {
                 value={form.smtpPort}
                 onChange={(e) => setForm({ ...form, smtpPort: e.target.value })}
                 placeholder="587"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -533,6 +549,7 @@ export default function SystemIntegrationsPage() {
                 value={form.smtpUsername}
                 onChange={(e) => setForm({ ...form, smtpUsername: e.target.value })}
                 placeholder="notifications@stayeaze.com"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -542,25 +559,26 @@ export default function SystemIntegrationsPage() {
                 value={form.smtpPassword}
                 onChange={(e) => setForm({ ...form, smtpPassword: e.target.value })}
                 placeholder="Enter App Password"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             
             {/* Live SMTP Diagnostic Test Section */}
-            <div className="sm:col-span-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex-1 w-full flex items-center gap-2">
+            <div className="sm:col-span-2 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <Input
                   type="email"
                   value={testEmail}
                   onChange={(e) => setTestEmail(e.target.value)}
                   placeholder="Enter recipient email to test (e.g. admin@gmail.com)"
-                  className="h-9 text-xs"
+                  className="h-10 text-xs sm:text-sm rounded-xl flex-1"
                 />
                 <Button
                   type="button"
                   size="sm"
                   disabled={testingEmail || !testEmail}
                   onClick={handleSendTestEmail}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs h-9 shrink-0"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs h-10 px-4 rounded-xl shrink-0 shadow-xs"
                 >
                   <Mail className="mr-1.5 h-3.5 w-3.5" />
                   {testingEmail ? 'Sending...' : 'Send Test Email'}
@@ -570,19 +588,19 @@ export default function SystemIntegrationsPage() {
           </CardContent>
         </Card>
 
-        {/* 5. Razorpay Master Gateway Keys */}
-        <Card className="border shadow-sm overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
+        {/* 6. Razorpay Master Gateway Keys */}
+        <Card className="rounded-2xl border shadow-xs overflow-hidden">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 pb-3 sm:pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
             <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Key className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <Key className="h-5 w-5 text-purple-600 dark:text-purple-400 shrink-0" />
                 Master Razorpay Gateway Credentials
               </CardTitle>
-              <CardDescription className="text-xs mt-1">
+              <CardDescription className="text-xs mt-1 leading-relaxed">
                 Global Razorpay credentials override for platform-wide rent payments and online collections.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${form.razorpayEnabled ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
                 {form.razorpayEnabled ? 'ACTIVE' : 'DISABLED'}
               </span>
@@ -596,13 +614,14 @@ export default function SystemIntegrationsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 grid gap-4 sm:grid-cols-2">
+          <CardContent className="p-4 sm:p-5 grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Master Key ID</Label>
               <Input
                 value={form.razorpayMasterKeyId}
                 onChange={(e) => setForm({ ...form, razorpayMasterKeyId: e.target.value })}
                 placeholder="rzp_live_..."
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -612,12 +631,13 @@ export default function SystemIntegrationsPage() {
                 value={form.razorpayMasterKeySecret}
                 onChange={(e) => setForm({ ...form, razorpayMasterKeySecret: e.target.value })}
                 placeholder="Enter Secret Key"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
 
             {/* Live Razorpay Diagnostic Test Section */}
-            <div className="sm:col-span-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
-              <p className="text-[11px] text-muted-foreground">
+            <div className="sm:col-span-2 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <p className="text-[11px] text-muted-foreground text-center sm:text-left">
                 Click to authenticate credentials against Razorpay servers and test online order creation.
               </p>
               <Button
@@ -625,7 +645,7 @@ export default function SystemIntegrationsPage() {
                 size="sm"
                 disabled={testingRazorpay || !form.razorpayMasterKeyId || !form.razorpayMasterKeySecret}
                 onClick={handleTestRazorpay}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs h-9 shrink-0 gap-1.5 shadow-xs"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs h-10 px-4 rounded-xl shrink-0 gap-1.5 shadow-xs w-full sm:w-auto"
               >
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {testingRazorpay ? 'Testing Connection...' : 'Test Razorpay Connection'}
@@ -634,19 +654,19 @@ export default function SystemIntegrationsPage() {
           </CardContent>
         </Card>
 
-        {/* 6. API Rate Limiting & Security */}
-        <Card className="border shadow-sm overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
+        {/* 7. API Rate Limiting & Security */}
+        <Card className="rounded-2xl border shadow-xs overflow-hidden">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 pb-3 sm:pb-4 bg-slate-50/50 dark:bg-slate-900/50 border-b">
             <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                Bucket4j Rate Limiting & Brute-Force Defense
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <ShieldCheck className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                Bucket4j Rate Limiting &amp; Brute-Force Defense
               </CardTitle>
-              <CardDescription className="text-xs mt-1">
+              <CardDescription className="text-xs mt-1 leading-relaxed">
                 Token bucket rate limiting to prevent API overload, DDoS attacks, and login brute-force attempts.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 self-start sm:self-auto shrink-0">
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${form.rateLimitingEnabled ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
                 {form.rateLimitingEnabled ? 'ACTIVE' : 'DISABLED'}
               </span>
@@ -660,7 +680,7 @@ export default function SystemIntegrationsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 grid gap-4 sm:grid-cols-2">
+          <CardContent className="p-4 sm:p-5 grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Max Requests / Sec (Per IP)</Label>
               <Input
@@ -668,6 +688,7 @@ export default function SystemIntegrationsPage() {
                 value={form.maxRequestsPerSec}
                 onChange={(e) => setForm({ ...form, maxRequestsPerSec: Number(e.target.value) })}
                 placeholder="50"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -677,18 +698,23 @@ export default function SystemIntegrationsPage() {
                 value={form.authBruteForceLimitPerMin}
                 onChange={(e) => setForm({ ...form, authBruteForceLimitPerMin: Number(e.target.value) })}
                 placeholder="5"
+                className="text-xs sm:text-sm h-10 rounded-xl"
               />
             </div>
           </CardContent>
         </Card>
 
         {/* Floating / Sticky Footer Save Action Bar */}
-        <div className="sticky bottom-4 z-20 flex items-center justify-between gap-4 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur sm:px-6">
-          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+        <div className="sticky bottom-16 sm:bottom-4 z-20 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl border bg-background/95 p-4 sm:px-6 shadow-xl backdrop-blur">
+          <p className="text-xs text-muted-foreground flex items-center gap-1.5 text-center sm:text-left">
             <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
             <span>Credentials take immediate effect upon saving.</span>
           </p>
-          <Button type="submit" disabled={saveMut.isPending} className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold gap-2 shadow-md">
+          <Button
+            type="submit"
+            disabled={saveMut.isPending}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold gap-2 shadow-xs rounded-xl h-10 text-xs sm:text-sm w-full sm:w-auto"
+          >
             <Save className="h-4 w-4" /> Save Cloud Infrastructure Credentials
           </Button>
         </div>
