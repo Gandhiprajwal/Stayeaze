@@ -102,6 +102,9 @@ public class WebSecurityConfig {
     @Autowired
     private SecurityRateLimitFilter securityRateLimitFilter;
 
+    @Autowired
+    private IdempotencyFilter idempotencyFilter;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -139,6 +142,7 @@ public class WebSecurityConfig {
 
         http.authenticationProvider(authenticationProvider());
         http.addFilterBefore(securityRateLimitFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(idempotencyFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(apiMetricsFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
         http.addFilterAfter(subscriptionLockoutFilter, UsernamePasswordAuthenticationFilter.class);

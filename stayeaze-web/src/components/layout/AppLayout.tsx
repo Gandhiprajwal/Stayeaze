@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Hotel, ChevronLeft, ChevronRight, Menu, Search, Sun, Moon, LogOut,
-  Settings as SettingsIcon, UserCog, Command, RotateCcw, Wrench, ShieldAlert, AlertTriangle, LifeBuoy,
+  Settings as SettingsIcon, UserCog, Command, RotateCcw, Wrench, ShieldAlert, AlertTriangle, LifeBuoy, WifiOff,
 } from 'lucide-react';
+import { useOnlineStatus } from '@/lib/hooks/useOnlineStatus';
 
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { useUIStore } from '@/lib/stores/ui-store';
@@ -47,10 +48,12 @@ export function AppLayout() {
   const [resetDbOpen, setResetDbOpen] = useState(false);
   const [resettingDb, setResettingDb] = useState(false);
 
+  const isOnline = useOnlineStatus();
+
   const { data: maintenanceData } = useQuery({
     queryKey: ['platform-maintenance-status'],
     queryFn: () => api.get<any>('/auth/maintenance-status').then((r) => r.data),
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes instead of polling every 10 seconds
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
@@ -397,6 +400,21 @@ export function AppLayout() {
             </DropdownMenu>
           </div>
         </header>
+
+        {/* Offline Status Warning Banner */}
+        {!isOnline && (
+          <div className="bg-destructive/15 border-b border-destructive/30 px-4 py-2 text-destructive dark:text-red-400 shrink-0 sticky top-16 z-30 backdrop-blur-md">
+            <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 text-xs font-semibold sm:text-sm">
+              <div className="flex items-center gap-2">
+                <WifiOff className="h-4 w-4 shrink-0 animate-pulse" />
+                <span>You are currently offline. Changes made while offline will synchronize automatically when your internet reconnects.</span>
+              </div>
+              <span className="hidden sm:inline-block text-[11px] bg-destructive/20 px-2 py-0.5 rounded-full font-bold">
+                Offline Mode
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Organization Onboarding Guard Banner */}
         {isSetupIncomplete && (

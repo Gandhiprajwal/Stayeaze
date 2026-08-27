@@ -556,7 +556,7 @@ public class AuthController {
                         .body(new TokenRefreshResponse(null, null)));
     }
 
-    @PostMapping("/logout")
+    @PostMapping({"/logout", "/signout"})
     public ResponseEntity<?> logoutUser(jakarta.servlet.http.HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {

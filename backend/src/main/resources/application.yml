@@ -86,7 +86,26 @@ management:
     health:
       show-details: always
       probes:
-        enabled: true
+resilience4j:
+  circuitbreaker:
+    instances:
+      externalPaymentGateway:
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10000ms
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+      notificationService:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10000ms
+  timelimiter:
+    instances:
+      externalPaymentGateway:
+        timeout-duration: 3000ms
+      notificationService:
+        timeout-duration: 4000ms
 
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250655368566D5970} # 256-bit key
