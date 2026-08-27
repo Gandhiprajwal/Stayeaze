@@ -195,13 +195,13 @@ export function RoomSelect({
               aria-expanded={open}
               disabled={disabled}
               className={cn(
-                'w-full justify-between h-12 px-3 text-left font-normal border-input hover:bg-muted/40 transition-all rounded-xl shadow-xs',
+                'w-full justify-between h-10 px-3.5 text-left font-normal border border-input/80 dark:border-slate-800 bg-background/90 dark:bg-slate-900/90 hover:bg-muted/40 transition-all rounded-xl shadow-2xs focus:ring-2 focus:ring-primary/20 focus:border-primary',
                 !selectedRoom && 'text-muted-foreground'
               )}
             >
               <div className="flex items-center gap-2.5 truncate flex-1 min-w-0 pr-2">
-                <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                  <Home className="h-4 w-4" />
+                <div className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Home className="h-3.5 w-3.5" />
                 </div>
                 {selectedRoom ? (
                   <div className="truncate flex-1 min-w-0">

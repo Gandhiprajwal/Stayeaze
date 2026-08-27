@@ -107,7 +107,7 @@ export function SearchableSelect({
             aria-expanded={open}
             disabled={disabled}
             className={cn(
-              'w-full justify-between h-10 px-3 text-left font-normal border-input hover:bg-muted/40 transition-colors',
+              'w-full justify-between h-10 px-3.5 rounded-xl border border-input/80 dark:border-slate-800 bg-background/90 dark:bg-slate-900/90 text-left font-normal shadow-2xs hover:bg-muted/40 transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary',
               !selectedOption && 'text-muted-foreground',
               triggerClassName
             )}
@@ -133,7 +133,7 @@ export function SearchableSelect({
                   )}
                 </>
               ) : (
-                <span>{placeholder}</span>
+                <span className="text-sm text-muted-foreground">{placeholder}</span>
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0 ml-1">
@@ -183,6 +183,19 @@ export function SearchableSelect({
           </div>
 
           <div className="max-h-64 overflow-y-auto p-1 text-xs">
+            {clearable && value && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('');
+                  setOpen(false);
+                }}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 mb-1 rounded-lg text-left text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-all italic text-[11px]"
+              >
+                <span>-- Clear Selection --</span>
+                <X className="h-3 w-3" />
+              </button>
+            )}
             {filteredOptions.length === 0 ? (
               <div className="p-4 text-center text-muted-foreground text-xs">{emptyText}</div>
             ) : (

@@ -50,19 +50,19 @@ export function TenantSelect({
         <PopoverAnchor asChild>
           <div className={cn('relative w-full', className)}>
             {selectedTenant ? (
-              <div className="flex items-center gap-2.5 h-12 px-3 border border-indigo-200 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-xl shadow-xs w-full">
-                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-indigo-600 to-violet-700 text-white flex items-center justify-center text-xs font-extrabold shrink-0 shadow-xs">
+              <div className="flex items-center gap-2.5 h-10 px-3 border border-primary/30 dark:border-primary/40 bg-primary/5 dark:bg-primary/10 rounded-xl shadow-2xs w-full">
+                <div className="h-6 w-6 rounded-full bg-gradient-to-br from-indigo-600 to-violet-700 text-white flex items-center justify-center text-[10px] font-extrabold shrink-0 shadow-xs">
                   {selectedTenant.name?.charAt(0).toUpperCase() || 'T'}
                 </div>
                 <div className="truncate flex-1">
-                  <span className="font-bold text-slate-900 dark:text-slate-100 text-xs">
+                  <span className="font-bold text-foreground text-xs">
                     {selectedTenant.name}
                   </span>
-                  <span className="text-[11px] text-slate-500 ml-2 font-mono">
+                  <span className="text-[11px] text-muted-foreground ml-2 font-mono">
                     ({selectedTenant.phone || selectedTenant.email || 'Registered'})
                   </span>
                 </div>
-                <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-bold bg-indigo-100 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-900 shrink-0">
+                <span className="text-[10px] text-primary font-bold bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20 shrink-0">
                   {selectedTenant.roomNumber ? `Room ${selectedTenant.roomNumber}` : 'Tenant'}
                 </span>
                 <button
@@ -72,14 +72,14 @@ export function TenantSelect({
                     setSearch('');
                     setTimeout(() => inputRef.current?.focus(), 50);
                   }}
-                  className="p-1 hover:bg-indigo-200/60 dark:hover:bg-indigo-900/60 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors shrink-0 ml-1"
+                  className="p-1 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-1"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
             ) : (
               <div className="relative flex items-center w-full">
-                <Search className="absolute left-3.5 h-4 w-4 text-indigo-500 pointer-events-none" />
+                <Search className="absolute left-3.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <input
                   ref={inputRef}
                   type="text"
@@ -92,7 +92,7 @@ export function TenantSelect({
                     if (search.trim()) setOpen(true);
                   }}
                   placeholder={placeholder}
-                  className="w-full h-12 pl-10 pr-9 text-xs rounded-xl border border-indigo-200 dark:border-indigo-900/80 bg-indigo-50/30 dark:bg-indigo-950/20 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all shadow-xs"
+                  className="w-full h-10 pl-10 pr-9 text-sm rounded-xl border border-input/80 dark:border-slate-800 bg-background/90 dark:bg-slate-900/90 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all shadow-2xs"
                 />
                 {search && (
                   <button
