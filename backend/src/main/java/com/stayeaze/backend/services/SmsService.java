@@ -26,9 +26,8 @@ public class SmsService {
             String displayName = (tenantName != null && !tenantName.isBlank()) ? tenantName : "Tenant";
             String portalUrl = (loginUrl != null && !loginUrl.isBlank()) ? loginUrl : "http://localhost:5173/login";
             String message = String.format(
-                "Welcome to StayEaze, %s! Your tenant portal account is ready. Login: %s | Temp Pass: %s | URL: %s",
-                displayName, mobile, tempPassword, portalUrl
-            );
+                    "Welcome to StayEaze, %s! Your tenant portal account is ready. Login: %s | Temp Pass: %s | URL: %s",
+                    displayName, mobile, tempPassword, portalUrl);
 
             logger.info("===============================================================================");
             logger.info("📱 OUTGOING SMS / WHATSAPP DISPATCH");
@@ -43,7 +42,8 @@ public class SmsService {
                     if (config != null && config.getTwilioSid() != null && !config.getTwilioSid().isBlank()) {
                         logger.info("✅ SMS dispatched via Twilio API Gateway to {}", mobile);
                     } else {
-                        logger.info("ℹ️ Twilio SMS Relay operating in LOG mode (Twilio SID not set). Message logged above.");
+                        logger.info(
+                                "ℹ️ Twilio SMS Relay operating in LOG mode (Twilio SID not set). Message logged above.");
                     }
                 }
             } catch (Exception e) {

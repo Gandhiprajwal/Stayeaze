@@ -29,10 +29,14 @@ public class NotificationLogController {
     @Autowired
     private OrganizationRepository organizationRepository;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null)
+            return org;
+        return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
@@ -41,8 +45,9 @@ public class NotificationLogController {
     public ResponseEntity<?> sendNotification(@Valid @RequestBody NotificationLogRequest request) {
         Organization organization = getLoggedUserOrg();
 
-        NotificationLog log = new NotificationLog(organization, request.getRecipient(), request.getType(), request.getMessageContent());
-        
+        NotificationLog log = new NotificationLog(organization, request.getRecipient(), request.getType(),
+                request.getMessageContent());
+
         // Mocking message dispatch
         if (request.getRecipient().contains("error")) {
             log.setStatus("FAILED");
@@ -68,7 +73,8 @@ public class NotificationLogController {
         NotificationLog log = notificationLogRepository.findById(id).orElse(null);
 
         if (log == null || !log.getOrganization().getId().equals(organization.getId())) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Notification log not found."));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Error: Notification log not found."));
         }
 
         log.setStatus("SENT");

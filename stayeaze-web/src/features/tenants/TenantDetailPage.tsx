@@ -7,6 +7,8 @@ import {
   KeyRound, LogOut, Archive, RotateCcw, Pencil, Eye, ScrollText, Calculator, FileCheck
 } from 'lucide-react';
 import CheckoutSettlementModal from '@/features/check-out/CheckoutSettlementModal';
+import TenantAdjustmentsLedgerCard from '@/features/tenants/TenantAdjustmentsLedgerCard';
+import DigitalAgreementModal from '@/features/tenants/DigitalAgreementModal';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
@@ -575,6 +577,9 @@ export default function TenantDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Penalties & Discounts Adjustment Ledger */}
+      <TenantAdjustmentsLedgerCard tenantId={tenant.id} isArchived={(tenant?.status || '').toUpperCase() === 'ARCHIVED'} />
+
       <Card>
         <CardHeader>
           <CardTitle>Billing History</CardTitle>
@@ -758,89 +763,15 @@ export default function TenantDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Digital Tenancy Agreement Viewer Dialog */}
-      <Dialog open={agreementOpen} onOpenChange={setAgreementOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col p-6 bg-white dark:bg-slate-900">
-          <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-base font-bold flex items-center gap-2">
-                <ScrollText className="h-5 w-5 text-indigo-600" />
-                Digital Residential Tenancy Agreement
-              </DialogTitle>
-              {(tenant as any).isAgreementAccepted ? (
-                <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-xs font-semibold gap-1">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Digitally Signed
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs">
-                  Pending Signature
-                </Badge>
-              )}
-            </div>
-            <DialogDescription className="text-xs">
-              Property: <span className="font-semibold text-slate-800 dark:text-slate-200">{propertyName ?? 'StayEaze Property'}</span> · Room {tenant.roomNumber || '—'} (Bed {tenant.bedNumber || '—'})
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto space-y-4 py-2 pr-1 text-xs">
-            {/* Agreement Metadata Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
-              <div>
-                <div className="text-[10px] text-muted-foreground uppercase font-semibold">Resident</div>
-                <div className="font-bold text-slate-900 dark:text-white mt-0.5">{tenant.name}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-muted-foreground uppercase font-semibold">Contact</div>
-                <div className="font-mono text-slate-800 dark:text-slate-200 mt-0.5">{tenant.phone || tenant.mobile || '—'}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-muted-foreground uppercase font-semibold">Monthly Rent</div>
-                <div className="font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">{formatCurrency(Number(tenant.rent || 0))}</div>
-              </div>
-              <div>
-                <div className="text-[10px] text-muted-foreground uppercase font-semibold">Security Deposit</div>
-                <div className="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{formatCurrency(Number(tenant.deposit || 0))}</div>
-              </div>
-            </div>
-
-            {/* Tenancy Agreement Legal Text */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-3 text-slate-600 dark:text-slate-300 leading-relaxed max-h-56 overflow-y-auto">
-              <p><strong>1. Rent Payment Schedule:</strong> Rent shall be paid on or before the 5th of every calendar month through the StayEaze online payment portal.</p>
-              <p><strong>2. Notice Period &amp; Move Out:</strong> A minimum notice of 30 days prior to vacating is mandatory. Failure to provide prior notice will lead to forfeiture of 1 month deposit.</p>
-              <p><strong>3. Gate &amp; Visitor Regulations:</strong> Main entrance gates close at 10:30 PM. Overnight guests require prior warden intimation and approval.</p>
-              <p><strong>4. Security Deposit Terms:</strong> The security deposit is refundable upon clearance of all utility bills, pending rents, and room handover in clean condition.</p>
-              <p><strong>5. Property Upkeep:</strong> Residents agree to take reasonable care of the furniture, electrical fixtures, and common amenities.</p>
-            </div>
-
-            {/* Digital Signature Confirmation Stamp */}
-            {(tenant as any).isAgreementAccepted ? (
-              <div className="p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/30 flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300">
-                <div className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-                  <div>
-                    <div className="font-bold">E-Signature Legally Verified</div>
-                    <div className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">Digitally accepted by {tenant.name} via Resident Portal</div>
-                  </div>
-                </div>
-                {(tenant as any).agreementAcceptedAt && (
-                  <div className="text-right text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
-                    {formatDate((tenant as any).agreementAcceptedAt)}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="p-3 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/30 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
-                <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-                <span>The tenant has not yet electronically signed the agreement on their portal.</span>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="pt-3 border-t border-slate-100 dark:border-slate-800">
-            <Button variant="outline" size="sm" onClick={() => setAgreementOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Digital Tenancy Agreement Viewer & Terms Manager Modal */}
+      <DigitalAgreementModal
+        open={agreementOpen}
+        onOpenChange={setAgreementOpen}
+        tenant={tenant}
+        propertyName={propertyName}
+        buildingName={displayBuildingName}
+        isOwnerOrManager={true}
+      />
 
       {/* Archive Confirm Dialog */}
       <ConfirmDialog

@@ -58,20 +58,20 @@ export function FormDialog({
             {children}
           </div>
 
-          <DialogFooter className="p-3.5 sm:p-4 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+          <DialogFooter className="p-3.5 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={loading}
-              className="h-9 px-4 text-xs font-semibold"
+              className="h-10 px-5 text-xs sm:text-sm font-semibold rounded-xl border-slate-200 dark:border-slate-800"
             >
               Cancel
             </Button>
             <Button
               type="submit"
               disabled={loading || disabled}
-              className="h-9 px-4 text-xs font-semibold shadow-xs"
+              className="h-10 px-5 text-xs sm:text-sm font-semibold rounded-xl shadow-xs"
             >
               {loading && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               {submitLabel}

@@ -79,12 +79,16 @@
 
 @layer base {
   html, body {
-    min-height: 100%;
+    height: 100%;
+    max-height: 100vh;
     margin: 0;
     padding: 0;
+    overflow: hidden;
   }
   #root {
-    min-height: 100%;
+    height: 100%;
+    max-height: 100vh;
+    overflow: hidden;
   }
   * {
     @apply border-border;
@@ -119,18 +123,76 @@
   }
 }
 
-/* Visible Custom Scrollbar styling for all scrollable containers */
+/* ==========================================================================
+   Dedicated Independent Scrollbar Rules (Sidebar vs Main Page Content)
+   ========================================================================== */
+
+/* 1. Sidebar Scrollbar: Ultra-sleek, dark, non-intrusive */
+.sidebar-scrollbar {
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent !important;
+}
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 5px !important;
+  height: 5px !important;
+  display: block !important;
+}
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22) !important;
+  border-radius: 9999px !important;
+}
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* 2. Main Page Content Scrollbar: Modern, adaptive, clearly visible */
+.main-page-scrollbar {
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(100, 116, 139, 0.4) transparent !important;
+}
+.main-page-scrollbar::-webkit-scrollbar {
+  width: 8px !important;
+  height: 8px !important;
+  display: block !important;
+}
+.main-page-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.03) !important;
+}
+.dark .main-page-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+.main-page-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4) !important;
+  border-radius: 6px !important;
+}
+.dark .main-page-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4) !important;
+  border-radius: 6px !important;
+}
+.main-page-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7) !important;
+}
+.dark .main-page-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.7) !important;
+}
+
+/* General Custom Scrollbar fallback for modals and dialogs */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.03);
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -165,12 +227,12 @@
     display: none !important;
   }
 
-  body * {
+  body.print-qr-only * {
     visibility: hidden !important;
   }
 
-  #reception-qr-print-poster,
-  #reception-qr-print-poster * {
+  body.print-qr-only #reception-qr-print-poster,
+  body.print-qr-only #reception-qr-print-poster * {
     visibility: visible !important;
   }
 

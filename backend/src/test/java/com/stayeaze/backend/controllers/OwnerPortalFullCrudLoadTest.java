@@ -220,6 +220,7 @@ public class OwnerPortalFullCrudLoadTest {
         }
 
         // 7. Seed Beds (2 to 3 beds per room)
+        Map<Bed, Room> bedToRoomMap = new HashMap<>();
         for (Room rm : seededRooms) {
             int cap = "DOUBLE".equals(rm.getSharingType()) ? 2 : 3;
             for (int b = 1; b <= cap; b++) {
@@ -227,6 +228,7 @@ public class OwnerPortalFullCrudLoadTest {
                 bd.setStatus(seededBeds.size() % 2 == 0 ? "OCCUPIED" : "AVAILABLE");
                 bd = bedRepository.save(bd);
                 seededBeds.add(bd);
+                bedToRoomMap.put(bd, rm);
             }
         }
 
@@ -240,13 +242,17 @@ public class OwnerPortalFullCrudLoadTest {
                     + "@stayeaze.com";
             String tPhone = "99" + (int) (Math.random() * 90000000 + 10000000);
 
+            Room rm = bedToRoomMap.get(bd);
+            String rNum = rm != null ? rm.getRoomNumber() : "101";
+            BigDecimal rent = rm != null && rm.getBaseRent() != null ? rm.getBaseRent() : BigDecimal.valueOf(8500);
+
             Tenant t = new Tenant(testOrg, "Test", "Tenant " + tIdx, tPhone);
             t.setEmail(tEmail);
             t.setStatus("ACTIVE");
             t.setPropertyId(propertyAlpha.getId());
-            t.setRoomNumber(bd.getRoom().getRoomNumber());
+            t.setRoomNumber(rNum);
             t.setBedNumber(bd.getBedNumber());
-            t.setRent(bd.getRoom().getBaseRent());
+            t.setRent(rent);
             t.setDeposit(BigDecimal.valueOf(15000));
             t = tenantRepository.save(t);
             seededTenants.add(t);
@@ -258,7 +264,7 @@ public class OwnerPortalFullCrudLoadTest {
             bk.setCheckinDate(LocalDate.now().minusDays(20));
             bk.setCheckoutDate(LocalDate.now().plusMonths(6));
             bk.setStatus("CONFIRMED");
-            bk.setRentAgreed(bd.getRoom().getBaseRent());
+            bk.setRentAgreed(rent);
             bk.setDepositAgreed(BigDecimal.valueOf(15000));
             bookingRepository.save(bk);
 

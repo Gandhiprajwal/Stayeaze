@@ -35,6 +35,7 @@ const RoomsPage = lazy(() => import('@/features/properties/RoomsPage'));
 const BedsPage = lazy(() => import('@/features/properties/BedsPage'));
 const TenantsPage = lazy(() => import('@/features/tenants/TenantsPage'));
 const TenantDetailPage = lazy(() => import('@/features/tenants/TenantDetailPage'));
+const AgreementsPage = lazy(() => import('@/features/agreements/AgreementsPage'));
 const BookingsPage = lazy(() => import('@/features/bookings/BookingsPage'));
 const BookingDetailPage = lazy(() => import('@/features/bookings/BookingDetailPage'));
 const CheckInsPage = lazy(() => import('@/features/check-in/CheckInsPage'));
@@ -173,6 +174,7 @@ export default function App() {
                 <Route path="/beds" element={<RequireAuth module="rooms"><BedsPage /></RequireAuth>} />
                 <Route path="/tenants" element={<RequireAuth module="tenants"><TenantsPage /></RequireAuth>} />
                 <Route path="/tenants/:id" element={<RequireAuth module="tenants"><TenantDetailPage /></RequireAuth>} />
+                <Route path="/agreements" element={<RequireAuth module="tenants"><AgreementsPage /></RequireAuth>} />
                 <Route path="/bookings" element={<RequireAuth module="bookings"><BookingsPage /></RequireAuth>} />
                 <Route path="/bookings/:id" element={<RequireAuth module="bookings"><BookingDetailPage /></RequireAuth>} />
                 <Route path="/check-ins" element={<RequireAuth module="checkins"><CheckInsPage /></RequireAuth>} />

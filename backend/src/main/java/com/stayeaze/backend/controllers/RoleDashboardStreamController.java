@@ -85,6 +85,9 @@ public class RoleDashboardStreamController {
     @Autowired(required = false)
     private OnboardingLeadRepository leadRepository;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     @PostConstruct
     public void init() {
         executor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -110,19 +113,17 @@ public class RoleDashboardStreamController {
         Organization organization = null;
 
         try {
-            if (SecurityContextHolder.getContext().getAuthentication() != null
-                    && SecurityContextHolder.getContext().getAuthentication().getPrincipal() instanceof UserDetailsImpl) {
-                UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-                email = userDetails.getUsername();
-                userId = userDetails.getId();
-
-                User user = userRepository.findById(userId).orElse(null);
-                if (user != null) {
-                    organization = user.getOrganization();
-                    if (user.getRoles() != null && !user.getRoles().isEmpty()) {
-                        role = user.getRoles().iterator().next().getName().replace("ROLE_", "").toUpperCase();
-                    }
+            User user = securityUtils.getCurrentUser();
+            if (user != null) {
+                userId = user.getId();
+                email = user.getEmail();
+                organization = user.getOrganization();
+                if (user.getRoles() != null && !user.getRoles().isEmpty()) {
+                    role = user.getRoles().iterator().next().getName().replace("ROLE_", "").toUpperCase();
                 }
+            }
+            if (organization == null) {
+                organization = securityUtils.getCurrentOrganization();
             }
         } catch (Exception ignored) {}
 
@@ -139,19 +140,17 @@ public class RoleDashboardStreamController {
         Organization organization = null;
 
         try {
-            if (SecurityContextHolder.getContext().getAuthentication() != null
-                    && SecurityContextHolder.getContext().getAuthentication().getPrincipal() instanceof UserDetailsImpl) {
-                UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-                email = userDetails.getUsername();
-                userId = userDetails.getId();
-
-                User user = userRepository.findById(userId).orElse(null);
-                if (user != null) {
-                    organization = user.getOrganization();
-                    if (user.getRoles() != null && !user.getRoles().isEmpty()) {
-                        role = user.getRoles().iterator().next().getName().replace("ROLE_", "").toUpperCase();
-                    }
+            User user = securityUtils.getCurrentUser();
+            if (user != null) {
+                userId = user.getId();
+                email = user.getEmail();
+                organization = user.getOrganization();
+                if (user.getRoles() != null && !user.getRoles().isEmpty()) {
+                    role = user.getRoles().iterator().next().getName().replace("ROLE_", "").toUpperCase();
                 }
+            }
+            if (organization == null) {
+                organization = securityUtils.getCurrentOrganization();
             }
         } catch (Exception ignored) {}
 
@@ -195,6 +194,7 @@ public class RoleDashboardStreamController {
         payload.put("timestamp", System.currentTimeMillis());
 
         String role = session.role != null ? session.role : "TENANT";
+        UUID orgId = session.organization != null ? session.organization.getId() : null;
 
         try {
             switch (role) {
@@ -214,13 +214,12 @@ public class RoleDashboardStreamController {
                 case "ADMIN":
                 case "OWNER":
                 case "PROPERTY_MANAGER":
-                    UUID orgId = session.organization != null ? session.organization.getId() : null;
                     User streamUser = session.userId != null ? userRepository.findById(session.userId).orElse(null) : null;
                     List<UUID> assignedProps = streamUser != null ? streamUser.getPropertyIds() : null;
 
                     Map<String, Object> overallStats = propertyService.getPropertyOverallStats(null, orgId);
-                    if (assignedProps != null && !assignedProps.isEmpty()) {
-                        // Recalculate stats for scoped properties
+                    if (assignedProps != null && !assignedProps.isEmpty() && !"OWNER".equalsIgnoreCase(role) && !"ADMIN".equalsIgnoreCase(role)) {
+                        // Recalculate stats for scoped properties (managers/staff only)
                         List<Property> assignedPropList = propertyRepository.findByIdIn(assignedProps);
                         int propCount = assignedPropList.size();
                         int totalBeds = 0;
@@ -243,7 +242,7 @@ public class RoleDashboardStreamController {
 
                     long maintBedsCount = 0;
                     if (orgId != null) {
-                        maintBedsCount = bedRepository.findByOrganizationIdNative(orgId).stream()
+                        maintBedsCount = bedRepository.findByOrganizationId(orgId).stream()
                                 .filter(b -> {
                                     if (assignedProps != null && !assignedProps.isEmpty()) {
                                         try {
@@ -266,11 +265,17 @@ public class RoleDashboardStreamController {
                     // Financial stats: Real-time Monthly Revenue Collected vs Pending Dues
                     List<Invoice> orgInvoices = orgId != null
                             ? invoiceRepository.findByOrganizationId(orgId)
-                            : invoiceRepository.findAll();
+                            : invoiceRepository.findAllWithTenant();
 
                     if (assignedProps != null && !assignedProps.isEmpty()) {
                         orgInvoices = orgInvoices.stream()
-                                .filter(i -> i.getTenant() != null && i.getTenant().getPropertyId() != null && assignedProps.contains(i.getTenant().getPropertyId()))
+                                .filter(i -> {
+                                    try {
+                                        return i.getTenant() != null && i.getTenant().getPropertyId() != null && assignedProps.contains(i.getTenant().getPropertyId());
+                                    } catch (Exception ignored) {
+                                        return false;
+                                    }
+                                })
                                 .collect(java.util.stream.Collectors.toList());
                     }
 
@@ -295,7 +300,7 @@ public class RoleDashboardStreamController {
                     // Tenant status breakdown (Active, Pending Check-ins, Pending Check-outs)
                     List<Tenant> orgTenants = orgId != null
                             ? tenantRepository.findByOrganizationIdNative(orgId)
-                            : tenantRepository.findAll();
+                            : tenantRepository.findAllSuperAdmin();
 
                     if (assignedProps != null && !assignedProps.isEmpty()) {
                         orgTenants = orgTenants.stream()
@@ -322,7 +327,9 @@ public class RoleDashboardStreamController {
                     break;
 
                 case "ACCOUNTANT":
-                    List<Invoice> invoices = invoiceRepository.findAll();
+                    List<Invoice> invoices = orgId != null
+                            ? invoiceRepository.findByOrganizationId(orgId)
+                            : invoiceRepository.findAllWithTenant();
                     BigDecimal paidTotal = invoices.stream()
                             .filter(i -> "PAID".equalsIgnoreCase(i.getStatus()))
                             .map(i -> i.getAmountPaid() != null ? i.getAmountPaid() : (i.getAmountDue() != null ? i.getAmountDue() : BigDecimal.ZERO))

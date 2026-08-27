@@ -22,7 +22,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="w-[calc(100vw-2rem)] max-w-md rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl p-6 shadow-2xl">
+      <AlertDialogContent className="w-[calc(100vw-2rem)] max-w-md rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-2xl">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-lg font-bold text-foreground">{title}</AlertDialogTitle>
           <AlertDialogDescription className="text-sm text-muted-foreground mt-1.5">{description}</AlertDialogDescription>
