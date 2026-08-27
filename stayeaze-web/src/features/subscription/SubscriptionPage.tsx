@@ -964,7 +964,7 @@ export default function SubscriptionPage() {
         onSubmit={() => handleUpgradeWithPayment()}
         loading={upgradePlanMut.isPending || paymentInProgress}
         submitLabel={previewData?.isUpgrade ? `Pay ${formatCurrency(previewData?.netPayable || 0)} via Razorpay` : 'Confirm & Extend Plan'}
-        size="md"
+        size="lg"
       >
         {previewData && (
           <div className="space-y-4">

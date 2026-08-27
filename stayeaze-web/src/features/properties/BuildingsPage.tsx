@@ -136,7 +136,7 @@ export default function BuildingsPage() {
           ]} />
         )} />
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Building' : 'Add Building'} onSubmit={submit}
-        loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
+        loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <FormInput label="Building Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} />
           <FormInput label="Code" id="code" value={form.values.code} onChange={(e) => form.setValue('code', e.target.value.toUpperCase())} />

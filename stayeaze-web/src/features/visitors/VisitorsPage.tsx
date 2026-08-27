@@ -631,7 +631,7 @@ export default function VisitorsPage() {
 
       {/* 1. WALK-IN LOG VISITOR MODAL (STAFF / SECURITY GUARD) WITH PHOTO CAPTURE */}
       <Dialog open={logModalOpen} onOpenChange={setLogModalOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-xl md:max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
           <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <Camera className="h-5 w-5 text-indigo-600" /> Log Walk-In Visitor at Gate
@@ -950,7 +950,7 @@ export default function VisitorsPage() {
 
       {/* 4. SECURITY GUARD SCANNER / PASSCODE LOOKUP MODAL */}
       <Dialog open={scanModalOpen} onOpenChange={setScanModalOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-md max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-md md:max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
           <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <QrCode className="h-5 w-5 text-indigo-600 dark:text-indigo-400" /> Verify Visitor Pass & Scan QR

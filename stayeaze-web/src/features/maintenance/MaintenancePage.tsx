@@ -114,7 +114,7 @@ export default function MaintenancePage() {
           ]} />
         )} />
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Maintenance Task' : 'New Maintenance Task'} onSubmit={submit}
-        loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
+        loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <FormInput label="Asset" required id="asset" value={form.values.asset} onChange={(e) => form.setValue('asset', e.target.value)} error={form.errors.asset} />
           <div className="space-y-1.5">

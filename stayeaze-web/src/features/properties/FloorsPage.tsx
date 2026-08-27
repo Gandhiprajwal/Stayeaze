@@ -177,7 +177,7 @@ export default function FloorsPage() {
           ]} />
         )} />
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Floor' : 'Add Floor'} onSubmit={submit}
-        loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'}>
+        loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2">
             <Label>1. Property</Label>

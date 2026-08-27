@@ -121,7 +121,7 @@ export default function AccountantDashboardPage() {
                   <Plus className="h-4 w-4" /> Record Expense
                 </Button>
               </DialogTrigger>
-              <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl p-5 sm:p-6">
+              <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-lg md:max-w-xl rounded-2xl p-5 sm:p-6">
                 <DialogHeader>
                   <DialogTitle className="text-base sm:text-lg font-bold">Record Property Expense</DialogTitle>
                   <DialogDescription className="text-xs">Add a new debit entry to the property cashbook ledger.</DialogDescription>

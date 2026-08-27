@@ -598,7 +598,7 @@ export default function TenantDetailPage() {
 
       {/* Upload KYC Document Dialog */}
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-md md:max-w-lg max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
           <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
             <div className="flex items-center gap-3">
               <div className="p-2 sm:p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
@@ -717,7 +717,7 @@ export default function TenantDetailPage() {
 
       {/* Preview KYC Document Dialog */}
       <Dialog open={!!previewDoc} onOpenChange={(open) => !open && setPreviewDoc(null)}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col">
           <DialogHeader className="flex flex-row items-center justify-between pr-6">
             <div>
               <DialogTitle className="flex items-center gap-2">
@@ -760,7 +760,7 @@ export default function TenantDetailPage() {
 
       {/* Digital Tenancy Agreement Viewer Dialog */}
       <Dialog open={agreementOpen} onOpenChange={setAgreementOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-6 bg-white dark:bg-slate-900">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col p-6 bg-white dark:bg-slate-900">
           <DialogHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <DialogTitle className="text-base font-bold flex items-center gap-2">

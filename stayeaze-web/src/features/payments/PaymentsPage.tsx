@@ -293,6 +293,7 @@ export default function PaymentsPage() {
         onSubmit={submit}
         loading={createMut.isPending} 
         submitLabel="Record & Generate Receipt"
+        size="lg"
       >
         <div className="grid gap-4 sm:grid-cols-2">
           {tenants && tenants.length > 0 && (

@@ -459,7 +459,7 @@ export default function ComplaintsPage() {
 
       {/* Log Complaint Dialog */}
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title="Log Complaint" onSubmit={submitCreate}
-        loading={createMut.isPending} submitLabel="Create">
+        loading={createMut.isPending} submitLabel="Create" size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
           {!isTenant ? (
             <>

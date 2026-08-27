@@ -19,10 +19,10 @@ interface FormDialogProps {
 }
 
 const sizeMap = {
-  sm: 'w-[95vw] sm:max-w-md',
-  md: 'w-[95vw] sm:max-w-lg',
-  lg: 'w-[95vw] sm:max-w-2xl',
-  xl: 'w-[95vw] sm:max-w-4xl',
+  sm: 'max-w-md',
+  md: 'max-w-lg sm:max-w-xl',
+  lg: 'max-w-2xl sm:max-w-3xl lg:max-w-4xl',
+  xl: 'max-w-3xl sm:max-w-4xl lg:max-w-5xl xl:max-w-6xl',
 };
 
 export function FormDialog({
@@ -39,7 +39,7 @@ export function FormDialog({
 }: FormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(sizeMap[size], 'rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl p-0 overflow-hidden shadow-2xl')}>
+      <DialogContent className={cn(sizeMap[size], 'w-[calc(100vw-2rem)] sm:w-full rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl p-0 overflow-hidden shadow-2xl')}>
         <div className="p-5 sm:p-6 pb-4 border-b border-border/60 bg-muted/20">
           <DialogHeader className="space-y-1 text-left">
             <DialogTitle className="text-lg font-bold text-foreground">{title}</DialogTitle>
@@ -54,11 +54,11 @@ export function FormDialog({
           }}
           className="flex flex-col"
         >
-          <div className="max-h-[65vh] sm:max-h-[70vh] overflow-y-auto p-5 sm:p-6 space-y-4">
+          <div className="max-h-[75vh] sm:max-h-[80vh] overflow-y-auto p-5 sm:p-6 lg:p-7 space-y-4 sm:space-y-5">
             {children}
           </div>
 
-          <DialogFooter className="p-4 sm:p-5 border-t border-border/60 bg-muted/10 gap-2 sm:gap-0">
+          <DialogFooter className="p-4 sm:p-5 border-t border-border/60 bg-muted/10 flex flex-col-reverse sm:flex-row sm:justify-end gap-2.5 sm:gap-3">
             <Button
               type="button"
               variant="outline"

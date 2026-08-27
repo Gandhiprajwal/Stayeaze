@@ -933,7 +933,7 @@ export default function UtilitiesPage() {
 
       {/* Detailed Room Breakdown & Photo Proof Dialog */}
       <Dialog open={!!activePreviewRoom} onOpenChange={() => setActivePreviewRoom(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-xl md:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5 text-amber-500" />

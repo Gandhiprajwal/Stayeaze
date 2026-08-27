@@ -452,7 +452,8 @@ export default function CheckOutsPage() {
         description="Verify move-out details, deposit refund, and release assigned bed."
         onSubmit={handleCompleteCheckOut}
         loading={completing}
-        submitLabel="Confirm & Release Bed">
+        submitLabel="Confirm & Release Bed"
+        size="lg">
         {completeTarget && (
           <div className="space-y-4">
             <div className="rounded-lg border bg-card p-4 space-y-3 shadow-sm">

@@ -558,7 +558,7 @@ export default function SupportTicketsPage() {
 
       {/* UNIFIED SUPPORT DIAGNOSTIC & TRIAGE WORKSPACE DIALOG */}
       <Dialog open={!!activeTicket} onOpenChange={(open) => !open && setActiveTicket(null)}>
-        <DialogContent className="max-w-3xl max-h-[92vh] flex flex-col p-0 overflow-hidden">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-3xl lg:max-w-4xl max-h-[92vh] flex flex-col p-0 overflow-hidden">
           {/* Header */}
           <DialogHeader className="p-4 border-b bg-muted/20">
             <div className="flex items-start justify-between gap-3">
@@ -1018,7 +1018,7 @@ export default function SupportTicketsPage() {
 
       {/* ESCALATE TO SUPER ADMIN DIALOG */}
       <Dialog open={isEscalateModalOpen} onOpenChange={setIsEscalateModalOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-lg md:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-amber-600">
               <ShieldAlert className="h-5 w-5" /> Escalate Ticket to Super Admin
@@ -1096,7 +1096,7 @@ export default function SupportTicketsPage() {
 
       {/* SUPER ADMIN ACTION RESOLUTION DIALOG */}
       <Dialog open={isSuperAdminActionModalOpen} onOpenChange={setIsSuperAdminActionModalOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-lg md:max-w-xl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2 text-indigo-600">
               <Sparkles className="h-5 w-5" /> Super Admin Action & Resolution
