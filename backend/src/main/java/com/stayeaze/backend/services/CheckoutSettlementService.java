@@ -47,7 +47,22 @@ public class CheckoutSettlementService {
         public String bedNumber;
         public LocalDate checkInDate;
         public LocalDate checkOutDate;
+        public BigDecimal monthlyRent = BigDecimal.ZERO;
+        public boolean isCurrentMonthRentPaid = false;
+        public int daysInMonth = 30;
+        public int stayedDaysInMonth = 0;
+        public int unconsumedDaysInMonth = 0;
+        public BigDecimal dailyRentRate = BigDecimal.ZERO;
+        public BigDecimal consumedRent = BigDecimal.ZERO;
+        public BigDecimal unconsumedPrepaidRent = BigDecimal.ZERO;
+        public int noticePeriodShortfallDays = 0;
+        public BigDecimal grossNoticePenalty = BigDecimal.ZERO;
+        public BigDecimal noticePrepaidOffset = BigDecimal.ZERO;
+        public BigDecimal netNoticePenalty = BigDecimal.ZERO;
+        public BigDecimal unconsumedRentRefund = BigDecimal.ZERO;
         public BigDecimal depositPaid = BigDecimal.ZERO;
+        public BigDecimal advanceBalance = BigDecimal.ZERO;
+        public boolean waiveNoticePenalty = false;
         public BigDecimal pendingRentDue = BigDecimal.ZERO;
         public BigDecimal pendingUtilityDue = BigDecimal.ZERO;
         public BigDecimal damageCharges = BigDecimal.ZERO;
@@ -55,6 +70,7 @@ public class CheckoutSettlementService {
         public BigDecimal noticePeriodPenalty = BigDecimal.ZERO;
         public BigDecimal otherDeductions = BigDecimal.ZERO;
         public BigDecimal totalDeductions = BigDecimal.ZERO;
+        public BigDecimal totalCredits = BigDecimal.ZERO;
         public BigDecimal netPayableRefund = BigDecimal.ZERO;
         public boolean isTenantOwingMoney = false;
         public BigDecimal amountOwedByTenant = BigDecimal.ZERO;
@@ -66,7 +82,7 @@ public class CheckoutSettlementService {
     }
 
     /**
-     * Live computation preview for checkout settlement math.
+     * Live computation preview for checkout settlement math with Rent Consumed vs Prepaid Rent reconciliation.
      */
     @Transactional(readOnly = true)
     public SettlementPreview calculatePreview(UUID tenantId, Map<String, Object> params) {
@@ -75,7 +91,7 @@ public class CheckoutSettlementService {
 
         SettlementPreview preview = new SettlementPreview();
         preview.tenantId = tenant.getId();
-        preview.tenantName = tenant.getFirstName() + " " + tenant.getLastName();
+        preview.tenantName = tenant.getFirstName() + " " + (tenant.getLastName() != null ? tenant.getLastName() : "");
         preview.mobile = tenant.getMobile();
         preview.roomNumber = tenant.getRoomNumber();
         preview.bedNumber = tenant.getBedNumber();
@@ -84,19 +100,52 @@ public class CheckoutSettlementService {
                 ? LocalDate.parse(params.get("checkOutDate").toString().substring(0, 10))
                 : LocalDate.now();
 
-        // 1. Initial Deposit
+        BigDecimal monthlyRent = tenant.getRent() != null ? tenant.getRent() : BigDecimal.ZERO;
+        preview.monthlyRent = monthlyRent;
+
+        // 1. Initial Deposit Paid
         preview.depositPaid = tenant.getDeposit() != null ? tenant.getDeposit() : BigDecimal.ZERO;
 
-        // 2. Fetch Unpaid Invoices
+        // 2. Rent Consumption & Prepaid Balance for Current Month Cycle
+        int daysInMonth = preview.checkOutDate.lengthOfMonth();
+        preview.daysInMonth = daysInMonth;
+        int stayedDays = preview.checkOutDate.getDayOfMonth();
+        preview.stayedDaysInMonth = stayedDays;
+        int unconsumedDays = Math.max(0, daysInMonth - stayedDays);
+        preview.unconsumedDaysInMonth = unconsumedDays;
+
+        BigDecimal dailyRate = monthlyRent.compareTo(BigDecimal.ZERO) > 0
+                ? monthlyRent.divide(BigDecimal.valueOf(daysInMonth), 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        preview.dailyRentRate = dailyRate;
+        preview.consumedRent = dailyRate.multiply(BigDecimal.valueOf(stayedDays)).setScale(2, RoundingMode.HALF_UP);
+
+        // 3. Fetch Invoices to check unpaid bills and determine if current month rent is paid
         List<Invoice> invoices = invoiceRepository.findByTenant(tenant);
         BigDecimal rentDue = BigDecimal.ZERO;
         BigDecimal utilDue = BigDecimal.ZERO;
+        boolean currentMonthPaid = false;
+        BigDecimal actualRentPaidInCycle = BigDecimal.ZERO;
 
         for (Invoice inv : invoices) {
+            LocalDate invDate = inv.getIssueDate() != null ? inv.getIssueDate() : (inv.getDueDate() != null ? inv.getDueDate() : null);
+            boolean isUtility = inv.getInvoiceNumber() != null && inv.getInvoiceNumber().startsWith("UTIL");
+
+            if (!isUtility && invDate != null && invDate.getYear() == preview.checkOutDate.getYear() && invDate.getMonthValue() == preview.checkOutDate.getMonthValue()) {
+                if ("PAID".equalsIgnoreCase(inv.getStatus()) || (inv.getAmountPaid() != null && inv.getAmountPaid().compareTo(BigDecimal.ZERO) > 0)) {
+                    currentMonthPaid = true;
+                    if (inv.getAmountPaid() != null && inv.getAmountPaid().compareTo(BigDecimal.ZERO) > 0) {
+                        actualRentPaidInCycle = actualRentPaidInCycle.add(inv.getAmountPaid());
+                    } else if (inv.getAmountDue() != null) {
+                        actualRentPaidInCycle = actualRentPaidInCycle.add(inv.getAmountDue());
+                    }
+                }
+            }
+
             if ("UNPAID".equalsIgnoreCase(inv.getStatus()) || "PARTIALLY_PAID".equalsIgnoreCase(inv.getStatus()) || "OVERDUE".equalsIgnoreCase(inv.getStatus())) {
                 BigDecimal remaining = inv.getAmountDue().subtract(inv.getAmountPaid() != null ? inv.getAmountPaid() : BigDecimal.ZERO);
                 if (remaining.compareTo(BigDecimal.ZERO) > 0) {
-                    if (inv.getInvoiceNumber() != null && inv.getInvoiceNumber().startsWith("UTIL")) {
+                    if (isUtility) {
                         utilDue = utilDue.add(remaining);
                     } else {
                         rentDue = rentDue.add(remaining);
@@ -104,37 +153,89 @@ public class CheckoutSettlementService {
                 }
             }
         }
+        preview.isCurrentMonthRentPaid = currentMonthPaid;
         preview.pendingRentDue = rentDue;
         preview.pendingUtilityDue = utilDue;
 
-        // 3. Custom Input Deductions
+        // If current month rent was paid, compute unconsumed prepaid rent credit (factors in room changes & overpayment)
+        if (currentMonthPaid && actualRentPaidInCycle.compareTo(BigDecimal.ZERO) > 0) {
+            if (actualRentPaidInCycle.compareTo(preview.consumedRent) >= 0) {
+                preview.unconsumedPrepaidRent = actualRentPaidInCycle.subtract(preview.consumedRent).setScale(2, RoundingMode.HALF_UP);
+            } else {
+                preview.unconsumedPrepaidRent = BigDecimal.ZERO;
+            }
+        } else if (currentMonthPaid) {
+            preview.unconsumedPrepaidRent = dailyRate.multiply(BigDecimal.valueOf(unconsumedDays)).setScale(2, RoundingMode.HALF_UP);
+        }
+
+        // 4. Custom Input Deductions
         preview.damageCharges = parseBigDecimal(params.get("damageCharges"));
-        preview.cleaningFee = params.containsKey("cleaningFee") ? parseBigDecimal(params.get("cleaningFee")) : BigDecimal.valueOf(500.00); // Standard Exit Cleaning Fee
+        preview.cleaningFee = params.containsKey("cleaningFee") ? parseBigDecimal(params.get("cleaningFee")) : BigDecimal.valueOf(500.00);
         preview.otherDeductions = parseBigDecimal(params.get("otherDeductions"));
 
-        // 4. Notice Period Calculation (e.g. 30 days standard)
+        // 5. Notice Period Calculation with Anti-Double-Charging Prepaid Offset & Owner Waiver Toggle
+        boolean waiveNoticePenalty = params.containsKey("waiveNoticePenalty") && Boolean.parseBoolean(params.get("waiveNoticePenalty").toString());
         int requiredNoticeDays = params.containsKey("requiredNoticeDays") ? Integer.parseInt(params.get("requiredNoticeDays").toString()) : 30;
-        if (params.containsKey("noticeDate") && params.get("noticeDate") != null) {
+        int shortfallDays = 0;
+        BigDecimal grossNoticePenalty = BigDecimal.ZERO;
+
+        if (waiveNoticePenalty) {
+            shortfallDays = 0;
+            grossNoticePenalty = BigDecimal.ZERO;
+        } else if (params.containsKey("noticeDate") && params.get("noticeDate") != null && !params.get("noticeDate").toString().isBlank()) {
             LocalDate noticeDate = LocalDate.parse(params.get("noticeDate").toString().substring(0, 10));
             long actualNoticeDays = ChronoUnit.DAYS.between(noticeDate, preview.checkOutDate);
             if (actualNoticeDays < requiredNoticeDays) {
-                long shortfallDays = requiredNoticeDays - actualNoticeDays;
-                BigDecimal monthlyRent = tenant.getRent() != null ? tenant.getRent() : BigDecimal.ZERO;
-                BigDecimal dailyRate = monthlyRent.divide(BigDecimal.valueOf(30), 2, RoundingMode.HALF_UP);
-                preview.noticePeriodPenalty = dailyRate.multiply(BigDecimal.valueOf(shortfallDays)).setScale(2, RoundingMode.HALF_UP);
-                preview.itemizedBreakdown.add(String.format("Notice Period Shortfall (%d days short of %d days): -₹%s", shortfallDays, requiredNoticeDays, preview.noticePeriodPenalty));
+                shortfallDays = (int) (requiredNoticeDays - actualNoticeDays);
+                grossNoticePenalty = dailyRate.multiply(BigDecimal.valueOf(shortfallDays)).setScale(2, RoundingMode.HALF_UP);
+            }
+        } else {
+            // Default 0-day notice served -> 30 days shortfall
+            shortfallDays = requiredNoticeDays;
+            grossNoticePenalty = dailyRate.multiply(BigDecimal.valueOf(shortfallDays)).setScale(2, RoundingMode.HALF_UP);
+        }
+
+        preview.waiveNoticePenalty = waiveNoticePenalty;
+        preview.noticePeriodShortfallDays = shortfallDays;
+        preview.grossNoticePenalty = grossNoticePenalty;
+
+        // Offset Notice Penalty against Unconsumed Prepaid Rent (Prevents Double Charging!)
+        BigDecimal noticePrepaidOffset = BigDecimal.ZERO;
+        BigDecimal netNoticePenalty = grossNoticePenalty;
+        BigDecimal unconsumedRentRefund = preview.unconsumedPrepaidRent;
+
+        if (!waiveNoticePenalty && preview.unconsumedPrepaidRent.compareTo(BigDecimal.ZERO) > 0 && grossNoticePenalty.compareTo(BigDecimal.ZERO) > 0) {
+            if (preview.unconsumedPrepaidRent.compareTo(grossNoticePenalty) >= 0) {
+                noticePrepaidOffset = grossNoticePenalty;
+                netNoticePenalty = BigDecimal.ZERO;
+                unconsumedRentRefund = preview.unconsumedPrepaidRent.subtract(grossNoticePenalty);
+            } else {
+                noticePrepaidOffset = preview.unconsumedPrepaidRent;
+                netNoticePenalty = grossNoticePenalty.subtract(preview.unconsumedPrepaidRent);
+                unconsumedRentRefund = BigDecimal.ZERO;
             }
         }
 
-        // 5. Total Deductions & Net Calculation
+        preview.noticePrepaidOffset = noticePrepaidOffset;
+        preview.netNoticePenalty = netNoticePenalty;
+        preview.noticePeriodPenalty = netNoticePenalty;
+        preview.unconsumedRentRefund = unconsumedRentRefund;
+
+        // Advance Balance (Multi-Month Advance or Ledger Credit)
+        BigDecimal advanceBalance = tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO;
+        preview.advanceBalance = advanceBalance;
+
+        // 6. Total Deductions & Total Credits
         preview.totalDeductions = preview.pendingRentDue
                 .add(preview.pendingUtilityDue)
                 .add(preview.damageCharges)
                 .add(preview.cleaningFee)
-                .add(preview.noticePeriodPenalty)
+                .add(preview.netNoticePenalty)
                 .add(preview.otherDeductions);
 
-        BigDecimal net = preview.depositPaid.subtract(preview.totalDeductions);
+        preview.totalCredits = preview.depositPaid.add(preview.unconsumedRentRefund).add(advanceBalance);
+
+        BigDecimal net = preview.totalCredits.subtract(preview.totalDeductions);
         if (net.compareTo(BigDecimal.ZERO) >= 0) {
             preview.netPayableRefund = net;
             preview.isTenantOwingMoney = false;
@@ -145,7 +246,7 @@ public class CheckoutSettlementService {
             preview.amountOwedByTenant = net.abs();
         }
 
-        // 6. Beneficiary Details
+        // 7. Refund Beneficiary Details (defaults to tenant profile records if empty in params)
         preview.beneficiaryUpi = params.containsKey("refundUpi") && params.get("refundUpi") != null
                 ? params.get("refundUpi").toString() : tenant.getRefundUpi();
         preview.beneficiaryAccount = params.containsKey("refundAccountNumber") && params.get("refundAccountNumber") != null
@@ -155,13 +256,31 @@ public class CheckoutSettlementService {
         preview.beneficiaryBank = params.containsKey("refundBankName") && params.get("refundBankName") != null
                 ? params.get("refundBankName").toString() : tenant.getRefundBankName();
 
-        // 7. Itemized breakdown summary strings
+        // 8. Itemized Breakdown Strings
         preview.itemizedBreakdown.add(String.format("Security Deposit Paid: +₹%s", preview.depositPaid));
-        if (preview.pendingRentDue.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Unpaid Rent Balance: -₹%s", preview.pendingRentDue));
-        if (preview.pendingUtilityDue.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Unpaid Utility Balance: -₹%s", preview.pendingUtilityDue));
-        if (preview.damageCharges.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Room Damage Repair Fee: -₹%s", preview.damageCharges));
-        if (preview.cleaningFee.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Exit Deep Cleaning Fee: -₹%s", preview.cleaningFee));
-        if (preview.otherDeductions.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Other Miscellaneous Deductions: -₹%s", preview.otherDeductions));
+        if (preview.advanceBalance.compareTo(BigDecimal.ZERO) > 0) {
+            preview.itemizedBreakdown.add(String.format("Advance Rent Balance Credit: +₹%s", preview.advanceBalance));
+        }
+        if (preview.isCurrentMonthRentPaid) {
+            preview.itemizedBreakdown.add(String.format("Current Month Rent Paid (Full Cycle): ₹%s (Stayed: %d/%d days)", preview.monthlyRent, preview.stayedDaysInMonth, preview.daysInMonth));
+            if (preview.unconsumedPrepaidRent.compareTo(BigDecimal.ZERO) > 0) {
+                preview.itemizedBreakdown.add(String.format("Unconsumed Prepaid Rent (%d days credit): +₹%s", preview.unconsumedDaysInMonth, preview.unconsumedPrepaidRent));
+            }
+        }
+        if (preview.pendingRentDue.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Unpaid Rent Due: -₹%s", preview.pendingRentDue));
+        if (preview.pendingUtilityDue.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Unpaid Utility Due: -₹%s", preview.pendingUtilityDue));
+        if (preview.damageCharges.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Damage Repair Fee: -₹%s", preview.damageCharges));
+        if (preview.cleaningFee.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Exit Deep Cleaning: -₹%s", preview.cleaningFee));
+        if (waiveNoticePenalty) {
+            preview.itemizedBreakdown.add("Notice Shortfall Penalty: ₹0.00 (Waived by Owner)");
+        } else if (preview.grossNoticePenalty.compareTo(BigDecimal.ZERO) > 0) {
+            if (preview.noticePrepaidOffset.compareTo(BigDecimal.ZERO) > 0) {
+                preview.itemizedBreakdown.add(String.format("Notice Shortfall Penalty (₹%s offset by prepaid rent ₹%s): -₹%s from deposit", preview.grossNoticePenalty, preview.noticePrepaidOffset, preview.netNoticePenalty));
+            } else {
+                preview.itemizedBreakdown.add(String.format("Notice Shortfall Penalty (%d days short): -₹%s", preview.noticePeriodShortfallDays, preview.netNoticePenalty));
+            }
+        }
+        if (preview.otherDeductions.compareTo(BigDecimal.ZERO) > 0) preview.itemizedBreakdown.add(String.format("Other Deductions: -₹%s", preview.otherDeductions));
 
         return preview;
     }
@@ -239,6 +358,7 @@ public class CheckoutSettlementService {
         // 5. Update Tenant Status
         tenant.setStatus("CHECKED_OUT");
         tenant.setLeaseEnd(preview.checkOutDate.toString());
+        tenant.setAdvanceBalance(BigDecimal.ZERO);
         tenantRepository.save(tenant);
 
         Map<String, Object> result = new HashMap<>();

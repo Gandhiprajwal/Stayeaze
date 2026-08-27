@@ -16,6 +16,9 @@ public class UtilityBillingController {
     @Autowired
     private UtilityBillingService utilityBillingService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(UtilityBillingController.class);
 
     @GetMapping("/properties/{propertyId}/stats")
@@ -26,6 +29,7 @@ public class UtilityBillingController {
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year) {
         try {
+            securityUtils.validatePropertyAccess(propertyId);
             Map<String, Object> stats = utilityBillingService.getPropertyUtilityStats(propertyId, buildingId, month, year);
             return ResponseEntity.ok(stats);
         } catch (Exception e) {
@@ -45,6 +49,7 @@ public class UtilityBillingController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         try {
+            securityUtils.validatePropertyAccess(propertyId);
             Map<String, Object> sheet = utilityBillingService.getPropertyMeterSheetPaginated(propertyId, buildingId, search, month, year, page, size);
             return ResponseEntity.ok(sheet);
         } catch (Exception e) {
@@ -70,6 +75,7 @@ public class UtilityBillingController {
             @PathVariable UUID propertyId,
             @RequestBody Map<String, Object> payload) {
         try {
+            securityUtils.validatePropertyAccess(propertyId);
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> readings = (List<Map<String, Object>>) payload.get("readings");
             boolean appendToRentInvoices = payload.containsKey("appendToRentInvoices") && Boolean.TRUE.equals(payload.get("appendToRentInvoices"));

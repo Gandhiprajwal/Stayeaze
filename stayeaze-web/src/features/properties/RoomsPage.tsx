@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Room, Floor, Building } from '@/lib/types';
 import { formatCurrency, formatRoomName } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
@@ -45,6 +46,7 @@ const emptyForm = {
 };
 
 export default function RoomsPage() {
+  const { selectedPropertyId } = usePropertyStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Room | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Room | null>(null);
@@ -88,7 +90,7 @@ export default function RoomsPage() {
 
   function openCreate() {
     setEditing(null);
-    setFormPropId('');
+    setFormPropId(selectedPropertyId && selectedPropertyId !== 'ALL' ? selectedPropertyId : '');
     setFormBldId('');
     form.reset(emptyForm);
     setDialogOpen(true);

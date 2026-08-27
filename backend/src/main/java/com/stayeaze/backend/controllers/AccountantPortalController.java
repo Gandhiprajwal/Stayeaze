@@ -40,33 +40,21 @@ public class AccountantPortalController {
     private ExpenseRepository expenseRepository;
 
     @Autowired
+    private CheckOutRepository checkOutRepository;
+
+    @Autowired
     private PropertyRepository propertyRepository;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private boolean isSuperAdminUser() {
-        if (SecurityContextHolder.getContext().getAuthentication() == null) return false;
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth.getAuthorities() != null) {
-            return auth.getAuthorities().stream()
-                    .anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_SUPER_ADMIN") || a.getAuthority().equalsIgnoreCase("SUPER_ADMIN"));
-        }
-        return false;
+        return securityUtils.isSuperAdmin();
     }
 
     private Organization getLoggedUserOrg() {
-        try {
-            Object principal = SecurityContextHolder.getContext().getAuthentication() != null
-                    ? SecurityContextHolder.getContext().getAuthentication().getPrincipal()
-                    : null;
-
-            if (principal instanceof UserDetailsImpl userDetails) {
-                if (userDetails.getOrgId() != null) {
-                    Organization org = organizationRepository.findById(userDetails.getOrgId()).orElse(null);
-                    if (org != null) return org;
-                }
-            }
-        } catch (Exception ignored) {}
-
-        // Fallback for Super Admin preview or first organization
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
         return organizationRepository.findAll().stream().findFirst().orElse(null);
     }
 
@@ -74,31 +62,14 @@ public class AccountantPortalController {
      * Resolves the set of authorized property IDs for the requesting user.
      */
     private Set<UUID> getAuthorizedPropertyIds(UUID filterPropertyId) {
-        Set<UUID> userAssigned = new HashSet<>();
-        try {
-            Object principal = SecurityContextHolder.getContext().getAuthentication() != null
-                    ? SecurityContextHolder.getContext().getAuthentication().getPrincipal()
-                    : null;
-            if (principal instanceof UserDetailsImpl userDetails) {
-                User user = userRepository.findById(userDetails.getId()).orElse(null);
-                if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
-                    for (UUID pId : user.getPropertyIds()) {
-                        if (pId != null) userAssigned.add(pId);
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
-
+        Set<UUID> assigned = securityUtils.getAssignedPropertyIds();
         if (filterPropertyId != null) {
-            if (!userAssigned.isEmpty() && !userAssigned.contains(filterPropertyId)) {
+            if (assigned != null && !assigned.contains(filterPropertyId)) {
                 return Collections.emptySet();
             }
-            Set<UUID> single = new HashSet<>();
-            single.add(filterPropertyId);
-            return single;
+            return Collections.singleton(filterPropertyId);
         }
-
-        return userAssigned.isEmpty() ? null : userAssigned;
+        return assigned;
     }
 
     // 1. Accountant Overview Financial Summary (Property-isolated & Null-Safe)
@@ -201,11 +172,34 @@ public class AccountantPortalController {
                 ? totalBilled.multiply(gstMultiplier).setScale(2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
 
-        BigDecimal netCashFlow = totalCollections.subtract(totalExpenses);
+        // CheckOuts: Process Settled Deposit Refunds and Damage Deductions
+        List<CheckOut> checkOuts = checkOutRepository.findByOrganizationId(orgId);
+        if (checkOuts == null) checkOuts = Collections.emptyList();
+        if (propIds != null) {
+            checkOuts = checkOuts.stream()
+                    .filter(c -> c != null && c.getPropertyId() != null && propIds.contains(c.getPropertyId()))
+                    .collect(Collectors.toList());
+        }
+
+        BigDecimal totalRefundsPaid = checkOuts.stream()
+                .filter(c -> c != null && c.getNetRefundAmount() != null && ("SETTLED".equalsIgnoreCase(c.getRefundStatus()) || "APPROVED".equalsIgnoreCase(c.getRefundStatus()) || "REFUNDED".equalsIgnoreCase(c.getRefundStatus()) || "COMPLETED".equalsIgnoreCase(c.getStatus())))
+                .map(CheckOut::getNetRefundAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal totalDamageRecoveries = checkOuts.stream()
+                .filter(c -> c != null && c.getDeductions() != null && ("SETTLED".equalsIgnoreCase(c.getRefundStatus()) || "APPROVED".equalsIgnoreCase(c.getRefundStatus()) || "REFUNDED".equalsIgnoreCase(c.getRefundStatus()) || "COMPLETED".equalsIgnoreCase(c.getStatus())))
+                .map(CheckOut::getDeductions)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal netCashFlow = totalCollections.subtract(totalExpenses).subtract(totalRefundsPaid).add(totalDamageRecoveries);
 
         Map<String, Object> summary = new HashMap<>();
         summary.put("totalCollections", totalCollections);
         summary.put("totalExpenses", totalExpenses);
+        summary.put("totalRefundsPaid", totalRefundsPaid);
+        summary.put("totalDamageRecoveries", totalDamageRecoveries);
         summary.put("netCashFlow", netCashFlow);
         summary.put("totalEscrowDeposit", totalEscrowDeposit);
         summary.put("pendingRefundCount", pendingRefundCount);
@@ -277,6 +271,56 @@ public class AccountantPortalController {
                 entry.put("vendor", e.getVendorName() != null ? e.getVendorName() : "N/A");
                 entry.put("status", "PAID");
                 ledgerEntries.add(entry);
+            }
+        }
+
+        // Add Settled Deposit Refunds as Debits and Damage Recoveries as Credits
+        List<CheckOut> checkOuts = checkOutRepository.findByOrganizationId(orgId);
+        if (checkOuts != null) {
+            for (CheckOut c : checkOuts) {
+                if (propIds != null && c.getPropertyId() != null) {
+                    if (!propIds.contains(c.getPropertyId())) {
+                        continue;
+                    }
+                }
+
+                boolean isSettledOrRefunded = "SETTLED".equalsIgnoreCase(c.getRefundStatus()) ||
+                        "APPROVED".equalsIgnoreCase(c.getRefundStatus()) ||
+                        "REFUNDED".equalsIgnoreCase(c.getRefundStatus()) ||
+                        "COMPLETED".equalsIgnoreCase(c.getStatus());
+
+                // 1. Settled Refund Disbursement (Cash Outflow -> DEBIT)
+                if (isSettledOrRefunded && c.getNetRefundAmount() != null && c.getNetRefundAmount().compareTo(BigDecimal.ZERO) > 0) {
+                    Map<String, Object> refEntry = new HashMap<>();
+                    refEntry.put("id", "REF-" + c.getId());
+                    refEntry.put("date", c.getCheckOutDate() != null ? c.getCheckOutDate().toString() : LocalDate.now().toString());
+                    refEntry.put("type", "DEBIT");
+                    refEntry.put("category", "Deposit Refund Settlement");
+                    String payoutDetails = c.getBeneficiaryUpi() != null && !c.getBeneficiaryUpi().isBlank()
+                            ? " (UPI: " + c.getBeneficiaryUpi() + ")"
+                            : c.getBeneficiaryAccount() != null && !c.getBeneficiaryAccount().isBlank()
+                            ? " (A/C: " + c.getBeneficiaryAccount() + ")"
+                            : "";
+                    refEntry.put("description", "Security deposit refund to " + (c.getTenantName() != null ? c.getTenantName() : "Tenant") + payoutDetails);
+                    refEntry.put("amount", c.getNetRefundAmount());
+                    refEntry.put("vendor", c.getTenantName() != null ? c.getTenantName() : "Resident");
+                    refEntry.put("status", "SETTLED");
+                    ledgerEntries.add(refEntry);
+                }
+
+                // 2. Damage / Cleaning Deductions Kept (Income Recovery -> CREDIT)
+                if (isSettledOrRefunded && c.getDeductions() != null && c.getDeductions().compareTo(BigDecimal.ZERO) > 0) {
+                    Map<String, Object> dedEntry = new HashMap<>();
+                    dedEntry.put("id", "DED-" + c.getId());
+                    dedEntry.put("date", c.getCheckOutDate() != null ? c.getCheckOutDate().toString() : LocalDate.now().toString());
+                    dedEntry.put("type", "CREDIT");
+                    dedEntry.put("category", "Damage Recovery Income");
+                    dedEntry.put("description", "Deposit deduction recovered for damages & cleaning from " + (c.getTenantName() != null ? c.getTenantName() : "Tenant"));
+                    dedEntry.put("amount", c.getDeductions());
+                    dedEntry.put("vendor", c.getTenantName() != null ? c.getTenantName() : "Resident");
+                    dedEntry.put("status", "SETTLED");
+                    ledgerEntries.add(dedEntry);
+                }
             }
         }
 

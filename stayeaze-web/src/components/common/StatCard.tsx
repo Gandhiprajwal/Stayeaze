@@ -43,7 +43,7 @@ export function StatCard({ label, value, icon: Icon, trend, hint, accent = 'prim
           )}
         </div>
         <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-lg', accentMap[accent])}>
-          <Icon className="h-5.5 w-5.5 h-6 w-6" />
+          <Icon className="h-5.5 w-5.5" />
         </div>
       </CardContent>
     </Card>

@@ -112,7 +112,7 @@ export function TenantSelect({
         </PopoverAnchor>
 
         <PopoverContent
-          className="w-[440px] p-1.5 shadow-2xl rounded-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 max-h-[300px] overflow-y-auto"
+          className="w-[var(--radix-popover-trigger-width)] min-w-[min(100vw-2rem,320px)] max-w-[calc(100vw-2rem)] p-1.5 shadow-2xl rounded-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 max-h-[300px] overflow-y-auto"
           align="start"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >

@@ -12,8 +12,16 @@ public class PropertySummaryDTO implements Serializable {
     private UUID id;
     private String name;
     private String code;
+    private String type;
+    private String status;
+    private String address;
     private String city;
     private String state;
+    private String manager;
+    private String phone;
+    private String email;
+    private Integer totalBuildings;
+    private Integer totalRooms;
     private Integer totalBeds;
     private Integer occupiedBeds;
     private Double occupancyPercent;
@@ -22,14 +30,24 @@ public class PropertySummaryDTO implements Serializable {
 
     public PropertySummaryDTO() {}
 
-    public PropertySummaryDTO(UUID id, String name, String code, String city, String state,
-                              Integer totalBeds, Integer occupiedBeds, Double occupancyPercent,
-                              BigDecimal monthlyRevenue, Integer activeTenantsCount) {
+    public PropertySummaryDTO(UUID id, String name, String code, String type, String status,
+                              String address, String city, String state, String manager,
+                              String phone, String email, Integer totalBuildings,
+                              Integer totalRooms, Integer totalBeds, Integer occupiedBeds,
+                              Double occupancyPercent, BigDecimal monthlyRevenue, Integer activeTenantsCount) {
         this.id = id;
         this.name = name;
         this.code = code;
+        this.type = type;
+        this.status = status;
+        this.address = address;
         this.city = city;
         this.state = state;
+        this.manager = manager;
+        this.phone = phone;
+        this.email = email;
+        this.totalBuildings = totalBuildings;
+        this.totalRooms = totalRooms;
         this.totalBeds = totalBeds;
         this.occupiedBeds = occupiedBeds;
         this.occupancyPercent = occupancyPercent;
@@ -47,8 +65,16 @@ public class PropertySummaryDTO implements Serializable {
                 p.getId(),
                 p.getName(),
                 p.getCode(),
+                p.getType() != null ? p.getType() : "PG",
+                p.getStatus() != null ? p.getStatus().toLowerCase() : "active",
+                p.getAddress(),
                 p.getCity(),
                 p.getState(),
+                p.getManager(),
+                p.getPhone(),
+                p.getEmail(),
+                p.getTotalBuildings() != null ? p.getTotalBuildings() : 0,
+                p.getTotalRooms() != null ? p.getTotalRooms() : 0,
                 total,
                 occupied,
                 occPct,
@@ -67,8 +93,16 @@ public class PropertySummaryDTO implements Serializable {
                 dto.getId(),
                 dto.getName(),
                 dto.getCode(),
+                dto.getType() != null ? dto.getType() : "PG",
+                dto.getStatus() != null ? dto.getStatus().toLowerCase() : "active",
+                dto.getAddress(),
                 dto.getCity(),
                 dto.getState(),
+                dto.getManager(),
+                dto.getPhone(),
+                dto.getEmail(),
+                dto.getTotalBuildings() != null ? dto.getTotalBuildings() : 0,
+                dto.getTotalRooms() != null ? dto.getTotalRooms() : 0,
                 total,
                 occupied,
                 occPct,
@@ -95,11 +129,35 @@ public class PropertySummaryDTO implements Serializable {
     public String getCode() { return code; }
     public void setCode(String code) { this.code = code; }
 
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+
     public String getCity() { return city; }
     public void setCity(String city) { this.city = city; }
 
     public String getState() { return state; }
     public void setState(String state) { this.state = state; }
+
+    public String getManager() { return manager; }
+    public void setManager(String manager) { this.manager = manager; }
+
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public Integer getTotalBuildings() { return totalBuildings; }
+    public void setTotalBuildings(Integer totalBuildings) { this.totalBuildings = totalBuildings; }
+
+    public Integer getTotalRooms() { return totalRooms; }
+    public void setTotalRooms(Integer totalRooms) { this.totalRooms = totalRooms; }
 
     public Integer getTotalBeds() { return totalBeds; }
     public void setTotalBeds(Integer totalBeds) { this.totalBeds = totalBeds; }

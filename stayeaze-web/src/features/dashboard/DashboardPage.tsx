@@ -23,13 +23,17 @@ import { formatCurrency, formatDate, initials, occupancyRate } from '@/lib/forma
 import api from '@/lib/api';
 import type { Property, Tenant, Invoice, Payment, Complaint } from '@/lib/types';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import { useSystemMetricsStream } from '@/lib/hooks/useSystemMetricsStream';
 import { useRoleDashboardStream } from '@/lib/hooks/useRoleDashboardStream';
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const { selectedPropertyId, selectedProperty } = usePropertyStore();
   const { isLiveStreaming } = useSystemMetricsStream();
   const { isLiveStreaming: isRoleStreaming, streamData: roleMetrics } = useRoleDashboardStream();
+
+  const activePropParam = selectedPropertyId !== 'ALL' ? { propertyId: selectedPropertyId } : {};
 
   const { data: properties, isLoading: loadingProps } = useQuery({
     queryKey: ['dashboard', 'properties-minimal'],
@@ -37,60 +41,60 @@ export default function DashboardPage() {
     staleTime: 60000,
   });
   const { data: buildings } = useQuery({
-    queryKey: ['dashboard', 'buildings'],
-    queryFn: () => api.get<{ data: any[] }>('/buildings').then((r) => r.data.data),
+    queryKey: ['dashboard', 'buildings', selectedPropertyId],
+    queryFn: () => api.get<{ data: any[] }>('/buildings', { params: activePropParam }).then((r) => r.data.data),
     enabled: user?.role !== 'SUPER_ADMIN',
     staleTime: 60000,
   });
   const { data: floors } = useQuery({
-    queryKey: ['dashboard', 'floors'],
-    queryFn: () => api.get<{ data: any[] }>('/floors').then((r) => r.data.data),
+    queryKey: ['dashboard', 'floors', selectedPropertyId],
+    queryFn: () => api.get<{ data: any[] }>('/floors', { params: activePropParam }).then((r) => r.data.data),
     enabled: user?.role !== 'SUPER_ADMIN',
     staleTime: 60000,
   });
   const { data: tenants } = useQuery({
-    queryKey: ['dashboard', 'tenants'],
-    queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 50 } }).then((r) => r.data.data),
+    queryKey: ['dashboard', 'tenants', selectedPropertyId],
+    queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { ...activePropParam, pageSize: 50 } }).then((r) => r.data.data),
     staleTime: 60000,
   });
   const { data: invoices } = useQuery({
-    queryKey: ['dashboard', 'invoices'],
-    queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: { pageSize: 50 } }).then((r) => r.data.data),
+    queryKey: ['dashboard', 'invoices', selectedPropertyId],
+    queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: { ...activePropParam, pageSize: 50 } }).then((r) => r.data.data),
     staleTime: 60000,
   });
   const { data: payments } = useQuery({
-    queryKey: ['dashboard', 'payments'],
-    queryFn: () => api.get<{ data: Payment[] }>('/payments', { params: { pageSize: 50 } }).then((r) => r.data?.data || []),
+    queryKey: ['dashboard', 'payments', selectedPropertyId],
+    queryFn: () => api.get<{ data: Payment[] }>('/payments', { params: { ...activePropParam, pageSize: 50 } }).then((r) => r.data?.data || []),
     staleTime: 60000,
   });
   const { data: complaints } = useQuery({
-    queryKey: ['dashboard', 'complaints'],
-    queryFn: () => api.get<{ data: Complaint[] }>('/complaints', { params: { pageSize: 5, sortBy: 'createdAt', sortOrder: 'desc' } }).then((r) => r.data.data),
+    queryKey: ['dashboard', 'complaints', selectedPropertyId],
+    queryFn: () => api.get<{ data: Complaint[] }>('/complaints', { params: { ...activePropParam, pageSize: 5, sortBy: 'createdAt', sortOrder: 'desc' } }).then((r) => r.data.data),
     staleTime: 60000,
   });
 
   // Dedicated Page-Based Server Stats
   const { data: propertyStats } = useQuery({
-    queryKey: ['properties-stats'],
-    queryFn: () => api.get('/properties/stats').then((r) => r.data || {}),
+    queryKey: ['properties-stats', selectedPropertyId],
+    queryFn: () => api.get('/properties/stats', { params: activePropParam }).then((r) => r.data || {}),
     staleTime: 60000,
   });
 
   const { data: tenantStats } = useQuery({
-    queryKey: ['tenants-stats'],
-    queryFn: () => api.get('/tenants/stats').then((r) => r.data || {}),
+    queryKey: ['tenants-stats', selectedPropertyId],
+    queryFn: () => api.get('/tenants/stats', { params: activePropParam }).then((r) => r.data || {}),
     staleTime: 60000,
   });
 
   const { data: invoiceStats } = useQuery({
-    queryKey: ['invoices-stats'],
-    queryFn: () => api.get('/invoices/stats').then((r) => r.data || {}),
+    queryKey: ['invoices-stats', selectedPropertyId],
+    queryFn: () => api.get('/invoices/stats', { params: activePropParam }).then((r) => r.data || {}),
     staleTime: 60000,
   });
 
   const { data: complaintStats } = useQuery({
-    queryKey: ['complaints-stats'],
-    queryFn: () => api.get('/complaints/stats').then((r) => r.data || {}),
+    queryKey: ['complaints-stats', selectedPropertyId],
+    queryFn: () => api.get('/complaints/stats', { params: activePropParam }).then((r) => r.data || {}),
     staleTime: 60000,
   });
 
@@ -631,7 +635,11 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title={`Welcome back, ${user?.name?.split(' ')[0] ?? 'Admin'}`}
-        description="Here's what's happening across your portfolio today."
+        description={
+          selectedPropertyId !== 'ALL' && selectedProperty
+            ? `Viewing active operations & metrics for ${selectedProperty.name}.`
+            : "Here's what's happening across your entire portfolio today."
+        }
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" asChild className="gap-1.5 rounded-xl h-10 text-xs font-semibold">

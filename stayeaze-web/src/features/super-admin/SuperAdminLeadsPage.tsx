@@ -631,7 +631,7 @@ export default function SuperAdminLeadsPage() {
             </div>
           </div>
 
-          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-3 border-t">
             <Button variant="outline" className="rounded-xl h-10 w-full sm:w-auto text-xs" onClick={() => setSelectedLead(null)}>Cancel</Button>
             <Button
               className="rounded-xl h-10 w-full sm:w-auto text-xs font-bold"
@@ -698,7 +698,7 @@ export default function SuperAdminLeadsPage() {
             </div>
           )}
 
-          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-3 border-t">
             <Button
               variant="outline"
               className="rounded-xl h-10 w-full sm:w-auto text-xs"

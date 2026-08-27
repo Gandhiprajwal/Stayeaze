@@ -15,19 +15,23 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import { exportToCSV, formatCurrency } from '@/lib/format';
 import type { Property, Tenant, Invoice, Payment, Complaint } from '@/lib/types';
 
 export default function ReportsPage() {
   const [timeRange, setTimeRange] = useState<'all' | '30days' | '90days'>('all');
+  const { selectedPropertyId } = usePropertyStore();
+
+  const queryParams = selectedPropertyId !== 'ALL' ? { propertyId: selectedPropertyId, pageSize: 500 } : { pageSize: 500 };
 
   const { data: properties } = useQuery({ queryKey: ['rep', 'properties-minimal'], queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []), staleTime: 300000 });
-  const { data: buildings } = useQuery({ queryKey: ['rep', 'buildings'], queryFn: () => api.get<{ data: any[] }>('/buildings').then((r) => r.data?.data || (Array.isArray(r.data) ? r.data : [])), staleTime: 300000 });
-  const { data: floors } = useQuery({ queryKey: ['rep', 'floors'], queryFn: () => api.get<{ data: any[] }>('/floors').then((r) => r.data?.data || (Array.isArray(r.data) ? r.data : [])), staleTime: 300000 });
-  const { data: tenants } = useQuery({ queryKey: ['rep', 'tenants'], queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 200 } }).then((r) => r.data.data), staleTime: 300000 });
-  const { data: invoices } = useQuery({ queryKey: ['rep', 'invoices'], queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: { pageSize: 200 } }).then((r) => r.data.data), staleTime: 300000 });
-  const { data: payments } = useQuery({ queryKey: ['rep', 'payments'], queryFn: () => api.get<{ data: Payment[] }>('/payments', { params: { pageSize: 200 } }).then((r) => r.data.data), staleTime: 300000 });
-  const { data: complaints } = useQuery({ queryKey: ['rep', 'complaints'], queryFn: () => api.get<{ data: Complaint[] }>('/complaints', { params: { pageSize: 200 } }).then((r) => r.data.data), staleTime: 300000 });
+  const { data: buildings } = useQuery({ queryKey: ['rep', 'buildings', selectedPropertyId], queryFn: () => api.get<{ data: any[] }>('/buildings', { params: queryParams }).then((r) => r.data?.data || (Array.isArray(r.data) ? r.data : [])), staleTime: 300000 });
+  const { data: floors } = useQuery({ queryKey: ['rep', 'floors', selectedPropertyId], queryFn: () => api.get<{ data: any[] }>('/floors', { params: queryParams }).then((r) => r.data?.data || (Array.isArray(r.data) ? r.data : [])), staleTime: 300000 });
+  const { data: tenants } = useQuery({ queryKey: ['rep', 'tenants', selectedPropertyId], queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: queryParams }).then((r) => r.data.data), staleTime: 300000 });
+  const { data: invoices } = useQuery({ queryKey: ['rep', 'invoices', selectedPropertyId], queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: queryParams }).then((r) => r.data.data), staleTime: 300000 });
+  const { data: payments } = useQuery({ queryKey: ['rep', 'payments', selectedPropertyId], queryFn: () => api.get<{ data: Payment[] }>('/payments', { params: queryParams }).then((r) => r.data.data), staleTime: 300000 });
+  const { data: complaints } = useQuery({ queryKey: ['rep', 'complaints', selectedPropertyId], queryFn: () => api.get<{ data: Complaint[] }>('/complaints', { params: queryParams }).then((r) => r.data.data), staleTime: 300000 });
 
   // Filter Active Tenants
   const activeTenantsList = (tenants ?? []).filter((t) => {

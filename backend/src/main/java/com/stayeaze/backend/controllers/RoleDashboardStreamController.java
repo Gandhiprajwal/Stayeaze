@@ -215,7 +215,27 @@ public class RoleDashboardStreamController {
                 case "OWNER":
                 case "PROPERTY_MANAGER":
                     UUID orgId = session.organization != null ? session.organization.getId() : null;
+                    User streamUser = session.userId != null ? userRepository.findById(session.userId).orElse(null) : null;
+                    List<UUID> assignedProps = streamUser != null ? streamUser.getPropertyIds() : null;
+
                     Map<String, Object> overallStats = propertyService.getPropertyOverallStats(null, orgId);
+                    if (assignedProps != null && !assignedProps.isEmpty()) {
+                        // Recalculate stats for scoped properties
+                        List<Property> assignedPropList = propertyRepository.findByIdIn(assignedProps);
+                        int propCount = assignedPropList.size();
+                        int totalBeds = 0;
+                        int occBeds = 0;
+                        for (Property p : assignedPropList) {
+                            if (p.getTotalBeds() != null) totalBeds += p.getTotalBeds();
+                            if (p.getOccupiedBeds() != null) occBeds += p.getOccupiedBeds();
+                        }
+                        overallStats.put("totalProperties", propCount);
+                        overallStats.put("totalBeds", totalBeds);
+                        overallStats.put("occupiedBeds", occBeds);
+                        overallStats.put("availableBeds", Math.max(0, totalBeds - occBeds));
+                        double occRate = totalBeds > 0 ? Math.round(((double) occBeds / totalBeds) * 1000.0) / 10.0 : 0.0;
+                        overallStats.put("occupancyRate", occRate);
+                    }
                     payload.putAll(overallStats);
 
                     // Occupancy breakdown (% occupied, % available, % maintenance)
@@ -224,6 +244,18 @@ public class RoleDashboardStreamController {
                     long maintBedsCount = 0;
                     if (orgId != null) {
                         maintBedsCount = bedRepository.findByOrganizationIdNative(orgId).stream()
+                                .filter(b -> {
+                                    if (assignedProps != null && !assignedProps.isEmpty()) {
+                                        try {
+                                            UUID pId = (b.getRoom() != null && b.getRoom().getFloor() != null && b.getRoom().getFloor().getBuilding() != null && b.getRoom().getFloor().getBuilding().getProperty() != null)
+                                                    ? b.getRoom().getFloor().getBuilding().getProperty().getId() : null;
+                                            return pId != null && assignedProps.contains(pId);
+                                        } catch (Exception ignored) {
+                                            return false;
+                                        }
+                                    }
+                                    return true;
+                                })
                                 .filter(b -> b.getStatus() != null && ("MAINTENANCE".equalsIgnoreCase(b.getStatus()) || "UNDER_MAINTENANCE".equalsIgnoreCase(b.getStatus())))
                                 .count();
                     }
@@ -235,6 +267,12 @@ public class RoleDashboardStreamController {
                     List<Invoice> orgInvoices = orgId != null
                             ? invoiceRepository.findByOrganizationId(orgId)
                             : invoiceRepository.findAll();
+
+                    if (assignedProps != null && !assignedProps.isEmpty()) {
+                        orgInvoices = orgInvoices.stream()
+                                .filter(i -> i.getTenant() != null && i.getTenant().getPropertyId() != null && assignedProps.contains(i.getTenant().getPropertyId()))
+                                .collect(java.util.stream.Collectors.toList());
+                    }
 
                     BigDecimal revenueCollected = orgInvoices.stream()
                             .filter(i -> "PAID".equalsIgnoreCase(i.getStatus()))
@@ -258,6 +296,12 @@ public class RoleDashboardStreamController {
                     List<Tenant> orgTenants = orgId != null
                             ? tenantRepository.findByOrganizationIdNative(orgId)
                             : tenantRepository.findAll();
+
+                    if (assignedProps != null && !assignedProps.isEmpty()) {
+                        orgTenants = orgTenants.stream()
+                                .filter(t -> t.getPropertyId() != null && assignedProps.contains(t.getPropertyId()))
+                                .collect(java.util.stream.Collectors.toList());
+                    }
 
                     long activeTenantsCount = orgTenants.stream()
                             .filter(t -> t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()) || "CHECKED_IN".equalsIgnoreCase(t.getStatus()))

@@ -179,7 +179,7 @@ export default function AccountantDashboardPage() {
                     <Label className="text-xs font-semibold">Description / Note</Label>
                     <Input placeholder="Monthly property power bill settlement" value={description} onChange={(e) => setDescription(e.target.value)} className="h-10 rounded-xl text-xs sm:text-sm" />
                   </div>
-                  <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+                  <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-3 border-t">
                     <Button type="button" variant="outline" className="rounded-xl h-10 w-full sm:w-auto text-xs" onClick={() => setOpenExpenseModal(false)}>Cancel</Button>
                     <Button type="submit" className="rounded-xl h-10 w-full sm:w-auto text-xs font-bold shadow-xs" disabled={createExpenseMutation.isPending}>
                       {createExpenseMutation.isPending ? 'Recording...' : 'Record Debit Entry'}

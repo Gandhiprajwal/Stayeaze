@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Hotel, Pencil, Trash2, Eye, CreditCard, ShieldCheck } from 'lucide-react';
+import { Plus, Hotel, Pencil, Trash2, Eye, CreditCard, ShieldCheck, AlertTriangle, Zap } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { DataTable, type Column } from '@/components/common/DataTable';
@@ -14,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import api from '@/lib/api';
 
 import type { Property } from '@/lib/types';
 import { occupancyRate } from '@/lib/format';
@@ -49,6 +51,16 @@ export default function PropertiesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Property | null>(null);
   const currentUser = useAuthStore((s) => s.user);
   const canManage = currentUser?.role === 'OWNER' || currentUser?.role === 'ADMIN' || currentUser?.role === 'PROPERTY_MANAGER';
+
+  const { data: subDetails } = useQuery({
+    queryKey: ['my-subscription-details'],
+    queryFn: () => api.get('/subscription/my-subscription').then((r) => r.data),
+  });
+
+  const planName = subDetails?.planName || 'Active Plan';
+  const maxProperties = subDetails?.maxProperties ?? subDetails?.usage?.maxProperties ?? 1;
+  const currentPropertyCount = subDetails?.propertyCount ?? subDetails?.usage?.currentProperties ?? 1;
+  const isPropertyLimitReached = !editing && currentPropertyCount >= maxProperties;
 
   const createMut = useCreate<Property>(ENDPOINT, 'Property');
   const updateMut = useUpdate<Property>(ENDPOINT, 'Property');
@@ -149,7 +161,7 @@ export default function PropertiesPage() {
       }
       return <span className="tabular-nums">{rooms}</span>;
     }},
-    { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status} tone={statusTone(r.status)} /> },
+    { key: 'status', header: 'Status', sortable: true, cell: (r) => <StatusBadge status={r.status || 'active'} tone={statusTone(r.status || 'active')} /> },
   ];
 
   return (
@@ -177,18 +189,6 @@ export default function PropertiesPage() {
           { key: 'status', label: 'Status', options: propertyStatuses },
           { key: 'type', label: 'Type', options: propertyTypes },
         ]}
-        rowActions={(row) => {
-          const items = [
-            { label: 'View', icon: Eye, onSelect: () => navigate(`/properties/${row.id}`) }
-          ];
-          if (canManage) {
-            items.push(
-              { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
-              { label: 'Delete', icon: Trash2, onSelect: () => setDeleteTarget(row) }
-            );
-          }
-          return <RowActions items={items} />;
-        }}
       />
 
       <FormDialog
@@ -201,7 +201,40 @@ export default function PropertiesPage() {
         submitLabel={editing ? 'Save Changes' : 'Create Property'}
         size="lg"
       >
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-4">
+          {/* Plan Property Limit Warning Banner */}
+          {isPropertyLimitReached && (
+            <div className="rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50/80 dark:bg-rose-950/40 p-3.5 space-y-2 text-rose-900 dark:text-rose-200">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <p className="font-bold">
+                    Plan Property Limit Reached ({currentPropertyCount}/{maxProperties} Properties)
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-rose-800 dark:text-rose-300">
+                    Your <strong>{planName}</strong> allows up to <strong>{maxProperties} property workspace(s)</strong>. Upgrade to <strong>Professional (3 Properties)</strong> or <strong>Enterprise (10 Properties)</strong> to manage multiple properties.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-rose-200 dark:border-rose-900/60 text-[11px]">
+                <span>Requires multi-property plan</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setDialogOpen(false);
+                    navigate('/subscription');
+                  }}
+                  className="h-6 px-2.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white border-transparent gap-1"
+                >
+                  <Zap className="h-3 w-3" /> Upgrade Plan
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
           <FormInput label="Property Name" required id="name" value={form.values.name} onChange={(e) => form.setValue('name', e.target.value)} error={form.errors.name} />
           <FormInput label="Property Code" required id="code" value={form.values.code} onChange={(e) => form.setValue('code', e.target.value.toUpperCase())} error={form.errors.code} placeholder="SE-KRM" />
           <div className="space-y-1.5">
@@ -254,6 +287,7 @@ export default function PropertiesPage() {
               <FormInput label="Razorpay Key ID" id="razorpayKeyId" value={form.values.razorpayKeyId} onChange={(e) => form.setValue('razorpayKeyId', e.target.value)} placeholder="rzp_live_..." />
               <FormInput label="Razorpay Key Secret" id="razorpayKeySecret" type="password" value={form.values.razorpayKeySecret} onChange={(e) => form.setValue('razorpayKeySecret', e.target.value)} />
             </div>
+          </div>
           </div>
         </div>
       </FormDialog>

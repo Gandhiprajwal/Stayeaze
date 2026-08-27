@@ -306,7 +306,7 @@ export default function ReceptionistDashboardPage() {
               />
             </div>
           </div>
-          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-3 border-t">
             <Button variant="outline" onClick={() => setVisitorModalOpen(false)} className="rounded-xl h-10 w-full sm:w-auto text-xs font-semibold">Cancel</Button>
             <Button
               onClick={() => createVisitorMutation.mutate(visitorForm)}
@@ -355,7 +355,7 @@ export default function ReceptionistDashboardPage() {
               />
             </div>
           </div>
-          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-3 border-t">
             <Button variant="outline" onClick={() => setParcelModalOpen(false)} className="rounded-xl h-10 w-full sm:w-auto text-xs font-semibold">Cancel</Button>
             <Button
               onClick={() => {

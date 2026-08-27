@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import { formatCurrency, formatRoomName } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 import type { Bed, Room } from '@/lib/types';
@@ -30,6 +31,7 @@ const statuses = [
 const emptyForm = { number: 'B1', roomId: '', status: 'available' as Bed['status'], tenantId: '' };
 
 export default function BedsPage() {
+  const { selectedPropertyId } = usePropertyStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Bed | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Bed | null>(null);
@@ -84,7 +86,7 @@ export default function BedsPage() {
 
   function openCreate() {
     setEditing(null);
-    setFormPropId('');
+    setFormPropId(selectedPropertyId && selectedPropertyId !== 'ALL' ? selectedPropertyId : '');
     setFormBldId('');
     setFormFloorId('');
     form.reset(emptyForm);

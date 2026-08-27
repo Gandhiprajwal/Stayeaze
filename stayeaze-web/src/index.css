@@ -78,11 +78,13 @@
 }
 
 @layer base {
-  html, body, #root {
-    height: 100%;
+  html, body {
+    min-height: 100%;
     margin: 0;
     padding: 0;
-    overflow-x: hidden;
+  }
+  #root {
+    min-height: 100%;
   }
   * {
     @apply border-border;
@@ -108,6 +110,13 @@
   .bg-sidebar { background-color: hsl(var(--sidebar)); }
   .text-sidebar-foreground { color: hsl(var(--sidebar-foreground)); }
   .border-sidebar { border-color: hsl(var(--sidebar)); }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
 }
 
 /* Visible Custom Scrollbar styling for all scrollable containers */

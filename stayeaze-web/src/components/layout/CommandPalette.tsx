@@ -6,14 +6,16 @@ import {
 } from '@/components/ui/command';
 import { filterNavForRole } from '@/lib/nav';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import type { Property, Tenant, Invoice, User, UserRole } from '@/lib/types';
 import {
   Hotel, Users, Receipt, Search, ArrowRight, LayoutDashboard,
   LogIn, LogOut, MessageSquareWarning, Wrench, UserCheck, UserCog,
-  ShieldCheck, ScrollText,
+  ShieldCheck, ScrollText, Building2, Globe, Check,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface QuickActionItem {
   label: string;
@@ -43,14 +45,22 @@ const allQuickActions: QuickActionItem[] = [
 export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { selectedPropertyId, setSelectedPropertyId } = usePropertyStore();
 
   const role = user?.role;
+  const isOrgUser = role && role !== 'SUPER_ADMIN' && role !== 'SUPPORT' && role !== 'TENANT';
 
   // Strict role-gated queries
   const canSeeProperties = role === 'SUPER_ADMIN';
   const canSeeUsers = role === 'SUPER_ADMIN' || role === 'ADMIN';
   const canSeeTenants = role === 'ADMIN' || role === 'PROPERTY_MANAGER' || role === 'RECEPTIONIST';
   const canSeeInvoices = role === 'ADMIN' || role === 'PROPERTY_MANAGER' || role === 'ACCOUNTANT';
+
+  const { data: orgProperties } = useQuery<any[]>({
+    queryKey: ['cmd', 'org-properties'],
+    queryFn: () => api.get('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
+    enabled: open && !!isOrgUser,
+  });
 
   const { data: properties } = useQuery({
     queryKey: ['cmd', 'properties'],
@@ -104,7 +114,46 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
           </CommandGroup>
         )}
 
-        <CommandSeparator />
+        {/* Property Switching for Org Users */}
+        {isOrgUser && orgProperties && orgProperties.length > 0 && (
+          <>
+            <CommandGroup heading="Switch Active Property">
+              <CommandItem
+                onSelect={() => {
+                  setSelectedPropertyId('ALL', null);
+                  onOpenChange(false);
+                  toast.success('Switched to All Properties (Aggregate)');
+                }}
+                value="switch property all aggregate"
+              >
+                <Globe className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span>All Properties (Aggregate)</span>
+                {selectedPropertyId === 'ALL' && (
+                  <Check className="ml-auto h-4 w-4 text-primary" />
+                )}
+              </CommandItem>
+              {orgProperties.map((p: any) => (
+                <CommandItem
+                  key={p.id}
+                  onSelect={() => {
+                    setSelectedPropertyId(p.id, p);
+                    onOpenChange(false);
+                    toast.success(`Switched to ${p.name}`);
+                  }}
+                  value={`switch property ${p.name} ${p.code || ''} ${p.city || ''}`}
+                >
+                  <Building2 className="mr-2 h-4 w-4 text-primary" />
+                  <span>{p.name}</span>
+                  {p.city && <span className="ml-2 text-xs text-muted-foreground">• {p.city}</span>}
+                  {selectedPropertyId === p.id && (
+                    <Check className="ml-auto h-4 w-4 text-primary" />
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        )}
 
         {/* Role-filtered Navigation */}
         {navSections.map((section) => (

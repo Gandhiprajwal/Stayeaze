@@ -1,0 +1,327 @@
+# Complete Production Responsive UI/UX Audit — StayEaze Frontend
+
+Full-stack audit of **68 feature pages**, **20 common components**, **5 layout components**, and **47 UI primitives** across breakpoints 320px–1920px.
+
+---
+
+## P0 — Critical / Broken
+
+### 1. `scrollbar-thin` class is not a valid Tailwind utility
+**Files**: [AppLayout.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/layout/AppLayout.tsx#L91), [VisitorsPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/visitors/VisitorsPage.tsx#L644), [PropertySwitcher.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/layout/PropertySwitcher.tsx#L247), [RaiseSupportTicketModal.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/support/RaiseSupportTicketModal.tsx)
+
+`scrollbar-thin` is not a built-in Tailwind class. No plugin or custom utility is defined in [index.css](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/index.css) for this. The class does nothing. Either add the `scrollbar-thin` utility via CSS (`scrollbar-width: thin`) or remove the class.
+
+**Fix**: Add to `index.css` `@layer utilities`:
+```css
+.scrollbar-thin {
+  scrollbar-width: thin; /* Firefox */
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+```
+
+---
+
+### 2. `StatCard` icon has conflicting size classes
+**File**: [StatCard.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/common/StatCard.tsx#L46)
+
+```tsx
+<Icon className="h-5.5 w-5.5 h-6 w-6" />
+```
+`h-5.5 w-5.5` is not a valid default Tailwind class. Followed immediately by `h-6 w-6`, the last one wins (in compiled output), but `h-5.5` generates no CSS. This is a bug — icon size should be intentional.
+
+**Fix**: Use `h-6 w-6` or `h-5 w-5` — pick one.
+
+---
+
+### 3. DataTable pagination sits outside the `<div>` wrapper — broken DOM nesting
+**File**: [DataTable.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/common/DataTable.tsx#L963-L1011)
+
+The mobile cards block (`<div className="block md:hidden ...">`) closes at line ~963, then the pagination footer is placed INSIDE the outer `<div className="space-y-4">` but _after_ both the desktop table and mobile cards blocks. The indentation suggests it was meant to be inside the `space-y-4` container but the closing `</div>` at line 1011 actually closes the _root_ container. 
+
+Looking at the structure more carefully:
+- Line 698: Desktop table `<div className="hidden md:block ...">` — closes at ~863
+- Line 866: Mobile cards `<div className="block md:hidden ...">` — closes at ~963
+- Line 965-1010: Pagination footer — this is a sibling of both, which is correct **but** the indentation is misleading and the pagination `<div>` has `className="flex flex-col items-center justify-between gap-3 border-t border-border/60 bg-muted/10 px-4 py-3 sm:flex-row rounded-2xl"`. The `rounded-2xl` with `border-t` creates a visually disconnected element on mobile.
+
+**Issue**: The pagination footer is correctly positioned as a sibling, but its rounded styling makes it look detached from the table above it. On mobile, the gap between the last card and pagination control is inconsistent.
+
+**Fix**: Remove `rounded-2xl` from pagination footer, or connect it visually to the table/card container.
+
+---
+
+### 4. Dialog modals use inconsistent background patterns
+**Across all files**
+
+Three distinct patterns found:
+1. `bg-card/95 backdrop-blur-xl` (muddy, translucent) — VisitorsPage scan modal, TenantDetailPage
+2. `bg-white dark:bg-slate-900` (pure solid white) — FormDialog, QuickAddTenantModal, VisitorsPage walk-in modal
+3. `bg-card` (theme-variable, could be white or grey) — SubscribersPage, EscalationsPage
+
+Per user's explicit instruction: **all modals must use pure solid white** (`bg-white dark:bg-slate-900`).
+
+**Fix**: Audit every `DialogContent` and normalize to `bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800`.
+
+---
+
+## P1 — Major Usability / Responsive Problems
+
+### 5. MobileBottomNav overlaps page content on small screens
+**File**: [MobileBottomNav.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/layout/MobileBottomNav.tsx#L46)
+
+The nav has `fixed bottom-0` with `pb-3`, but the main content area in [AppLayout.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/layout/AppLayout.tsx#L506) uses `pb-32 md:pb-8`. At 320–480px, `pb-32` (128px) is excessive and wastes valuable vertical space. Meanwhile, at exactly `md` (768px), the nav hides via `md:hidden` but the padding drops to `pb-8` — there's a clean transition. However, the actual nav height is only ~60px, so `pb-32` wastes ~68px of vertical space on mobile.
+
+**Fix**: Reduce to `pb-20 md:pb-8` (80px — enough clearance for the floating nav + safe area insets).
+
+---
+
+### 6. PageHeader actions wrap poorly at 480–767px (phablet range)
+**File**: [PageHeader.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/common/PageHeader.tsx#L14)
+
+At `sm` (640px), the layout switches to `sm:flex-row sm:items-center sm:justify-between`. But between 480–639px, the actions `div` uses `flex-wrap` and buttons stack with `gap-2`. This creates a cramped multi-row layout on phablets where buttons are full-width but unnecessarily narrow. 
+
+Many PageHeader consumers pass 2–3 buttons with `flex-1 sm:flex-none` — at 480px, these become equal-width cramped pills.
+
+**Fix**: Keep `flex-col gap-3` below `sm`, then `sm:flex-row`. Add `w-full sm:w-auto` to the actions container for full-width button stacking on mobile.
+
+---
+
+### 7. PropertySwitcher trigger button too narrow on 320px
+**File**: [PropertySwitcher.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/layout/PropertySwitcher.tsx#L122)
+
+The trigger uses `max-w-[130px] xs:max-w-[180px]` — but `xs` is not a default Tailwind breakpoint. It does nothing. At 320px, the button is capped at 130px and text is truncated to near-illegibility ("All P...").
+
+**Fix**: Remove the non-existent `xs:` modifier. Use `max-w-[160px] sm:max-w-[240px] md:max-w-[280px]`.
+
+---
+
+### 8. Charts don't resize properly on mobile in DashboardPage
+**File**: [DashboardPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/dashboard/DashboardPage.tsx)
+
+`ResponsiveContainer` from Recharts requires a parent with explicit width. The dashboard cards use `Card` → `CardContent` → `ResponsiveContainer`. At 320px, the chart overflows its card because no `min-h-0` or `overflow-hidden` is set on the parent.
+
+**Fix**: Add `overflow-hidden` to all chart-containing `CardContent` elements and set `min-h-0` on flex parents.
+
+---
+
+### 9. DataTable search bar uses `shrink-0` at full width on mobile — blocks filter visibility
+**File**: [DataTable.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/common/DataTable.tsx#L562)
+
+Search bar: `w-full sm:w-64 md:w-72 lg:w-80 shrink-0`. At mobile (`w-full`), it takes the entire row. Filters are pushed below. With `flex-wrap`, this stacks correctly, but the Export/Columns buttons are also `shrink-0` and appear on a third row. At 320px, the toolbar takes ~160px of vertical space before any data is visible.
+
+**Fix**: On mobile, collapse the search into a single expandable icon. Or reduce toolbar density by hiding Export/Columns behind a single "⋯" overflow menu on mobile.
+
+---
+
+### 10. Multiple pages have custom inline tables NOT using DataTable — no mobile card view
+**Files**: 
+- [SubscribersPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/super-admin/SubscribersPage.tsx) (164KB — the largest file)
+- [UserJourneyTrackingPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/super-admin/UserJourneyTrackingPage.tsx)
+- [SuperAdminLeadsPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/super-admin/SuperAdminLeadsPage.tsx)
+- [SuperAdminEscalationsPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/super-admin/SuperAdminEscalationsPage.tsx)
+- [SaaSInvoicesPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/super-admin/SaaSInvoicesPage.tsx)
+- [BackendLogsPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/super-admin/BackendLogsPage.tsx)
+- [SecuritySessionsPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/super-admin/SecuritySessionsPage.tsx)
+- [UtilitiesPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/utilities/UtilitiesPage.tsx)
+- [BillingPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/billing/BillingPage.tsx)
+
+These pages use raw `<Table>` with `overflow-x-auto` for horizontal scrolling. On mobile (320–480px), users must horizontally scroll wide tables — poor touch experience. The `DataTable` component already handles this with mobile card views, but these pages don't use it.
+
+**Fix**: Either refactor to use `DataTable` or add a `md:hidden` stacked card layout for each.
+
+---
+
+### 11. SettingsPage (72KB) — tabs overflow horizontally on mobile
+**File**: [SettingsPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/settings/SettingsPage.tsx)
+
+The `TabsList` likely has 6+ tabs. On 320–480px, tabs overflow horizontally. Standard `TabsList` has no `overflow-x-auto` or scrollable behavior — tabs get clipped or cause horizontal page scroll.
+
+**Fix**: Add `overflow-x-auto scrollbar-none` to `TabsList` with `flex-nowrap`, or use a select/dropdown tab switcher on mobile.
+
+---
+
+### 12. CheckInsPage form dialog — too many fields for mobile viewport
+**File**: [CheckInsPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/check-in/CheckInsPage.tsx)
+
+The check-in form has ~12+ fields (tenant, property, room, bed, dates, rent, deposit, ID verification, status). On 320px with `max-h-[calc(100vh-3.5rem)]` and the form header/footer, the scrollable area is very small (~300px). Users with keyboard open (mobile) see only 1-2 fields.
+
+**Fix**: Group form fields into collapsible sections or a multi-step wizard for mobile.
+
+---
+
+## P2 — Moderate Issues
+
+### 13. Inconsistent button height tokens across the codebase
+**Files**: Multiple
+
+The `button.tsx` base component defines:
+- `default`: `h-9`
+- `sm`: `h-8`
+- `lg`: `h-10`
+
+But pages override with inline classes: `h-9.5`, `h-10`, `h-8.5`, `h-7`. The value `h-9.5` and `h-8.5` are **not valid default Tailwind** classes — they require custom spacing config. If `9.5` and `8.5` are configured in `tailwind.config`, this works, but creates design token fragmentation.
+
+**Fix**: Standardize to `h-8`, `h-9`, `h-10` only. Add `h-9.5` to design tokens if intentionally used as a half-step.
+
+---
+
+### 14. FormDialog footer buttons are too small
+**File**: [FormDialog.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/common/FormDialog.tsx#L62-L78)
+
+Cancel and Submit buttons use `h-9 px-4 text-xs` — functionally correct but visually small compared to the redesigned VisitorsPage buttons (`h-10 px-5 text-sm font-bold`). Since FormDialog is used across ~20 pages, this inconsistency is highly visible.
+
+**Fix**: Upgrade to `h-10 px-5 text-xs sm:text-sm font-semibold`.
+
+---
+
+### 15. NotificationBell dropdown panel — not mobile-optimized
+**File**: [NotificationBell.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/layout/NotificationBell.tsx)
+
+The notification dropdown opens as a `DropdownMenuContent` from the topbar. On 320px, this panel may clip to the right edge. Radix `collisionPadding` helps but the content width may exceed viewport.
+
+**Fix**: Use `w-[calc(100vw-2rem)]` with `max-w-sm` on the dropdown content, similar to PropertySwitcher.
+
+---
+
+### 16. EmptyState component uses hard-coded `py-16` — wastes mobile space
+**File**: [EmptyState.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/common/EmptyState.tsx#L12)
+
+`py-16` (128px total) is fine on desktop but on mobile, this empty state takes 60% of the visible viewport before the user sees the CTA.
+
+**Fix**: `py-8 sm:py-16`.
+
+---
+
+### 17. Main content container max-width not using full 1920px screens
+**File**: [AppLayout.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/layout/AppLayout.tsx#L506)
+
+`max-w-[1600px]` — at 1920px with a 256px sidebar, the content area has 1664px available but is capped at 1600px, leaving ~64px unused margin. This is a design choice, not a bug, but means ~3.3% of ultrawide screens is wasted.
+
+**Decision needed**: Is 1600px intentional or should it expand to 1800px?
+
+---
+
+### 18. Inconsistent modal border/shadow patterns
+**Across all files**
+
+Three border patterns found in DialogContent:
+1. `border-border/80` — semi-transparent theme border
+2. `border border-slate-200/80 dark:border-slate-800` — explicit solid border
+3. `border-slate-200 dark:border-slate-800` (no opacity)
+
+These look nearly identical in light mode but differ subtly in dark mode.
+
+**Fix**: Standardize to `border border-slate-200 dark:border-slate-800`.
+
+---
+
+### 19. Print stylesheet hides all content except QR poster
+**File**: [index.css](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/index.css#L159-L161)
+
+```css
+body * { visibility: hidden !important; }
+```
+This makes ALL print output invisible unless the QR poster is present. If a user tries to print a billing page or report, they get a blank page.
+
+**Fix**: Scope the `visibility: hidden` rule inside a `.print-qr-only` class applied dynamically only when printing the QR poster, not globally.
+
+---
+
+## P3 — Visual / Polish Improvements
+
+### 20. `void Separator;` and `void Trash2;` dead code
+**Files**: [AppLayout.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/layout/AppLayout.tsx#L549), [DataTable.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/common/DataTable.tsx#L1024)
+
+`void Separator;` at the end of files — likely used to suppress "unused import" warnings. This is a code smell.
+
+**Fix**: Remove unused imports instead of voiding them.
+
+---
+
+### 21. Duplicate `CommandPalette.tsx` files
+**Files**: 
+- [components/common/CommandPalette.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/common/CommandPalette.tsx) (9KB)
+- [components/layout/CommandPalette.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/components/layout/CommandPalette.tsx) (10KB)
+
+Two command palette implementations. AppLayout imports from `./CommandPalette` (layout version). The common version may be stale/unused.
+
+**Fix**: Verify which is used, delete the duplicate.
+
+---
+
+### 22. Select dropdown content uses inconsistent backdrop blur
+Multiple files use different patterns:
+- `bg-popover/95 backdrop-blur-xl` (DataTable)
+- `rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900` (VisitorsPage)
+- `bg-popover/98` (PropertySwitcher)
+
+**Fix**: Standardize to `bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700` for consistency with the user's white-form directive.
+
+---
+
+### 23. `h-5.5`, `w-5.5`, `h-4.5`, `w-4.5`, `h-9.5` — non-standard Tailwind sizes
+**Multiple files**
+
+These half-step sizes require explicit Tailwind config. They work if configured but are unusual and may confuse contributors.
+
+**Fix**: Audit `tailwind.config` to confirm these are defined. If not, replace with standard sizes.
+
+---
+
+### 24. Touch target sizes on some icon-only buttons
+**Files**: Various RowActions, sort buttons in DataTable headers
+
+Several interactive elements have `h-8 w-8` touch targets (32px). Apple HIG and WCAG recommend minimum 44px × 44px for touch targets.
+
+**Fix**: Ensure all touch-interactive elements have at least `min-h-[44px] min-w-[44px]` or adequate padding to meet the 44px guideline on mobile.
+
+---
+
+### 25. SubscribersPage.tsx is 164KB — needs decomposition
+**File**: [SubscribersPage.tsx](file:///c:/Users/gandh/OneDrive/Desktop/StayEaze/stayeaze-web/src/features/super-admin/SubscribersPage.tsx)
+
+At 164KB (estimated 3000+ lines), this is the largest single component file. It likely contains multiple modals, inline tables, stat cards, and complex logic all in one file. This impacts:
+- IDE performance
+- Code review difficulty
+- Bundle splitting efficiency
+- Maintainability
+
+**Fix**: Extract modals, table sections, and stats into sub-components.
+
+---
+
+## Responsive Behavior Summary by Breakpoint
+
+| Breakpoint | Key Issues |
+|---|---|
+| **320px** | PropertySwitcher text clipped, toolbar 3-row stacking, charts overflow, tab overflow, excessive bottom padding |
+| **375px** | Same as 320px but slightly less severe |
+| **390–430px** | Phablet range — PageHeader buttons wrap awkwardly, 2-col stat grids are cramped |
+| **480px** | Transition zone — not quite `sm` (640px), so many elements still use mobile layout but have more space than needed |
+| **768px** | `md` breakpoint — MobileBottomNav hides, tables switch to desktop view. Clean transition. |
+| **1024px** | `lg` breakpoint — sidebar shows. Desktop layout kicks in. Generally good. |
+| **1280–1440px** | Sweet spot — all layouts work well |
+| **1920px** | `max-w-[1600px]` caps content, leaving margins. Acceptable. |
+
+---
+
+## Recommended Execution Order
+
+1. **P0 items 1–4** — Fix broken utilities, icon sizes, modal backgrounds (immediate)
+2. **P1 items 5–7** — Mobile bottom nav padding, PageHeader actions, PropertySwitcher width
+3. **P1 items 8–9** — Chart overflow, DataTable toolbar density
+4. **P1 items 10–12** — Custom table mobile views, Settings tabs, CheckIn form
+5. **P2 items 13–19** — Button tokens, FormDialog sizes, notifications, empty states, print CSS
+6. **P3 items 20–25** — Dead code, duplicates, polish
+
+> [!IMPORTANT]
+> Items 1, 2, 4 are quick wins that can be done in one pass. Item 10 (custom tables → mobile views) is the largest effort and may need to be done incrementally per page.
+
+## Open Questions
+
+1. **Max content width**: Should `max-w-[1600px]` be increased to `1800px` for ultrawide monitors?
+2. **Tab overflow strategy**: Should we use a horizontal scroll on mobile tabs or a select dropdown?
+3. **DataTable mobile toolbar**: Should search expand from an icon, or stay full-width with filters hidden behind a "Filters" button?
+4. **SubscribersPage decomposition**: Should this be a priority or deferred?

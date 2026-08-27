@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -54,19 +55,12 @@ public class ComplaintController {
     @Autowired
     private com.stayeaze.backend.services.WebSocketNotificationService webSocketNotificationService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        if (principal instanceof UserDetailsImpl) {
-            UserDetailsImpl userDetails = (UserDetailsImpl) principal;
-            return organizationRepository.findById(userDetails.getOrgId())
-                    .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
-        }
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userRepository.findByEmail(username).orElseGet(() ->
-                userRepository.findByMobile(username).orElse(null));
-        if (user != null && user.getOrganization() != null) {
-            return user.getOrganization();
-        }
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
         return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
@@ -213,7 +207,7 @@ public class ComplaintController {
 
     @GetMapping("/complaints")
     @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('STAFF') or hasRole('TENANT')")
-    public ResponseEntity<?> getFlatComplaints() {
+    public ResponseEntity<?> getFlatComplaints(@RequestParam(required = false) UUID propertyId) {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         UserDetailsImpl userDetails = (principal instanceof UserDetailsImpl) ? (UserDetailsImpl) principal : null;
 
@@ -234,25 +228,32 @@ public class ComplaintController {
 
         Organization organization = getLoggedUserOrg();
         List<Complaint> complaints = complaintRepository.findByOrganizationIdNative(organization.getId());
-        if (userDetails != null) {
-            User user = userRepository.findById(userDetails.getId()).orElse(null);
-            if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
-                List<UUID> assignedProps = user.getPropertyIds();
-                List<Complaint> filtered = complaints.stream()
-                        .filter(c -> {
-                            try {
-                                return c.getTenant() != null && c.getTenant().getPropertyId() != null
-                                        && assignedProps.contains(c.getTenant().getPropertyId());
-                            } catch (Exception ignored) {
-                                return true;
-                            }
-                        })
-                        .collect(java.util.stream.Collectors.toList());
-                if (!filtered.isEmpty()) {
-                    complaints = filtered;
-                }
-            }
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            complaints = complaints.stream()
+                    .filter(c -> {
+                        try {
+                            return c.getTenant() != null && c.getTenant().getPropertyId() != null
+                                    && assignedProps.contains(c.getTenant().getPropertyId());
+                        } catch (Exception ignored) {
+                            return false;
+                        }
+                    })
+                    .collect(java.util.stream.Collectors.toList());
         }
+
+        if (propertyId != null) {
+            complaints = complaints.stream()
+                    .filter(c -> {
+                        try {
+                            return c.getTenant() != null && propertyId.equals(c.getTenant().getPropertyId());
+                        } catch (Exception ignored) {
+                            return false;
+                        }
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
         List<ComplaintDTO> dtos = complaints.stream()
                 .map(com.stayeaze.backend.payload.response.ComplaintDTO::fromEntity)
                 .collect(java.util.stream.Collectors.toList());

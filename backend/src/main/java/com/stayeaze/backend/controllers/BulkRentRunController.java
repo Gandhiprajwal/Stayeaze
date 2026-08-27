@@ -41,20 +41,13 @@ public class BulkRentRunController {
     @Autowired
     private SubscriptionEnforcementService enforcementService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth == null || !auth.isAuthenticated()) return null;
-            if (auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
-                if (userDetails.getOrgId() != null) {
-                    return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
-                }
-                return userRepository.findById(userDetails.getId()).map(User::getOrganization).orElse(null);
-            }
-            return userRepository.findByEmail(auth.getName()).map(User::getOrganization).orElse(null);
-        } catch (Exception e) {
-            return null;
-        }
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst().orElse(null);
     }
 
     @PostMapping
@@ -109,10 +102,18 @@ public class BulkRentRunController {
                 .collect(Collectors.toList());
 
         if (targetPropertyId != null) {
+            securityUtils.validatePropertyAccess(targetPropertyId);
             final UUID pId = targetPropertyId;
             activeTenants = activeTenants.stream()
                     .filter(t -> pId.equals(t.getPropertyId()))
                     .collect(Collectors.toList());
+        } else {
+            Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+            if (assignedProps != null) {
+                activeTenants = activeTenants.stream()
+                        .filter(t -> t.getPropertyId() != null && assignedProps.contains(t.getPropertyId()))
+                        .collect(Collectors.toList());
+            }
         }
 
         List<Invoice> newInvoices = new ArrayList<>();

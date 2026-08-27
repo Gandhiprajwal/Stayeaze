@@ -3,8 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft, Hotel, Building2, Users, BedDouble, Wallet, MapPin,
-  Phone, Mail, Pencil, Calendar, TrendingUp, Layers, DoorOpen,
-  ChevronDown, ChevronRight, BedSingle, CreditCard, ShieldCheck,
+  Phone, Mail, Pencil, Trash2, Calendar, TrendingUp, Layers, DoorOpen,
+  ChevronDown, ChevronRight, BedSingle, CreditCard, ShieldCheck, RotateCcw,
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/common/PageHeader';
@@ -20,14 +20,16 @@ import { cn } from '@/lib/utils';
 import api from '@/lib/api';
 import type { Property, Building, Tenant, Floor, Room, Bed } from '@/lib/types';
 import { FormDialog } from '@/components/common/FormDialog';
+import { PropertyDeleteModal } from './PropertyDeleteModal';
 import { FormInput } from '@/components/common/FormField';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { formatCurrency, formatDate, initials, occupancyRate } from '@/lib/format';
-import { useUpdate, useForm } from '@/lib/hooks/use-crud';
+import { useUpdate, useDelete, useForm } from '@/lib/hooks/use-crud';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { toast } from 'sonner';
 
 const propertyTypes = [
   { value: 'PG', label: 'Paying Guest' },
@@ -48,18 +50,36 @@ export default function PropertyDetailPage() {
   const [expandedBuilding, setExpandedBuilding] = useState<string | null>(null);
   const [expandedFloor, setExpandedFloor] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const updateMut = useUpdate<Property>('/properties', 'Property');
+  const deleteMut = useDelete('/properties', 'Property');
+  const canManage = isSuperAdmin || (user?.role as string) === 'OWNER' || (user?.role as string) === 'ADMIN' || (user?.role as string) === 'PROPERTY_MANAGER';
   const form = useForm({
     name: '', code: '', type: 'PG' as Property['type'], address: '', city: '', state: '', pincode: '',
     manager: '', phone: '', email: '', status: 'active' as Property['status'],
     razorpayKeyId: '', razorpayKeySecret: ''
   });
 
-  const { data: property, isLoading } = useQuery({
+  const { data: property, isLoading, refetch: refetchProperty } = useQuery({
     queryKey: ['/properties', id],
     queryFn: () => api.get<Property>(`/properties/${id}`).then((r) => r.data),
     enabled: !!id,
   });
+
+  async function handleRestore() {
+    if (!property) return;
+    try {
+      setRestoring(true);
+      await api.put(`/properties/${property.id}/restore`);
+      toast.success(`Property "${property.name}" and all spaces have been restored to Active!`);
+      refetchProperty();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to restore property');
+    } finally {
+      setRestoring(false);
+    }
+  }
   const { data: buildings } = useQuery({
     queryKey: ['/buildings', id],
     queryFn: () => api.get<any>('/buildings', { params: { pageSize: 100 } }).then((r) => {
@@ -219,7 +239,47 @@ export default function PropertyDetailPage() {
         title={property.name}
         description={`${property.code || 'PROP'} · ${(property.type || 'CO_LIVING').replace('_', '-')} · ${property.city || ''}, ${property.state || ''}`}
         icon={Hotel}
-        actions={<Button variant="outline" onClick={openEdit}><Pencil className="mr-1.5 h-4 w-4" /> Edit Property</Button>}
+        actions={
+          canManage ? (
+            <div className="flex items-center gap-2">
+              {property.status?.toLowerCase() === 'archived' ? (
+                <>
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 px-3 py-1 font-semibold uppercase text-xs">
+                    Archived Property
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    onClick={handleRestore}
+                    disabled={restoring}
+                    className="gap-1.5 font-semibold text-xs border-success/30 text-success hover:bg-success/5"
+                  >
+                    <RotateCcw className="h-4 w-4" /> {restoring ? 'Restoring...' : 'Restore Property'}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setDeleteOpen(true)}
+                    className="gap-1.5 font-bold text-xs"
+                  >
+                    <Trash2 className="h-4 w-4" /> Purge Permanently
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" onClick={openEdit}>
+                    <Pencil className="mr-1.5 h-4 w-4" /> Edit Property
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setDeleteOpen(true)}
+                    className="bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground border border-destructive/20 font-medium"
+                  >
+                    <Trash2 className="mr-1.5 h-4 w-4" /> Delete / Archive
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : undefined
+        }
       />
 
       {/* KPIs */}
@@ -521,11 +581,23 @@ export default function PropertyDetailPage() {
           )}
         </div>
       </FormDialog>
+
+      <PropertyDeleteModal
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        property={property}
+        fallbackActiveTenants={activeTenants.length > 0 ? activeTenants.length : (property.occupiedBeds ?? 0)}
+        fallbackBuildings={buildings?.length ?? property.totalBuildings ?? 0}
+        fallbackRooms={rooms?.length ?? property.totalRooms ?? 0}
+        fallbackBeds={beds?.length ?? property.totalBeds ?? 0}
+        onSuccess={() => navigate('/properties')}
+      />
     </div>
   );
 }
 
 function InfoRow({ icon: Icon, label, value, allowWrap }: { icon: React.ComponentType<{ className?: string }>; label: string; value?: string; allowWrap?: boolean }) {
+  const isEmailOrId = label.toLowerCase().includes('email') || label.toLowerCase().includes('id') || label.toLowerCase().includes('phone');
   return (
     <div className="flex items-start gap-3">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground mt-0.5">
@@ -533,7 +605,7 @@ function InfoRow({ icon: Icon, label, value, allowWrap }: { icon: React.Componen
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={cn("text-sm font-medium", allowWrap ? "break-words whitespace-normal" : "truncate capitalize")}>
+        <p className={cn("text-sm font-medium", allowWrap ? "break-words whitespace-normal" : "truncate", isEmailOrId ? "normal-case" : "capitalize")}>
           {value || '—'}
         </p>
       </div>

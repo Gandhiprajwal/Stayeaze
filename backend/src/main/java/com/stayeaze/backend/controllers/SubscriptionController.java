@@ -30,6 +30,9 @@ public class SubscriptionController {
     private PropertyRepository propertyRepository;
 
     @Autowired
+    private BedRepository bedRepository;
+
+    @Autowired
     private SaaSPlanRepository saasPlanRepository;
 
     @Autowired
@@ -184,8 +187,18 @@ public class SubscriptionController {
         OrganizationBillingProfile profile = getOrCreateProfile(org);
 
         List<Property> properties = propertyRepository.findByOrganization(org);
-        int totalBeds = properties.stream().mapToInt(Property::getTotalBeds).sum();
-        int occupiedBeds = properties.stream().mapToInt(Property::getOccupiedBeds).sum();
+        List<Bed> allBeds = bedRepository.findByOrganizationId(org.getId());
+        
+        int totalBeds = 0;
+        int occupiedBeds = 0;
+        if (!allBeds.isEmpty()) {
+            totalBeds = allBeds.size();
+            occupiedBeds = (int) allBeds.stream().filter(b -> b.getStatus() != null && 
+                    ("OCCUPIED".equalsIgnoreCase(b.getStatus()) || "BOOKED".equalsIgnoreCase(b.getStatus()))).count();
+        } else {
+            totalBeds = properties.stream().mapToInt(Property::getTotalBeds).sum();
+            occupiedBeds = properties.stream().mapToInt(Property::getOccupiedBeds).sum();
+        }
 
         String planName = profile.getSubscriptionPlanName() != null ? profile.getSubscriptionPlanName() : "Starter PG Plan";
         BigDecimal planPrice = profile.getSubscriptionPlanPrice() != null ? profile.getSubscriptionPlanPrice() : new BigDecimal("1499");
@@ -194,12 +207,22 @@ public class SubscriptionController {
 
         int maxProperties = 1;
         int maxBeds = 30;
-        if (planName.toLowerCase().contains("pro")) {
-            maxProperties = 5;
-            maxBeds = 150;
-        } else if (planName.toLowerCase().contains("enterprise") || planName.toLowerCase().contains("custom")) {
-            maxProperties = 50;
-            maxBeds = 2000;
+        Optional<SaaSPlan> activePlanOpt = saasPlanRepository.findByNameIgnoreCase(planName);
+        if (activePlanOpt.isEmpty()) {
+            String pKey = planName.toLowerCase().contains("enterprise") ? "ENTERPRISE" : planName.toLowerCase().contains("pro") ? "PROFESSIONAL" : "STARTER";
+            activePlanOpt = saasPlanRepository.findByPlanKey(pKey);
+        }
+        if (activePlanOpt.isPresent()) {
+            maxProperties = activePlanOpt.get().getMaxProperties() != null ? activePlanOpt.get().getMaxProperties() : 1;
+            maxBeds = activePlanOpt.get().getMaxBeds() != null ? activePlanOpt.get().getMaxBeds() : 30;
+        } else {
+            if (planName.toLowerCase().contains("pro")) {
+                maxProperties = 3;
+                maxBeds = 100;
+            } else if (planName.toLowerCase().contains("enterprise") || planName.toLowerCase().contains("custom")) {
+                maxProperties = 10;
+                maxBeds = 500;
+            }
         }
 
         long totalCycleDays = "ANNUAL".equalsIgnoreCase(billingCycle) ? 365 : 30;
@@ -219,6 +242,11 @@ public class SubscriptionController {
         res.put("endDate", endDate);
         res.put("daysRemaining", daysRemaining);
         res.put("lastDowngradedAt", profile.getLastDowngradedAt());
+        res.put("totalBeds", totalBeds);
+        res.put("occupiedBeds", occupiedBeds);
+        res.put("maxBeds", maxBeds);
+        res.put("propertyCount", properties.size());
+        res.put("maxProperties", maxProperties);
 
         boolean downgradeCooldownActive = profile.getLastDowngradedAt() != null 
                 && profile.getLastDowngradedAt().plusDays(90).isAfter(OffsetDateTime.now());
@@ -231,6 +259,7 @@ public class SubscriptionController {
         usage.put("currentProperties", properties.size());
         usage.put("maxProperties", maxProperties);
         usage.put("currentBeds", totalBeds);
+        usage.put("totalBeds", totalBeds);
         usage.put("maxBeds", maxBeds);
         usage.put("occupiedBeds", occupiedBeds);
         res.put("usage", usage);
@@ -245,7 +274,7 @@ public class SubscriptionController {
             @RequestParam(required = false, defaultValue = "MONTHLY") String billingCycle) {
         Organization org = getLoggedUserOrg();
         OrganizationBillingProfile profile = getOrCreateProfile(org);
-
+        
         boolean isDowngrade = isDowngradeTransition(profile.getSubscriptionPlanName(), profile.getSubscriptionBillingCycle(), targetPlanName, billingCycle);
 
         Map<String, Object> res = new HashMap<>();
@@ -602,8 +631,17 @@ public class SubscriptionController {
         profile.setSubscriptionStartDate(OffsetDateTime.now());
         profile.setSubscriptionEndDate(p.newEndDate);
 
-        if (planName.toLowerCase().contains("enterprise") || planName.toLowerCase().contains("custom")) {
+        boolean isEnterprisePlan = planName.toLowerCase().contains("enterprise") || planName.toLowerCase().contains("custom");
+        Optional<SaaSPlan> newPlanOpt = saasPlanRepository.findByNameIgnoreCase(planName);
+        if (newPlanOpt.isPresent() && Boolean.TRUE.equals(newPlanOpt.get().getAllowCustomBranding())) {
+            isEnterprisePlan = true;
+        }
+
+        if (isEnterprisePlan) {
             profile.setCustomBrandingEnabled(true);
+        } else {
+            profile.setCustomBrandingEnabled(false);
+            profile.setHideStayEazeBranding(false);
         }
 
         if (razorpayPaymentId != null && !razorpayPaymentId.isBlank()) {

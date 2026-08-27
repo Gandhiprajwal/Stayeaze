@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -52,10 +53,16 @@ public class BookingController {
     @Autowired
     private com.stayeaze.backend.services.EmailService emailService;
 
+    @Autowired
+    private com.stayeaze.backend.services.AccountUniquenessService accountUniquenessService;
+
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
@@ -249,6 +256,20 @@ public class BookingController {
     public ResponseEntity<?> createFlatBooking(@RequestBody BookingRequest request) {
         try {
             Organization organization = getLoggedUserOrg();
+
+            if (request.getTenantEmail() != null || request.getTenantPhone() != null) {
+                try {
+                    accountUniquenessService.validateTenantEmailAndMobile(
+                        organization,
+                        request.getTenantEmail(),
+                        request.getTenantPhone(),
+                        null,
+                        null
+                    );
+                } catch (IllegalArgumentException ex) {
+                    return ResponseEntity.badRequest().body(new MessageResponse(ex.getMessage()));
+                }
+            }
 
             // Find or create tenant stub safely
             Tenant tenant = null;
@@ -501,10 +522,32 @@ public class BookingController {
     @Transactional(readOnly = true)
     public ResponseEntity<?> getFlatBookings(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) UUID propertyId) {
         Organization organization = getLoggedUserOrg();
         List<Booking> bookings = bookingRepository.findByOrganizationIdNative(organization.getId());
         List<Map<String, Object>> mapped = bookings.stream().map(this::formatBooking).collect(java.util.stream.Collectors.toList());
+
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            mapped = mapped.stream().filter(m -> {
+                Object pId = m.get("propertyId");
+                if (pId == null) return false;
+                try {
+                    return assignedProps.contains(UUID.fromString(pId.toString()));
+                } catch (Exception e) {
+                    return false;
+                }
+            }).collect(java.util.stream.Collectors.toList());
+        }
+
+        if (propertyId != null) {
+            mapped = mapped.stream().filter(m -> {
+                Object pId = m.get("propertyId");
+                return pId != null && propertyId.toString().equalsIgnoreCase(pId.toString());
+            }).collect(java.util.stream.Collectors.toList());
+        }
+
         return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(mapped, page, pageSize));
     }
 
@@ -514,6 +557,9 @@ public class BookingController {
         Booking booking = bookingRepository.findById(id).orElse(null);
         if (booking == null || !booking.getTenant().getOrganization().getId().equals(organization.getId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Booking not found."));
+        }
+        if (booking.getPropertyId() != null) {
+            securityUtils.validatePropertyAccess(booking.getPropertyId());
         }
         return ResponseEntity.ok(formatBooking(booking));
     }

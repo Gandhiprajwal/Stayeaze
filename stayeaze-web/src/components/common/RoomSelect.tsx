@@ -195,23 +195,23 @@ export function RoomSelect({
               aria-expanded={open}
               disabled={disabled}
               className={cn(
-                'w-full justify-between h-10 px-3.5 text-left font-normal border border-input/80 dark:border-slate-800 bg-background/90 dark:bg-slate-900/90 hover:bg-muted/40 transition-all rounded-xl shadow-2xs focus:ring-2 focus:ring-primary/20 focus:border-primary',
+                'w-full justify-between h-auto min-h-[42px] py-1.5 px-3 text-left font-normal border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all rounded-lg shadow-2xs focus:ring-2 focus:ring-primary/20 focus:border-primary',
                 !selectedRoom && 'text-muted-foreground'
               )}
             >
               <div className="flex items-center gap-2.5 truncate flex-1 min-w-0 pr-2">
-                <div className="h-6 w-6 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                  <Home className="h-3.5 w-3.5" />
+                <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Home className="h-4 w-4" />
                 </div>
                 {selectedRoom ? (
-                  <div className="truncate flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex flex-col min-w-0 flex-1 text-left justify-center py-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap leading-tight">
                       {(selectedBuilding || selectedFloor) && (
-                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-muted/60 font-semibold text-muted-foreground">
+                        <span className="text-[10px] py-0.5 px-1.5 rounded-md bg-slate-100 dark:bg-slate-800 font-semibold text-muted-foreground border border-slate-200/60 dark:border-slate-700/60 shrink-0">
                           {selectedBuilding ? `${selectedBuilding}` : ''}
                           {selectedBuilding && selectedFloor ? ' • ' : ''}
                           {selectedFloor ? `${selectedFloor}` : ''}
-                        </Badge>
+                        </span>
                       )}
                       <span className="font-bold text-foreground text-xs">
                         Room {selectedRoom.roomNumber || selectedRoom.number}
@@ -220,8 +220,8 @@ export function RoomSelect({
                         ({selectedRoom.sharingType || selectedRoom.type || 'Shared'})
                       </span>
                     </div>
-                    <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
-                      <span>Rent: <strong className="text-foreground">{formatCurrency(Number(selectedRoom.baseRent || selectedRoom.rent || 0))}</strong>/mo</span>
+                    <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-1 leading-tight">
+                      <span>Rent: <strong className="text-foreground font-semibold">{formatCurrency(Number(selectedRoom.baseRent || selectedRoom.rent || 0))}</strong>/mo</span>
                       {selectedBedNumber && (
                         <>
                           <span>•</span>
@@ -239,8 +239,8 @@ export function RoomSelect({
             </Button>
           </PopoverTrigger>
 
-          <PopoverContent className="w-[360px] sm:w-[420px] p-0 rounded-xl shadow-xl" align="start">
-            <div className="p-3 border-b bg-muted/30 space-y-2">
+          <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-[min(100vw-2rem,320px)] sm:min-w-[420px] max-w-[calc(100vw-2rem)] p-0 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden" align="start">
+            <div className="p-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <input
@@ -360,7 +360,7 @@ export function RoomSelect({
 
       {/* 2. Interactive Bed Strip for Selected Room */}
       {selectedRoom && (
-        <div className="p-3 rounded-xl border bg-card/60 space-y-2 animate-in fade-in duration-150">
+        <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs space-y-2 animate-in fade-in duration-150">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
               <BedIcon className="h-3.5 w-3.5 text-primary" />
@@ -388,7 +388,7 @@ export function RoomSelect({
                       ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/20 shadow-xs'
                       : isOccupied
                       ? 'border-destructive/30 bg-destructive/5 text-muted-foreground opacity-75 cursor-not-allowed'
-                      : 'border-border bg-background hover:border-primary/50 hover:bg-muted/30 text-foreground'
+                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-foreground'
                   )}
                 >
                   <div className="flex items-center justify-between w-full mb-1">

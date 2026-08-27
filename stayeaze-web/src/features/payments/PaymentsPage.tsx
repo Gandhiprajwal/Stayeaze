@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Payment, Property, User, Tenant, InvoiceIssuerSnapshot } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm, useBulkDelete } from '@/lib/hooks/use-crud';
@@ -57,6 +58,7 @@ export default function PaymentsPage() {
   const [viewingReceipt, setViewingReceipt] = useState<Payment | null>(null);
 
   const currentUser = useAuthStore((s) => s.user);
+  const { selectedPropertyId } = usePropertyStore();
 
   const { data: properties } = useQuery({
     queryKey: ['payments-properties-minimal'],
@@ -80,8 +82,11 @@ export default function PaymentsPage() {
   });
 
   const { data: payments } = useQuery({
-    queryKey: ['payments-stats'],
-    queryFn: () => api.get<{ data: Payment[] }>(ENDPOINT, { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['payments-stats', selectedPropertyId],
+    queryFn: () => {
+      const p = selectedPropertyId !== 'ALL' ? { propertyId: selectedPropertyId, pageSize: 500 } : { pageSize: 500 };
+      return api.get<{ data: Payment[] }>(ENDPOINT, { params: p }).then((r) => r.data.data);
+    },
   });
 
   const { data: billingProfile } = useQuery({
@@ -114,6 +119,7 @@ export default function PaymentsPage() {
   function openCreate() {
     form.reset({
       ...emptyForm,
+      propertyId: selectedPropertyId && selectedPropertyId !== 'ALL' ? selectedPropertyId : '',
       collectedBy: currentUser?.name || 'Staff Admin',
       date: new Date().toISOString().slice(0, 10),
     });

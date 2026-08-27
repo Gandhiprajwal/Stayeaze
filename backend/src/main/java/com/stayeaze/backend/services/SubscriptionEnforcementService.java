@@ -156,12 +156,18 @@ public class SubscriptionEnforcementService {
         if (plan == null) return;
 
         List<Property> props = propertyRepository.findByOrganization(organization);
-        int currentBeds = (props != null) ? props.stream().mapToInt(Property::getTotalBeds).sum() : 0;
+        List<Bed> allBeds = bedRepository.findByOrganizationId(organization.getId());
+        int currentBeds = 0;
+        if (!allBeds.isEmpty()) {
+            currentBeds = allBeds.size();
+        } else if (props != null) {
+            currentBeds = props.stream().mapToInt(Property::getTotalBeds).sum();
+        }
         
         if ((currentBeds + additionalBedsCount) > plan.getMaxBeds()) {
             throw new IllegalArgumentException("Subscription Limit Reached: Your current plan (" + plan.getName() 
                 + ") allows up to " + plan.getMaxBeds() + " total beds across your workspace (currently using " + currentBeds 
-                + " beds). Please upgrade your subscription plan to add more beds.");
+                + " beds, attempted to add " + additionalBedsCount + " beds). Please upgrade your subscription plan to add more beds.");
         }
     }
 

@@ -155,6 +155,7 @@ export default function SubscriptionPage() {
       queryClient.invalidateQueries({ queryKey: ['organization-billing-profile'] });
       queryClient.invalidateQueries({ queryKey: ['super-admin-subscribers'] });
       queryClient.invalidateQueries({ queryKey: ['my-subscription-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['portal-branding'] });
       setPreviewModalOpen(false);
       setPaymentInProgress(false);
       setSandboxModalOpen(false);
@@ -431,8 +432,10 @@ export default function SubscriptionPage() {
       ];
 
   // Bed usage calculation for capacity progress bar
-  const totalBeds = subDetails?.totalBeds || 0;
-  const maxBeds = subDetails?.maxBeds || 50;
+  const usage = (subDetails as any)?.usage;
+  const totalBeds = subDetails?.totalBeds ?? usage?.currentBeds ?? usage?.totalBeds ?? 0;
+  const occupiedBeds = subDetails?.occupiedBeds ?? usage?.occupiedBeds ?? 0;
+  const maxBeds = subDetails?.maxBeds ?? usage?.maxBeds ?? (currentPlanName.includes('Enterprise') ? 500 : currentPlanName.includes('Professional') ? 100 : 30);
   const isUnlimitedBeds = maxBeds >= 99999;
   const bedUsagePercent = isUnlimitedBeds ? 15 : Math.min(100, Math.round((totalBeds / maxBeds) * 100));
 
@@ -665,7 +668,7 @@ export default function SubscriptionPage() {
           <div className="space-y-1">
             <Progress value={bedUsagePercent} className="h-1.5 bg-slate-100 dark:bg-slate-800" />
             <p className="text-[11px] text-slate-500 flex justify-between">
-              <span>Occupied: {subDetails?.occupiedBeds || 0} beds</span>
+              <span>Occupied: {occupiedBeds} beds</span>
               <span>{bedUsagePercent}% utilized</span>
             </p>
           </div>

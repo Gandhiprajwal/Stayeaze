@@ -1445,33 +1445,29 @@ export default function SubscribersPage() {
 
           <div className="flex items-center gap-2 flex-wrap overflow-x-auto w-full sm:w-auto scrollbar-none pb-1">
             <Button
-              size="sm"
               variant={approvalStatusFilter === 'PENDING' ? 'default' : 'outline'}
-              className={approvalStatusFilter === 'PENDING' ? 'bg-amber-600 hover:bg-amber-700 text-white text-xs h-8.5 rounded-xl font-bold px-3 shrink-0' : 'text-xs h-8.5 rounded-xl font-medium px-3 shrink-0'}
+              className={approvalStatusFilter === 'PENDING' ? 'bg-amber-600 hover:bg-amber-700 text-white text-xs sm:text-sm h-9.5 rounded-xl font-bold px-3.5 shrink-0 shadow-xs' : 'text-xs sm:text-sm h-9.5 rounded-xl font-semibold px-3.5 shrink-0'}
               onClick={() => setApprovalStatusFilter('PENDING')}
             >
               Pending ({pendingRequests.length})
             </Button>
             <Button
-              size="sm"
               variant={approvalStatusFilter === 'APPROVED' ? 'default' : 'outline'}
-              className={approvalStatusFilter === 'APPROVED' ? 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8.5 rounded-xl font-bold px-3 shrink-0' : 'text-xs h-8.5 rounded-xl font-medium px-3 shrink-0'}
+              className={approvalStatusFilter === 'APPROVED' ? 'bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm h-9.5 rounded-xl font-bold px-3.5 shrink-0 shadow-xs' : 'text-xs sm:text-sm h-9.5 rounded-xl font-semibold px-3.5 shrink-0'}
               onClick={() => setApprovalStatusFilter('APPROVED')}
             >
               Approved
             </Button>
             <Button
-              size="sm"
               variant={approvalStatusFilter === 'REJECTED' ? 'default' : 'outline'}
-              className={approvalStatusFilter === 'REJECTED' ? 'bg-rose-600 hover:bg-rose-700 text-white text-xs h-8.5 rounded-xl font-bold px-3 shrink-0' : 'text-xs h-8.5 rounded-xl font-medium px-3 shrink-0'}
+              className={approvalStatusFilter === 'REJECTED' ? 'bg-rose-600 hover:bg-rose-700 text-white text-xs sm:text-sm h-9.5 rounded-xl font-bold px-3.5 shrink-0 shadow-xs' : 'text-xs sm:text-sm h-9.5 rounded-xl font-semibold px-3.5 shrink-0'}
               onClick={() => setApprovalStatusFilter('REJECTED')}
             >
               Rejected
             </Button>
             <Button
-              size="sm"
               variant={approvalStatusFilter === 'ALL' ? 'default' : 'outline'}
-              className="text-xs h-8.5 rounded-xl font-medium px-3 shrink-0"
+              className="text-xs sm:text-sm h-9.5 rounded-xl font-semibold px-3.5 shrink-0"
               onClick={() => setApprovalStatusFilter('ALL')}
             >
               All Requests

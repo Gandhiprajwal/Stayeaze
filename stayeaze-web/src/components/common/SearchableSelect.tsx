@@ -107,7 +107,7 @@ export function SearchableSelect({
             aria-expanded={open}
             disabled={disabled}
             className={cn(
-              'w-full justify-between h-10 px-3.5 rounded-xl border border-input/80 dark:border-slate-800 bg-background/90 dark:bg-slate-900/90 text-left font-normal shadow-2xs hover:bg-muted/40 transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary',
+              'w-full justify-between h-9.5 px-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-left font-normal shadow-2xs hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors focus:ring-2 focus:ring-primary/20 focus:border-primary',
               !selectedOption && 'text-muted-foreground',
               triggerClassName
             )}
@@ -118,7 +118,7 @@ export function SearchableSelect({
                   {selectedOption.icon && (
                     <selectedOption.icon className="h-4 w-4 shrink-0 text-primary" />
                   )}
-                  <span className="truncate font-medium text-foreground text-sm">
+                  <span className="truncate font-medium text-foreground text-xs sm:text-sm">
                     {selectedOption.label}
                   </span>
                   {selectedOption.badge && (
@@ -133,7 +133,7 @@ export function SearchableSelect({
                   )}
                 </>
               ) : (
-                <span className="text-sm text-muted-foreground">{placeholder}</span>
+                <span className="text-xs sm:text-sm text-muted-foreground">{placeholder}</span>
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0 ml-1">
@@ -160,8 +160,8 @@ export function SearchableSelect({
             </div>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] min-w-[260px] max-w-[min(420px,calc(100vw-2rem))] shadow-xl border-border bg-popover rounded-xl overflow-hidden" align="start">
-          <div className="flex items-center border-b px-3 py-2 bg-muted/30">
+        <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)] min-w-[min(100vw-2rem,280px)] max-w-[calc(100vw-2rem)] shadow-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-xl overflow-hidden" align="start">
+          <div className="flex items-center border-b border-slate-200 dark:border-slate-800 px-3 py-2 bg-white dark:bg-slate-900">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground mr-2" />
             <input
               ref={searchInputRef}

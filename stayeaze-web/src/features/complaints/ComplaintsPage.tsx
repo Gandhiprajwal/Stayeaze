@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { TenantSelect } from '@/components/common/TenantSelect';
 import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { useAuthStore } from '@/lib/stores/auth-store';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import { useWebSocket } from '@/lib/websocket/WebSocketProvider';
 
 const ENDPOINT = '/complaints';
@@ -93,6 +94,7 @@ function formatRoomBadge(rawRoom?: any): string {
 
 export default function ComplaintsPage() {
   const currentUser = useAuthStore((s) => s.user);
+  const { selectedPropertyId } = usePropertyStore();
   const user = currentUser;
   const userRole = (currentUser?.role ?? '').toUpperCase();
   const isTenant = userRole === 'TENANT';
@@ -143,15 +145,17 @@ export default function ComplaintsPage() {
   });
 
   const { data: complaints } = useQuery<Complaint[]>({
-    queryKey: ['complaints-stats'],
-    queryFn: () =>
-      api.get<any>(ENDPOINT, { params: { pageSize: 100 } }).then((r) => {
+    queryKey: ['complaints-stats', selectedPropertyId],
+    queryFn: () => {
+      const p = selectedPropertyId !== 'ALL' ? { propertyId: selectedPropertyId, pageSize: 100 } : { pageSize: 100 };
+      return api.get<any>(ENDPOINT, { params: p }).then((r) => {
         const raw = r.data;
         if (Array.isArray(raw)) return raw;
         if (Array.isArray(raw?.data)) return raw.data;
         if (Array.isArray(raw?.content)) return raw.content;
         return [];
-      }),
+      });
+    },
   });
   const safeComplaints: Complaint[] = Array.isArray(complaints) ? complaints : [];
   const open = safeComplaints.filter((c) => c.status === 'open').length;

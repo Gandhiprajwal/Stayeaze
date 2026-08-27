@@ -28,6 +28,7 @@ import {
 import { cn } from '@/lib/utils';
 import { exportToCSV } from '@/lib/format';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Paginated, QueryParams } from '@/lib/types';
 
 export interface Column<T> {
@@ -259,6 +260,7 @@ export function DataTable<T extends { id: string }>({
     };
   };
 
+  const { selectedPropertyId, setSelectedPropertyId } = usePropertyStore();
   const [params, setParams] = useState<QueryParams>(getInitialParams);
   const [visibleCols, setVisibleCols] = useState<Set<string>>(
     new Set(columns.map((c) => c.key))
@@ -296,8 +298,13 @@ export function DataTable<T extends { id: string }>({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rawPayload, isLoading, isError, error } = useQuery<any, Error>({
-    queryKey: [endpoint, params],
+    queryKey: [endpoint, params, selectedPropertyId],
     queryFn: async () => {
+      const activeFilterParams = { ...params.filters };
+      if (selectedPropertyId && selectedPropertyId !== 'ALL' && !activeFilterParams.propertyId) {
+        activeFilterParams.propertyId = selectedPropertyId;
+      }
+
       const res = await api.get(endpoint, {
         params: {
           page: params.page,
@@ -305,7 +312,7 @@ export function DataTable<T extends { id: string }>({
           search: params.search || undefined,
           sortBy: params.sortBy,
           sortOrder: params.sortOrder,
-          ...params.filters,
+          ...activeFilterParams,
         },
       });
       return res.data;
@@ -343,6 +350,18 @@ export function DataTable<T extends { id: string }>({
   // Memoize client-side filtering and sorting for fallback non-server-paginated endpoints
   const filteredItems = useMemo(() => {
     let result = [...rawItems];
+
+    // 0. Active Property Scoping (Client-side fallback)
+    if (selectedPropertyId && selectedPropertyId !== 'ALL') {
+      result = result.filter((item) => {
+        const rec = item as Record<string, unknown>;
+        const pId = rec.propertyId ?? (typeof rec.property === 'object' && rec.property !== null ? (rec.property as any).id : null);
+        if (pId !== undefined && pId !== null) {
+          return String(pId) === selectedPropertyId;
+        }
+        return true;
+      });
+    }
 
     // 1. Dropdown Filters
     if (params.filters && Object.keys(params.filters).length > 0) {
@@ -459,6 +478,9 @@ export function DataTable<T extends { id: string }>({
   }
 
   function setFilter(key: string, value: string) {
+    if (key === 'propertyId') {
+      setSelectedPropertyId(value === 'all' ? 'ALL' : value);
+    }
     setParams((p) => ({ ...p, filters: { ...p.filters, [key]: value }, page: 1 }));
   }
 
@@ -543,7 +565,7 @@ export function DataTable<T extends { id: string }>({
               placeholder={searchPlaceholder}
               value={params.search ?? ''}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 pr-8 h-10 rounded-xl bg-card/90 border-border/80 text-xs sm:text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="pl-10 pr-8 h-9 rounded-lg bg-card/90 border-border/80 text-xs sm:text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-primary/40"
             />
             {params.search && (
               <button
@@ -559,24 +581,29 @@ export function DataTable<T extends { id: string }>({
           {/* Filter Dropdowns - Generous Width & Spacing */}
           {(filters.length > 0 || dateRangeFilter) && (
             <div className="flex items-center gap-2 flex-wrap flex-1 sm:flex-none">
-              {filters.map((f) => (
-                <Select key={f.key} value={params.filters?.[f.key] ?? 'all'} onValueChange={(v) => setFilter(f.key, v)}>
-                  <SelectTrigger className="h-10 rounded-xl border-border/80 bg-card/90 text-xs sm:text-sm font-medium w-full sm:w-auto min-w-[130px] sm:min-w-[145px] shadow-xs px-3">
-                    <SelectValue placeholder={f.label} />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-2xl border-border/80 bg-popover/95 backdrop-blur-xl shadow-xl text-xs sm:text-sm p-1">
-                    <SelectItem value="all" className="rounded-lg">{f.label}: All</SelectItem>
-                    {f.options.map((o) => (
-                      <SelectItem key={o.value} value={o.value} className="rounded-lg">{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ))}
+              {filters.map((f) => {
+                const activeVal = f.key === 'propertyId'
+                  ? (selectedPropertyId !== 'ALL' ? selectedPropertyId : (params.filters?.[f.key] ?? 'all'))
+                  : (params.filters?.[f.key] ?? 'all');
+                return (
+                  <Select key={f.key} value={activeVal} onValueChange={(v) => setFilter(f.key, v)}>
+                    <SelectTrigger className="h-9 rounded-lg border-border/80 bg-card/90 text-xs sm:text-sm font-medium w-full sm:w-auto min-w-[130px] sm:min-w-[145px] shadow-2xs px-3">
+                      <SelectValue placeholder={f.label} />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-border/80 bg-popover/95 backdrop-blur-xl shadow-xl text-xs sm:text-sm p-1">
+                      <SelectItem value="all" className="rounded-lg">{f.label}: All</SelectItem>
+                      {f.options.map((o) => (
+                        <SelectItem key={o.value} value={o.value} className="rounded-lg">{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                );
+              })}
 
               {dateRangeFilter && (
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn('h-10 rounded-xl gap-2 text-xs sm:text-sm font-medium px-3 shadow-xs w-full sm:w-auto shrink-0', dateRangeActive && 'border-primary text-primary font-semibold bg-primary/5')}>
+                    <Button variant="outline" className={cn('h-9 rounded-lg gap-2 text-xs sm:text-sm font-medium px-3 shadow-2xs w-full sm:w-auto shrink-0', dateRangeActive && 'border-primary text-primary font-semibold bg-primary/5')}>
                       <CalendarRange className="h-4 w-4" /> {dateRangeActive ? 'Date: Filtered' : dateRangeFilter.label}
                     </Button>
                   </PopoverTrigger>
@@ -586,16 +613,16 @@ export function DataTable<T extends { id: string }>({
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
                           <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">From</label>
-                          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 rounded-xl text-xs" />
+                          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 rounded-lg text-xs" />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">To</label>
-                          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 rounded-xl text-xs" />
+                          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 rounded-lg text-xs" />
                         </div>
                       </div>
                       <div className="flex gap-2 pt-1">
-                        <Button size="sm" className="flex-1 h-9 rounded-xl text-xs font-semibold" onClick={applyDateRange}>Apply Range</Button>
-                        <Button size="sm" variant="outline" className="h-9 rounded-xl text-xs" onClick={clearDateRange}>Clear</Button>
+                        <Button size="sm" className="flex-1 h-8 rounded-lg text-xs font-semibold" onClick={applyDateRange}>Apply Range</Button>
+                        <Button size="sm" variant="outline" className="h-8 rounded-lg text-xs" onClick={clearDateRange}>Clear</Button>
                       </div>
                     </div>
                   </PopoverContent>
@@ -607,12 +634,12 @@ export function DataTable<T extends { id: string }>({
 
         {/* Action Tools (Export & Columns) */}
         <div className="flex items-center gap-2 justify-end shrink-0">
-          <Button variant="outline" onClick={exportData} disabled={!filteredItems.length} className="h-10 rounded-xl text-xs sm:text-sm font-medium gap-2 px-3 shadow-xs">
+          <Button variant="outline" onClick={exportData} disabled={!filteredItems.length} className="h-9 rounded-lg text-xs sm:text-sm font-medium gap-2 px-3 shadow-2xs">
             <Download className="h-4 w-4" /> Export
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-10 rounded-xl text-xs sm:text-sm font-medium gap-2 px-3 shadow-xs">
+              <Button variant="outline" className="h-9 rounded-lg text-xs sm:text-sm font-medium gap-2 px-3 shadow-2xs">
                 <Settings2 className="h-4 w-4" /> Columns
               </Button>
             </DropdownMenuTrigger>
@@ -735,11 +762,11 @@ export function DataTable<T extends { id: string }>({
                         </p>
                       </div>
                       {params.search ? (
-                        <Button variant="outline" size="sm" onClick={() => setSearch('')} className="rounded-xl h-8.5 text-xs font-semibold">
+                        <Button variant="outline" size="sm" onClick={() => setSearch('')} className="rounded-lg h-8 text-xs font-semibold">
                           Clear Search
                         </Button>
                       ) : emptyAction ? (
-                        <Button size="sm" onClick={emptyAction.onClick} className="rounded-xl h-8.5 text-xs font-semibold gap-1.5 shadow-xs">
+                        <Button size="sm" onClick={emptyAction.onClick} className="rounded-lg h-8 text-xs font-semibold gap-1.5 shadow-2xs">
                           {emptyAction.icon && <emptyAction.icon className="h-3.5 w-3.5" />}
                           {emptyAction.label}
                         </Button>
@@ -946,7 +973,7 @@ export function DataTable<T extends { id: string }>({
               value={String(params.pageSize ?? initialPageSize)}
               onValueChange={(v) => setParams((p) => ({ ...p, pageSize: Number(v), page: 1 }))}
             >
-              <SelectTrigger className="h-9 w-[115px] text-xs sm:text-sm rounded-xl border-border/80 bg-card">
+              <SelectTrigger className="h-8.5 w-[115px] text-xs rounded-lg border-border/80 bg-card">
                 <SelectValue placeholder={`${initialPageSize} / page`} />
               </SelectTrigger>
               <SelectContent className="rounded-xl border-border/80 bg-popover/95 backdrop-blur-xl text-xs sm:text-sm">
@@ -961,7 +988,7 @@ export function DataTable<T extends { id: string }>({
             <Button
               variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-xl border-border/80 shadow-2xs"
+              className="h-8 w-8 rounded-lg border-border/80 shadow-2xs"
               disabled={page <= 1}
               onClick={() => setParams((p) => ({ ...p, page: (p.page ?? 1) - 1 }))}
             >
@@ -973,7 +1000,7 @@ export function DataTable<T extends { id: string }>({
             <Button
               variant="outline"
               size="icon"
-              className="h-9 w-9 rounded-xl border-border/80 shadow-2xs"
+              className="h-8 w-8 rounded-lg border-border/80 shadow-2xs"
               disabled={page >= totalPages}
               onClick={() => setParams((p) => ({ ...p, page: (p.page ?? 1) + 1 }))}
             >

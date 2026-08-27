@@ -290,7 +290,7 @@ export default function TenantDetailPage() {
         actions={
           <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 shrink-0">
             {tenant.status === 'pending_checkin' && (
-              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold rounded-xl h-9 text-xs sm:text-sm gap-1.5" onClick={handleApproveDeskPayment}>
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold h-9 px-3.5 text-xs gap-1.5" onClick={handleApproveDeskPayment}>
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 <span className="hidden sm:inline">Approve Payment</span>
                 <span className="sm:hidden">Approve</span>
@@ -300,7 +300,7 @@ export default function TenantDetailPage() {
               size="sm"
               variant="outline"
               onClick={() => setUploadOpen(true)}
-              className="rounded-xl h-9 text-xs sm:text-sm font-semibold border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
+              className="h-9 px-3.5 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
             >
               <Upload className="h-4 w-4 shrink-0" />
               <span className="hidden sm:inline">Upload KYC</span>
@@ -310,7 +310,7 @@ export default function TenantDetailPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="text-indigo-600 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 font-medium rounded-xl h-9 text-xs sm:text-sm gap-1.5"
+                className="text-indigo-600 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 font-semibold h-9 px-3.5 text-xs gap-1.5"
                 onClick={handleVerifyKyc}
               >
                 <ShieldCheck className="h-4 w-4 shrink-0" />
@@ -322,7 +322,7 @@ export default function TenantDetailPage() {
               size="sm"
               variant="outline"
               onClick={handleSendCredentials}
-              className="rounded-xl h-9 text-xs sm:text-sm font-semibold gap-1.5"
+              className="h-9 px-3.5 text-xs font-semibold gap-1.5"
             >
               <KeyRound className="h-4 w-4 shrink-0" />
               <span className="hidden sm:inline">Send Credentials</span>
@@ -331,7 +331,7 @@ export default function TenantDetailPage() {
             {tenant.status !== 'checked_out' && tenant.status !== 'archived' && (
               <Button
                 size="sm"
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs gap-1.5 rounded-xl h-9 text-xs sm:text-sm"
+                className="bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-xs gap-1.5 h-9 px-3.5 text-xs"
                 onClick={() => setCheckoutSettlementOpen(true)}
               >
                 <Calculator className="h-4 w-4 shrink-0" />
@@ -882,10 +882,14 @@ export default function TenantDetailPage() {
 }
 
 function InfoRow({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string }) {
+  const isEmailOrId = label.toLowerCase().includes('email') || label.toLowerCase().includes('id') || label.toLowerCase().includes('phone');
   return (
     <div className="flex items-center gap-3">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Icon className="h-4.5 w-4.5" /></div>
-      <div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="truncate text-sm font-medium capitalize">{value}</p></div>
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className={`truncate text-sm font-medium ${isEmailOrId ? 'normal-case' : 'capitalize'}`}>{value}</p>
+      </div>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -49,11 +50,14 @@ public class CheckOutController {
     @Autowired
     private com.stayeaze.backend.services.EmailService emailService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
-                .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
+                .orElse(null);
     }
 
     @Autowired
@@ -126,7 +130,8 @@ public class CheckOutController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String sortBy,
-            @RequestParam(required = false) String sortOrder) {
+            @RequestParam(required = false) String sortOrder,
+            @RequestParam(required = false) UUID propertyId) {
         Organization organization = getLoggedUserOrg();
         if (organization == null) {
             return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(new java.util.ArrayList<>(), page, pageSize));
@@ -140,6 +145,30 @@ public class CheckOutController {
         org.springframework.data.domain.Pageable pageable =
                 org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize),
                         org.springframework.data.domain.Sort.by(direction, sortProperty));
+
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null || propertyId != null) {
+            List<CheckOut> allCheckOuts = checkOutRepository.findAll().stream()
+                    .filter(c -> c.getOrganization() != null && c.getOrganization().getId().equals(organization.getId()))
+                    .filter(c -> c.getPropertyId() != null)
+                    .filter(c -> assignedProps == null || assignedProps.contains(c.getPropertyId()))
+                    .filter(c -> propertyId == null || propertyId.equals(c.getPropertyId()))
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (search != null && !search.trim().isEmpty()) {
+                String q = search.trim().toLowerCase();
+                allCheckOuts = allCheckOuts.stream().filter(c ->
+                        (c.getTenantName() != null && c.getTenantName().toLowerCase().contains(q)) ||
+                        (c.getCode() != null && c.getCode().toLowerCase().contains(q)) ||
+                        (c.getRoomNumber() != null && c.getRoomNumber().toLowerCase().contains(q))
+                ).collect(java.util.stream.Collectors.toList());
+            }
+
+            List<com.stayeaze.backend.payload.response.CheckOutDTO> dtos = allCheckOuts.stream()
+                    .map(com.stayeaze.backend.payload.response.CheckOutDTO::fromEntity)
+                    .collect(java.util.stream.Collectors.toList());
+            return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(dtos, page, pageSize));
+        }
 
         org.springframework.data.domain.Page<CheckOut> pageResult;
         if (search != null && !search.trim().isEmpty()) {

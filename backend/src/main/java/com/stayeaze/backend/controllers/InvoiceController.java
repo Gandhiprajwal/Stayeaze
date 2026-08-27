@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -63,6 +64,9 @@ public class InvoiceController {
     @Autowired
     private com.stayeaze.backend.services.InvoiceSequenceService invoiceSequenceService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private OrganizationBillingProfile getBillingProfile(Organization organization) {
         return organizationBillingProfileRepository.findByOrganization(organization)
                 .orElseGet(() -> organizationBillingProfileRepository.save(new OrganizationBillingProfile(organization)));
@@ -77,20 +81,18 @@ public class InvoiceController {
     }
 
     private Organization getLoggedUserOrg() {
-        try {
-            Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-            if (principal instanceof UserDetailsImpl userDetails) {
-                if (userDetails.getOrgId() != null) {
-                    Organization org = organizationRepository.findById(userDetails.getOrgId()).orElse(null);
-                    if (org != null) return org;
-                }
-            }
-        } catch (Exception ignored) {}
-        return null;
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
+                .orElse(null);
     }
 
     private Tenant getAuthorizedTenant(UUID tenantId) {
-        return tenantRepository.findById(tenantId).orElse(null);
+        Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
+        if (tenant != null && tenant.getPropertyId() != null) {
+            securityUtils.validatePropertyAccess(tenant.getPropertyId());
+        }
+        return tenant;
     }
 
     @GetMapping("/invoices/stats")
@@ -406,6 +408,11 @@ public class InvoiceController {
                 }
             }
             map.put("items", itemList);
+
+            Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+            if (assignedProps != null && (propId == null || !assignedProps.contains(propId))) {
+                continue;
+            }
 
             // Property filter
             if (propertyId != null && propId != null && !propertyId.equals(propId)) {

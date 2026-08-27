@@ -750,7 +750,7 @@ export default function UserJourneyTrackingPage() {
             </div>
           )}
 
-          <DialogFooter className="border-t pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-0">
+          <DialogFooter className="border-t pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -833,7 +833,7 @@ export default function UserJourneyTrackingPage() {
             </div>
           )}
 
-          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-3 border-t">
             <Button variant="outline" size="sm" onClick={() => setReconcileTarget(null)} className="text-xs rounded-xl h-10 w-full sm:w-auto">
               Cancel
             </Button>

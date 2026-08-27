@@ -11,6 +11,7 @@ import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { RoomSelect } from '@/components/common/RoomSelect';
 import { toast } from '@/hooks/use-toast';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Property, Room, Bed } from '@/lib/types';
 import { formatCurrency } from '@/lib/format';
 
@@ -24,6 +25,7 @@ interface QuickAddTenantModalProps {
 }
 
 export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties, rooms, beds }: QuickAddTenantModalProps) {
+  const { selectedPropertyId } = usePropertyStore();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,7 +34,7 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male');
-  const [propertyId, setPropertyId] = useState('');
+  const [propertyId, setPropertyId] = useState(selectedPropertyId !== 'ALL' ? selectedPropertyId : '');
   const [roomId, setRoomId] = useState('');
   const [roomNumber, setRoomNumber] = useState('');
   const [bedNumber, setBedNumber] = useState('');
@@ -53,12 +55,14 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
   const [emergencyContact, setEmergencyContact] = useState('');
   const [sendCredentials, setSendCredentials] = useState(true);
 
-  // Auto-fill property if only 1 exists
+  // Auto-fill property if only 1 exists or if global property is selected
   useEffect(() => {
-    if (properties.length === 1 && !propertyId) {
+    if (selectedPropertyId && selectedPropertyId !== 'ALL') {
+      setPropertyId(selectedPropertyId);
+    } else if (properties.length === 1 && !propertyId) {
       setPropertyId(properties[0].id);
     }
-  }, [properties, propertyId]);
+  }, [selectedPropertyId, properties, open]);
 
   function resetForm() {
     setStep(1);
@@ -159,8 +163,8 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val) resetForm(); onOpenChange(val); }}>
-      <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-2xl lg:max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
-        <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-2xl lg:max-w-3xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl">
+        <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2 sm:p-2.5 rounded-xl bg-primary/10 text-primary shrink-0">
@@ -175,7 +179,7 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
             </div>
 
             {/* Step Indicators */}
-            <div className="flex items-center justify-between sm:justify-end gap-1.5 text-xs font-semibold w-full sm:w-auto bg-muted/40 sm:bg-transparent p-1.5 sm:p-0 rounded-xl">
+            <div className="flex items-center justify-between sm:justify-end gap-1.5 text-xs font-semibold w-full sm:w-auto bg-slate-50 dark:bg-slate-800/40 sm:bg-transparent p-1.5 sm:p-0 rounded-xl">
               <span className={`px-2.5 py-1 rounded-lg text-center flex-1 sm:flex-none ${step === 1 ? 'bg-primary text-primary-foreground font-bold shadow-xs' : step > 1 ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-muted/60 text-muted-foreground'}`}>
                 1. Room
               </span>
@@ -191,7 +195,7 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
           </div>
         </DialogHeader>
 
-        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[calc(85vh-140px)]">
+        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[calc(85vh-140px)] bg-white dark:bg-slate-900">
           {/* STEP 1: Basic Info & Room Allocation */}
           {step === 1 && (
             <div className="space-y-4 animate-in fade-in-50 duration-200">
@@ -201,7 +205,12 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
                   <Input placeholder="e.g. Rahul Sharma" value={name} onChange={e => setName(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Phone Number *</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold">Phone Number *</Label>
+                    {phone.length > 0 && phone.length < 10 && (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">10 digits required ({phone.length}/10)</span>
+                    )}
+                  </div>
                   <Input
                     type="tel"
                     inputMode="numeric"
@@ -215,7 +224,12 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Email Address (for login)</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold">Email Address (for login)</Label>
+                    {email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && (
+                      <span className="text-[10px] text-rose-500 font-medium">Invalid email format</span>
+                    )}
+                  </div>
                   <Input type="email" placeholder="e.g. rahul@gmail.com" value={email} onChange={e => setEmail(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
@@ -366,7 +380,12 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
                   <Input placeholder="e.g. Parent / Guardian" value={emergencyName} onChange={e => setEmergencyName(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Emergency Phone</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold">Emergency Phone</Label>
+                    {emergencyContact.length > 0 && emergencyContact === phone && (
+                      <span className="text-[10px] text-rose-500 font-medium">Cannot match primary phone</span>
+                    )}
+                  </div>
                   <Input
                     type="tel"
                     inputMode="numeric"
@@ -392,13 +411,13 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
           )}
         </div>
 
-        <DialogFooter className="p-4 border-t border-border/60 bg-muted/20 flex flex-row items-center justify-between gap-2 shrink-0">
+        <DialogFooter className="p-4 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-row items-center justify-between gap-3 shrink-0">
           {step === 1 && (
             <>
-              <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl h-9.5 text-xs font-semibold">
+              <Button variant="ghost" onClick={() => onOpenChange(false)} className="h-9 px-4 text-xs font-semibold">
                 Cancel
               </Button>
-              <Button disabled={!isStep1Valid} onClick={() => setStep(2)} className="gap-2 rounded-xl h-9.5 text-xs sm:text-sm font-bold shadow-xs">
+              <Button disabled={!isStep1Valid} onClick={() => setStep(2)} className="gap-2 h-9 px-4 text-xs font-semibold shadow-xs">
                 Next: Financials <ArrowRight className="h-4 w-4" />
               </Button>
             </>
@@ -406,14 +425,14 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
 
           {step === 2 && (
             <>
-              <Button variant="outline" onClick={() => setStep(1)} className="gap-1.5 rounded-xl h-9.5 text-xs font-semibold">
+              <Button variant="outline" onClick={() => setStep(1)} className="gap-1.5 h-9 px-4 text-xs font-semibold">
                 <ArrowLeft className="h-3.5 w-3.5" /> Back
               </Button>
-              <div className="flex items-center gap-2">
-                <Button variant="secondary" onClick={handleSubmit} disabled={isSubmitting || !isStep2Valid} className="rounded-xl h-9.5 text-xs font-semibold">
+              <div className="flex items-center gap-2.5">
+                <Button variant="secondary" onClick={handleSubmit} disabled={isSubmitting || !isStep2Valid} className="h-9 px-4 text-xs font-semibold">
                   Save (Skip KYC)
                 </Button>
-                <Button disabled={!isStep2Valid} onClick={() => setStep(3)} className="gap-2 rounded-xl h-9.5 text-xs sm:text-sm font-bold shadow-xs">
+                <Button disabled={!isStep2Valid} onClick={() => setStep(3)} className="gap-2 h-9 px-4 text-xs font-semibold shadow-xs">
                   Next: KYC <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -422,10 +441,10 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
 
           {step === 3 && (
             <>
-              <Button variant="outline" onClick={() => setStep(2)} className="gap-1.5 rounded-xl h-9.5 text-xs font-semibold">
+              <Button variant="outline" onClick={() => setStep(2)} className="gap-1.5 h-9 px-4 text-xs font-semibold">
                 <ArrowLeft className="h-3.5 w-3.5" /> Back
               </Button>
-              <Button onClick={handleSubmit} disabled={isSubmitting} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl h-9.5 text-xs sm:text-sm shadow-xs">
+              <Button onClick={handleSubmit} disabled={isSubmitting} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-9 px-4 text-xs shadow-xs">
                 <Check className="h-4 w-4" /> Complete Onboarding
               </Button>
             </>

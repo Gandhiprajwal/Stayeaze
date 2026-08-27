@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -44,17 +45,24 @@ public class PaymentController {
     @Autowired
     private com.stayeaze.backend.services.UserJourneyAuditService userJourneyAuditService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
     private Tenant getAuthorizedTenant(UUID tenantId) {
         Organization organization = getLoggedUserOrg();
-        return tenantRepository.findByIdAndOrganization(tenantId, organization)
+        Tenant tenant = tenantRepository.findByIdAndOrganization(tenantId, organization)
                 .orElseThrow(() -> new IllegalArgumentException("Tenant profile not found or unauthorized"));
+        if (tenant.getPropertyId() != null) {
+            securityUtils.validatePropertyAccess(tenant.getPropertyId());
+        }
+        return tenant;
     }
 
     @PostMapping("/tenants/{tenantId}/invoices/{invoiceId}/payments")
@@ -246,7 +254,8 @@ public class PaymentController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String method,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID propertyId) {
         Organization organization = getLoggedUserOrg();
         List<Payment> rawPayments = paymentRepository.findByOrganizationId(organization.getId());
 
@@ -260,11 +269,11 @@ public class PaymentController {
             Tenant tenant = p.getInvoice() != null ? p.getInvoice().getTenant() : null;
             m.put("tenantName", tenant != null ? tenant.getFirstName() + " " + tenant.getLastName() : "Tenant");
             
-            String propertyId = "";
+            String propIdStr = "";
             if (tenant != null && tenant.getPropertyId() != null) {
-                propertyId = tenant.getPropertyId().toString();
+                propIdStr = tenant.getPropertyId().toString();
             }
-            m.put("propertyId", propertyId);
+            m.put("propertyId", propIdStr);
 
             m.put("amount", p.getAmount());
             m.put("method", p.getPaymentMethod() != null ? p.getPaymentMethod().toLowerCase() : "cash");
@@ -275,6 +284,26 @@ public class PaymentController {
             m.put("razorpayPaymentId", p.getTransactionReference());
 
             mapped.add(m);
+        }
+
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            mapped = mapped.stream().filter(m -> {
+                Object pId = m.get("propertyId");
+                if (pId == null || pId.toString().isBlank()) return false;
+                try {
+                    return assignedProps.contains(UUID.fromString(pId.toString()));
+                } catch (Exception e) {
+                    return false;
+                }
+            }).collect(java.util.stream.Collectors.toList());
+        }
+
+        if (propertyId != null) {
+            mapped = mapped.stream().filter(m -> {
+                Object pId = m.get("propertyId");
+                return pId != null && propertyId.toString().equalsIgnoreCase(pId.toString());
+            }).collect(java.util.stream.Collectors.toList());
         }
 
         return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(mapped, page, pageSize));

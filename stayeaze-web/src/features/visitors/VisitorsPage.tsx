@@ -631,55 +631,53 @@ export default function VisitorsPage() {
 
       {/* 1. WALK-IN LOG VISITOR MODAL (STAFF / SECURITY GUARD) WITH PHOTO CAPTURE */}
       <Dialog open={logModalOpen} onOpenChange={setLogModalOpen}>
-        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-xl md:max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
-          <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-              <Camera className="h-5 w-5 text-indigo-600" /> Log Walk-In Visitor at Gate
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-xl md:max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl">
+          <DialogHeader className="p-5 sm:p-6 pb-4 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
+            <DialogTitle className="flex items-center gap-2.5 text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+              <Camera className="h-5 w-5 text-primary" /> Log Walk-In Visitor at Gate
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-0.5">
               Capture visitor photo, record visitor details, and trigger instant resident verification.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto max-h-[calc(85vh-130px)]">
+          <div className="p-5 sm:p-6 space-y-4 overflow-y-auto max-h-[calc(85vh-130px)] scrollbar-thin">
             {/* Photo Capture Section */}
-            <div className="p-4 rounded-xl border-2 border-dashed border-border/80 bg-muted/20 text-center space-y-3">
+            <div className="p-5 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 text-center space-y-3">
               {walkInForm.photoUrl ? (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <img
                     src={resolveFileUrl(walkInForm.photoUrl)}
                     alt="Visitor Preview"
-                    className="h-28 w-28 rounded-xl object-cover mx-auto border-2 border-indigo-500 shadow-md"
+                    className="h-28 w-28 rounded-xl object-cover mx-auto border-2 border-primary shadow-md"
                   />
-                  <div className="flex justify-center gap-2">
+                  <div className="flex justify-center gap-2.5">
                     <Button
                       type="button"
-                      size="sm"
                       variant="outline"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploadingPhoto}
-                      className="rounded-xl h-8.5 text-xs font-semibold"
+                      className="rounded-xl h-10 px-4 text-xs sm:text-sm font-semibold gap-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-2xs hover:bg-slate-50 dark:hover:bg-slate-800"
                     >
-                      <Camera className="mr-1.5 h-3.5 w-3.5" /> Retake Photo
+                      <Camera className="h-4 w-4" /> Retake Photo
                     </Button>
                     <Button
                       type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="text-rose-500 hover:text-rose-600 rounded-xl h-8.5 text-xs"
+                      variant="outline"
+                      className="border-rose-300 text-rose-700 bg-rose-50/60 hover:bg-rose-100 dark:border-rose-800 dark:text-rose-300 dark:bg-rose-950/30 rounded-xl h-10 px-4 text-xs sm:text-sm font-semibold gap-1.5 shadow-2xs"
                       onClick={() => setWalkInForm((f) => ({ ...f, photoUrl: '' }))}
                     >
-                      Remove
+                      <XCircle className="h-4 w-4" /> Remove
                     </Button>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                <div className="space-y-2.5 py-1">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center border border-primary/20">
                     <Camera className="h-6 w-6" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Visitor Photo Capture</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">Visitor Photo Capture</p>
                     <p className="text-xs text-muted-foreground">Take photo via webcam / smartphone camera or upload file</p>
                   </div>
                   <Button
@@ -687,9 +685,9 @@ export default function VisitorsPage() {
                     variant="outline"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploadingPhoto}
-                    className="border-primary/30 text-primary hover:bg-primary/10 rounded-xl h-9 text-xs font-semibold"
+                    className="border-primary/30 text-primary hover:bg-primary/10 rounded-xl h-10 px-5 text-xs sm:text-sm font-semibold shadow-2xs gap-2"
                   >
-                    <Camera className="mr-1.5 h-4 w-4" /> {uploadingPhoto ? 'Uploading...' : 'Take / Upload Photo'}
+                    <Camera className="h-4 w-4" /> {uploadingPhoto ? 'Uploading...' : 'Take / Upload Photo'}
                   </Button>
                 </div>
               )}
@@ -706,16 +704,17 @@ export default function VisitorsPage() {
             {/* Input Details */}
             <div className="grid gap-3.5 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Visitor Full Name *</Label>
+                <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">Visitor Full Name *</Label>
                 <Input
                   placeholder="e.g. Rahul Sharma"
                   value={walkInForm.visitorName}
                   onChange={(e) => setWalkInForm({ ...walkInForm, visitorName: e.target.value })}
+                  className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Visitor Phone Number *</Label>
+                <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">Visitor Phone Number *</Label>
                 <Input
                   type="tel"
                   inputMode="numeric"
@@ -723,65 +722,78 @@ export default function VisitorsPage() {
                   placeholder="e.g. 9876543210"
                   value={walkInForm.visitorPhone}
                   onChange={(e) => setWalkInForm({ ...walkInForm, visitorPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                  className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Visiting Resident (Tenant)</Label>
-                <SearchableSelect
-                  options={(tenantsList ?? []).map((t: Tenant) => ({
-                    value: t.id,
-                    label: `${t.firstName} ${t.lastName || ''}`.trim(),
-                    sublabel: `Room: ${t.roomNumber || 'Assigned'} • Phone: ${t.mobile || ''}`,
-                  }))}
-                  value={walkInForm.tenantId}
-                  onChange={(v) => {
-                    const selected = (tenantsList ?? []).find((t: Tenant) => t.id === v);
-                    setWalkInForm({
-                      ...walkInForm,
-                      tenantId: v,
-                      tenantName: selected ? `${selected.firstName} ${selected.lastName || ''}`.trim() : '',
-                    });
-                  }}
-                  placeholder="Search resident by name or room..."
-                  searchPlaceholder="Search tenants..."
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Purpose of Visit</Label>
+                <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">Purpose of Visit</Label>
                 <Select
                   value={walkInForm.purpose}
                   onValueChange={(v) => setWalkInForm({ ...walkInForm, purpose: v })}
                 >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"><SelectValue /></SelectTrigger>
+                  <SelectContent className="rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
                     {purposes.map((p) => (
-                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                      <SelectItem key={p.value} value={p.value} className="text-xs sm:text-sm py-2">{p.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Vehicle Number (Optional)</Label>
+                <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">Whom to Meet (Resident)</Label>
+                <Select
+                  value={walkInForm.tenantId || 'none'}
+                  onValueChange={(v) => {
+                    if (v === 'none') {
+                      setWalkInForm({
+                        ...walkInForm,
+                        tenantId: '',
+                        tenantName: '',
+                      });
+                    } else {
+                      const ten = (tenantsList ?? []).find((t: any) => t.id === v);
+                      setWalkInForm({
+                        ...walkInForm,
+                        tenantId: v,
+                        tenantName: ten ? `${ten.firstName || ten.name} ${ten.lastName || ''}`.trim() : '',
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"><SelectValue placeholder="Select Resident (Optional)" /></SelectTrigger>
+                  <SelectContent className="rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                    <SelectItem value="none">General / Delivery / Maintenance (No resident)</SelectItem>
+                    {(tenantsList ?? []).map((t: any) => (
+                      <SelectItem key={t.id} value={t.id} className="text-xs sm:text-sm py-2">
+                        {t.firstName || t.name} {t.lastName || ''} — Room {t.roomNumber || '—'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">Vehicle Number (Optional)</Label>
                 <Input
                   placeholder="e.g. KA-01-AB-1234"
                   value={walkInForm.vehicleNumber}
                   onChange={(e) => setWalkInForm({ ...walkInForm, vehicleNumber: e.target.value.toUpperCase() })}
+                  className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Property</Label>
+                <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">Property</Label>
                 <Select
                   value={walkInForm.propertyId}
                   onValueChange={(v) => setWalkInForm({ ...walkInForm, propertyId: v })}
                 >
-                  <SelectTrigger><SelectValue placeholder="Select Property" /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"><SelectValue placeholder="Select Property" /></SelectTrigger>
+                  <SelectContent className="rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
                     {(properties ?? []).map((p: any) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      <SelectItem key={p.id} value={p.id} className="text-xs sm:text-sm py-2">{p.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -789,11 +801,12 @@ export default function VisitorsPage() {
             </div>
           </div>
 
-          <DialogFooter className="p-4 border-t border-border/60 bg-muted/20 flex flex-row items-center justify-between gap-2 shrink-0">
-            <Button variant="ghost" onClick={() => setLogModalOpen(false)} className="rounded-xl h-9 text-xs font-semibold">
+          <DialogFooter className="p-4 sm:p-5 border-t border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 flex flex-row items-center justify-between gap-3 shrink-0">
+            <Button variant="outline" onClick={() => setLogModalOpen(false)} className="rounded-xl h-10 px-4 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
               Cancel
             </Button>
-            <Button onClick={handleWalkInSubmit} className="bg-primary hover:bg-primary/90 font-bold rounded-xl h-9 text-xs shadow-xs">
+            <Button onClick={handleWalkInSubmit} className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl h-10 px-5 text-xs sm:text-sm shadow-xs gap-2">
+              <UserCheck className="h-4 w-4" />
               {walkInForm.tenantId ? 'Log Visitor & Request Approval' : 'Grant Direct Entry'}
             </Button>
           </DialogFooter>
@@ -1006,11 +1019,10 @@ export default function VisitorsPage() {
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={() => document.getElementById('qr-gate-scanner-input')?.click()}
-                className="rounded-xl border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100/50 dark:hover:bg-indigo-900/40 h-8.5 text-xs font-semibold w-full gap-1.5"
+                className="rounded-xl border-indigo-300 dark:border-indigo-700/80 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100/60 dark:hover:bg-indigo-900/50 h-10 px-4 text-xs sm:text-sm font-semibold w-full gap-2 transition-all"
               >
-                <Camera className="h-3.5 w-3.5" /> Launch QR Camera Scanner
+                <Camera className="h-4 w-4 shrink-0" /> Launch QR Camera Scanner
               </Button>
             </div>
 

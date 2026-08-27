@@ -91,6 +91,8 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
     const rawHeaders = lines[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.trim().replace(/^"|"$/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''));
     
     const rows: ParsedTenantRow[] = [];
+    const seenMobiles = new Set<string>();
+    const seenEmails = new Set<string>();
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ''));
@@ -122,7 +124,33 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
       const errors: string[] = [];
       if (!name || name === 'Resident') errors.push('Name is required');
       if (!mobile) errors.push('Mobile number is required');
-      if (!email) errors.push('Email is recommended for credentials');
+
+      const cleanMob = mobile.replace(/\D/g, '').slice(-10);
+      if (cleanMob.length < 10) {
+        errors.push('Mobile must be 10 digits');
+      } else if (seenMobiles.has(cleanMob)) {
+        errors.push(`Duplicate mobile ${cleanMob} in this file`);
+      } else {
+        seenMobiles.add(cleanMob);
+      }
+
+      if (email) {
+        const cleanEm = email.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEm)) {
+          errors.push('Invalid email format');
+        } else if (seenEmails.has(cleanEm)) {
+          errors.push(`Duplicate email ${cleanEm} in this file`);
+        } else {
+          seenEmails.add(cleanEm);
+        }
+      }
+
+      if (cleanMob && emergencyContactMobile) {
+        const cleanEmerg = emergencyContactMobile.replace(/\D/g, '').slice(-10);
+        if (cleanEmerg === cleanMob) {
+          errors.push('Emergency contact same as resident phone');
+        }
+      }
 
       rows.push({
         name,
@@ -215,8 +243,8 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val) resetModal(); onOpenChange(val); }}>
-      <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-3xl lg:max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl">
-        <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b bg-muted/30 shrink-0">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-3xl lg:max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl">
+        <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
               <FileSpreadsheet className="h-6 w-6" />
@@ -230,7 +258,7 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-h-[calc(85vh-130px)]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-h-[calc(85vh-130px)] bg-white dark:bg-slate-900">
           {step === 'upload' && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -424,13 +452,13 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
           )}
         </div>
 
-        <DialogFooter className="p-4 border-t border-border/60 bg-muted/20 flex flex-row items-center justify-between gap-2 shrink-0">
+        <DialogFooter className="p-4 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-row items-center justify-between gap-3 shrink-0">
           {step === 'upload' && (
             <>
-              <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl h-9 text-xs font-semibold">
+              <Button variant="ghost" onClick={() => onOpenChange(false)} className="h-9 px-4 text-xs font-semibold">
                 Cancel
               </Button>
-              <Button onClick={() => fileInputRef.current?.click()} className="gap-2 rounded-xl h-9 text-xs font-bold shadow-xs">
+              <Button onClick={() => fileInputRef.current?.click()} className="gap-2 h-9 px-4 text-xs font-semibold shadow-xs">
                 <Upload className="h-4 w-4" /> Select CSV File
               </Button>
             </>
@@ -438,17 +466,17 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
 
           {step === 'preview' && (
             <>
-              <Button variant="outline" onClick={() => setStep('upload')} className="rounded-xl h-9 text-xs font-semibold">
+              <Button variant="outline" onClick={() => setStep('upload')} className="h-9 px-4 text-xs font-semibold">
                 Back
               </Button>
-              <Button onClick={executeBulkImport} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl h-9 text-xs shadow-xs">
+              <Button onClick={executeBulkImport} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-9 px-4 text-xs shadow-xs">
                 Confirm & Import {parsedRows.filter(r => r.isValid).length} Residents <ArrowRight className="h-4 w-4" />
               </Button>
             </>
           )}
 
           {step === 'summary' && (
-            <Button onClick={() => onOpenChange(false)} className="w-full rounded-xl h-9.5 text-xs font-bold">
+            <Button onClick={() => onOpenChange(false)} className="w-full h-9 text-xs font-semibold">
               Done & View Tenants
             </Button>
           )}

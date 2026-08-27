@@ -20,6 +20,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -56,6 +57,9 @@ public class BedController {
     @Autowired
     private com.stayeaze.backend.services.FloorService floorService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     @Transactional(readOnly = true)
     public Bed populateBedDetails(Bed bed) {
         if (bed == null) return bed;
@@ -67,23 +71,22 @@ public class BedController {
     }
 
     private Organization getLoggedUserOrg() {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                    .getAuthentication().getPrincipal();
-            if (userDetails.getOrgId() == null) return null;
-            return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
-        } catch (Exception ignored) {
-            return null;
-        }
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
+                .orElse(null);
     }
 
     private boolean isRoomAuthorizedForUser(Room room) {
         if (room == null || room.getId() == null) return false;
+        if (securityUtils.isSuperAdmin()) return true;
         try {
-            Organization org = getLoggedUserOrg();
-            if (org == null) return false;
-            if (room.getFloor() != null && room.getFloor().getBuilding() != null && room.getFloor().getBuilding().getProperty() != null && room.getFloor().getBuilding().getProperty().getOrganization() != null) {
-                return room.getFloor().getBuilding().getProperty().getOrganization().getId().equals(org.getId());
+            UUID propId = room.getPropertyId();
+            if (propId != null) {
+                return securityUtils.isPropertyAccessible(propId);
+            }
+            if (room.getFloor() != null && room.getFloor().getBuilding() != null && room.getFloor().getBuilding().getProperty() != null) {
+                return securityUtils.isPropertyAccessible(room.getFloor().getBuilding().getProperty().getId());
             }
         } catch (Exception ignored) {}
         return true;
@@ -203,10 +206,17 @@ public class BedController {
     @Transactional(readOnly = true)
     public ResponseEntity<?> getFlatBeds(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
-        Organization organization = null;
-        try { organization = getLoggedUserOrg(); } catch (Exception ignored) {}
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) UUID propertyId) {
+        Organization organization = getLoggedUserOrg();
         List<com.stayeaze.backend.payload.response.BedDTO> all = bedService.getBedsByOrg(organization);
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            all = all.stream().filter(b -> b.getPropertyId() != null && assignedProps.contains(b.getPropertyId())).collect(Collectors.toList());
+        }
+        if (propertyId != null) {
+            all = all.stream().filter(b -> propertyId.equals(b.getPropertyId())).collect(Collectors.toList());
+        }
         return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
     }
 

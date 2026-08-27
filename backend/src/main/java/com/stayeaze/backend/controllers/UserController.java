@@ -217,6 +217,9 @@ public class UserController {
     @Autowired
     private com.stayeaze.backend.services.EmailService emailService;
 
+    @Autowired
+    private com.stayeaze.backend.services.AccountUniquenessService accountUniquenessService;
+
     @PostMapping
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> createUser(@RequestBody Map<String, Object> request) {
@@ -254,27 +257,20 @@ public class UserController {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: Email is required!"));
         }
 
-        String cleanEmail = email.trim().toLowerCase();
-        String cleanPhone = phone != null ? phone.trim() : "";
+        String cleanEmail = accountUniquenessService.normalizeEmail(email);
+        String cleanPhone = accountUniquenessService.normalizeMobile(phone);
 
-        User existingByEmail = userRepository.findByEmail(cleanEmail).orElse(null);
-        if (existingByEmail != null && existingByEmail.getOrganization() != null && organization != null &&
-            existingByEmail.getOrganization().getId().equals(organization.getId())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: A user with this email is already registered in your organization!"));
-        }
-
-        if (!cleanPhone.isEmpty()) {
-            User existingByPhone = userRepository.findByMobile(cleanPhone).orElse(null);
-            if (existingByPhone != null && existingByPhone.getOrganization() != null && organization != null &&
-                existingByPhone.getOrganization().getId().equals(organization.getId())) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: A user with this phone number is already registered in your organization!"));
-            }
+        // Universal Uniqueness Validation across Users and Active Residents
+        try {
+            accountUniquenessService.validateStaffEmailAndMobile(organization, cleanEmail, cleanPhone, null);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(new MessageResponse(ex.getMessage()));
         }
         
         // Generate cryptographically secure 12-character random temporary password
         String tempPassword = credentialService.generateSecurePassword();
 
-        User user = existingByEmail != null ? existingByEmail : new User(organization, cleanEmail, encoder.encode(tempPassword), cleanPhone);
+        User user = new User(organization, cleanEmail, encoder.encode(tempPassword), cleanPhone);
         user.setOrganization(organization);
         user.setPassword(encoder.encode(tempPassword));
         user.setMustChangePassword(true);
@@ -396,18 +392,21 @@ public class UserController {
             user.setFirstName(name.trim());
         }
 
+        String newEmail = email != null && !email.trim().isEmpty() ? email.trim() : user.getEmail();
+        String newPhone = phone != null && !phone.trim().isEmpty() ? phone.trim() : user.getMobile();
+
+        try {
+            accountUniquenessService.validateStaffEmailAndMobile(user.getOrganization(), newEmail, newPhone, id);
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(new MessageResponse(ex.getMessage()));
+        }
+
         if (email != null && !email.trim().isEmpty()) {
-            if (!user.getEmail().equalsIgnoreCase(email) && userRepository.existsByEmail(email)) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: Email is already registered!"));
-            }
-            user.setEmail(email);
+            user.setEmail(accountUniquenessService.normalizeEmail(email));
         }
 
         if (phone != null && !phone.trim().isEmpty()) {
-            if (!user.getMobile().equals(phone) && userRepository.existsByMobile(phone)) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: Phone number is already registered!"));
-            }
-            user.setMobile(phone);
+            user.setMobile(accountUniquenessService.normalizeMobile(phone));
         }
 
         if (status != null) {

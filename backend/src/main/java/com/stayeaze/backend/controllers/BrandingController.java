@@ -98,10 +98,9 @@ public class BrandingController {
                 }
                 if (planOpt.isPresent() && Boolean.TRUE.equals(planOpt.get().getAllowCustomBranding())) {
                     allowedByPlan = true;
+                } else if (isEnterprise) {
+                    allowedByPlan = true;
                 }
-            }
-            if (isEnterprise || Boolean.TRUE.equals(profile.getCustomBrandingEnabled())) {
-                allowedByPlan = true;
             }
         }
 
@@ -159,9 +158,6 @@ public class BrandingController {
             if (planOpt.isPresent() && Boolean.TRUE.equals(planOpt.get().getAllowCustomBranding())) {
                 planAllows = true;
             }
-        }
-        if (Boolean.TRUE.equals(profile.getCustomBrandingEnabled())) {
-            planAllows = true;
         }
 
         if (!planAllows) {

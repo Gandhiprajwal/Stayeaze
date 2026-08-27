@@ -33,8 +33,112 @@ import { WorkspaceLockedModal } from '@/components/subscription/WorkspaceLockedM
 import { OrganizationSetupGuardModal } from '@/components/subscription/OrganizationSetupGuardModal';
 import { RaiseSupportTicketModal } from '@/components/support/RaiseSupportTicketModal';
 import { SubscriptionStatusBanner } from '@/components/common/SubscriptionStatusBanner';
+import { PropertySwitcher } from './PropertySwitcher';
 
 import { useBranding } from '@/lib/branding-context';
+
+interface SidebarContentProps {
+  sidebarCollapsed: boolean;
+  brandLogo: string | null;
+  brandName: string;
+  isWhiteLabeled: boolean;
+  brandTagline?: string | null;
+  sections: Array<{
+    title: string;
+    items: Array<{
+      to: string;
+      label: string;
+      icon: React.ComponentType<{ className?: string }>;
+      badge?: string | number;
+    }>;
+  }>;
+  toggleSidebar: () => void;
+  onNavigate?: () => void;
+}
+
+function SidebarContent({
+  sidebarCollapsed,
+  brandLogo,
+  brandName,
+  isWhiteLabeled,
+  brandTagline,
+  sections,
+  toggleSidebar,
+  onNavigate,
+}: SidebarContentProps) {
+  return (
+    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+      {/* Brand */}
+      <div className={cn('flex h-16 items-center gap-2.5 border-b border-white/10 px-4', sidebarCollapsed && 'justify-center px-2')}>
+        {brandLogo ? (
+          <img src={brandLogo} alt={brandName} className="h-9 w-9 rounded-lg object-contain bg-white/10 p-0.5" />
+        ) : (
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Hotel className="h-5 w-5" />
+          </div>
+        )}
+        {!sidebarCollapsed && (
+          <div className="min-w-0">
+            <p className="font-heading text-base font-bold leading-none tracking-tight truncate">{brandName}</p>
+            <p className="mt-0.5 text-[11px] text-white/50 truncate">
+              {isWhiteLabeled && brandTagline ? brandTagline : 'Management Console'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Nav with naturally preserved scroll position */}
+      <nav className="flex-1 space-y-5 overflow-y-auto py-4 scrollbar-thin">
+        {sections.map((section) => (
+          <div key={section.title} className="px-3">
+            {!sidebarCollapsed && (
+              <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                {section.title}
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={onNavigate}
+                  title={sidebarCollapsed ? item.label : undefined}
+                  className={({ isActive }) =>
+                    cn(
+                      'group flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
+                      sidebarCollapsed && 'justify-center px-2',
+                      isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-white/70 hover:bg-white/10 hover:text-white'
+                    )
+                  }
+                >
+                  <item.icon className="h-5 w-5 shrink-0" />
+                  {!sidebarCollapsed && <span className="flex-1 truncate">{item.label}</span>}
+                  {!sidebarCollapsed && item.badge && (
+                    <span className="rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold">{item.badge}</span>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* Collapse toggle — desktop only */}
+      <div className="hidden border-t border-white/10 p-2 lg:block">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleSidebar}
+          className="w-full justify-center text-white/70 hover:bg-white/10 hover:text-white"
+        >
+          {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <><ChevronLeft className="h-4 w-4" /> Collapse</>}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function AppLayout() {
   const { user, logout } = useAuthStore();
@@ -162,79 +266,6 @@ export function AppLayout() {
     }
   };
 
-  const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-      {/* Brand */}
-      <div className={cn('flex h-16 items-center gap-2.5 border-b border-white/10 px-4', sidebarCollapsed && 'justify-center px-2')}>
-        {brandLogo ? (
-          <img src={brandLogo} alt={brandName} className="h-9 w-9 rounded-lg object-contain bg-white/10 p-0.5" />
-        ) : (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Hotel className="h-5 w-5" />
-          </div>
-        )}
-        {!sidebarCollapsed && (
-          <div className="min-w-0">
-            <p className="font-heading text-base font-bold leading-none tracking-tight truncate">{brandName}</p>
-            <p className="mt-0.5 text-[11px] text-white/50 truncate">
-              {isWhiteLabeled && branding.brandTagline ? branding.brandTagline : 'Management Console'}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 space-y-5 overflow-y-auto py-4 scrollbar-thin">
-        {sections.map((section) => (
-          <div key={section.title} className="px-3">
-            {!sidebarCollapsed && (
-              <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                {section.title}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  onClick={onNavigate}
-                  title={sidebarCollapsed ? item.label : undefined}
-                  className={({ isActive }) =>
-                    cn(
-                      'group flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
-                      sidebarCollapsed && 'justify-center px-2',
-                      isActive
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-white/70 hover:bg-white/10 hover:text-white'
-                    )
-                  }
-                >
-                  <item.icon className="h-4.5 w-4.5 h-5 w-5 shrink-0" />
-                  {!sidebarCollapsed && <span className="flex-1 truncate">{item.label}</span>}
-                  {!sidebarCollapsed && item.badge && (
-                    <span className="rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold">{item.badge}</span>
-                  )}
-                </NavLink>
-              ))}
-            </div>
-          </div>
-        ))}
-      </nav>
-
-      {/* Collapse toggle — desktop only */}
-      <div className="hidden border-t border-white/10 p-2 lg:block">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleSidebar}
-          className="w-full justify-center text-white/70 hover:bg-white/10 hover:text-white"
-        >
-          {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <><ChevronLeft className="h-4 w-4" /> Collapse</>}
-        </Button>
-      </div>
-    </div>
-  );
-
   return (
     <div className="flex h-full w-full overflow-hidden bg-background">
       {/* Desktop sidebar */}
@@ -244,14 +275,31 @@ export function AppLayout() {
           sidebarCollapsed ? 'w-[72px]' : 'w-64'
         )}
       >
-        <SidebarContent />
+        <SidebarContent
+          sidebarCollapsed={sidebarCollapsed}
+          brandLogo={brandLogo}
+          brandName={brandName}
+          isWhiteLabeled={isWhiteLabeled}
+          brandTagline={branding?.brandTagline}
+          sections={sections}
+          toggleSidebar={toggleSidebar}
+        />
       </aside>
 
       {/* Mobile sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" className="w-72 border-0 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SidebarContent onNavigate={() => setMobileOpen(false)} />
+          <SidebarContent
+            sidebarCollapsed={false}
+            brandLogo={brandLogo}
+            brandName={brandName}
+            isWhiteLabeled={isWhiteLabeled}
+            brandTagline={branding?.brandTagline}
+            sections={sections}
+            toggleSidebar={toggleSidebar}
+            onNavigate={() => setMobileOpen(false)}
+          />
         </SheetContent>
       </Sheet>
 
@@ -306,6 +354,9 @@ export function AppLayout() {
               <Command className="h-3 w-3" /> K
             </kbd>
           </button>
+
+          {/* Global Property Switcher */}
+          <PropertySwitcher />
 
           <div className="ml-auto flex items-center gap-2">
             {/* Super Admin Reset DB Topbar Button */}

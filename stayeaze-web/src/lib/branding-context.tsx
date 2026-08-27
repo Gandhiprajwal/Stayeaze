@@ -108,7 +108,8 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   });
 
   const branding: BrandingConfig = brandingData || defaultBranding;
-  const isWhiteLabeled = Boolean(branding.enabled && branding.brandName);
+  const canBrand = Boolean(branding.isEnterprise || branding.allowCustomBranding);
+  const isWhiteLabeled = Boolean(canBrand && branding.enabled && branding.brandName);
   const brandName = isWhiteLabeled && branding.brandName ? branding.brandName : 'StayEaze';
   const brandLogo = isWhiteLabeled && branding.brandLogoUrl ? resolveFileUrl(branding.brandLogoUrl) : null;
   const primaryColor = isWhiteLabeled && branding.brandPrimaryColor ? branding.brandPrimaryColor : '#4f46e5';
@@ -140,7 +141,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         document.documentElement.style.setProperty('--chart-1', hslVal);
       }
     } else {
-      // Revert to standard StayEaze indigo
+      // Revert to standard StayEaze brand primary
       document.documentElement.style.setProperty('--primary', '217 91% 60%');
       document.documentElement.style.setProperty('--ring', '217 91% 60%');
       document.documentElement.style.setProperty('--chart-1', '217 91% 60%');

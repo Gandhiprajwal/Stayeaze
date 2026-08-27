@@ -11,10 +11,12 @@ import { formatCurrency } from '@/lib/format';
 import { Wallet, ShieldCheck, RefreshCw, CheckCircle2, UserCheck, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { CheckoutSettlementModal } from '@/features/check-out/CheckoutSettlementModal';
 
 export default function SecurityDepositLedgerPage() {
   const queryClient = useQueryClient();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('ALL');
+  const [settlementTenant, setSettlementTenant] = useState<{ id: string; name: string } | null>(null);
 
   const { data: properties } = useQuery({
     queryKey: ['properties-minimal'],
@@ -28,8 +30,8 @@ export default function SecurityDepositLedgerPage() {
     }).then((r) => r.data),
   });
 
-  const handleProcessRefund = (tenantName: string) => {
-    toast.success(`Security deposit refund processed for ${tenantName}!`);
+  const handleProcessRefund = (tenantId: string, tenantName: string) => {
+    setSettlementTenant({ id: tenantId, name: tenantName });
   };
 
   const rows = depositData?.tenantsDeposits ?? [];
@@ -101,10 +103,10 @@ export default function SecurityDepositLedgerPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleProcessRefund(row.tenantName)}
-                        className="w-full rounded-xl h-9 text-xs font-semibold border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 gap-1.5"
+                        onClick={() => handleProcessRefund(row.tenantId, row.tenantName)}
+                        className="w-full rounded-xl h-10 px-4 py-2 text-xs sm:text-sm font-semibold border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 gap-2 shadow-2xs mt-2 transition-all"
                       >
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Settle Refund
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" /> Settle Refund
                       </Button>
                     </div>
                   ))
@@ -120,32 +122,37 @@ export default function SecurityDepositLedgerPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Tenant Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Occupancy Status</TableHead>
-                      <TableHead className="text-right">Deposit Held (₹)</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
+                      <TableHead className="py-3 px-4">Tenant Name</TableHead>
+                      <TableHead className="py-3 px-4">Email</TableHead>
+                      <TableHead className="py-3 px-4">Phone</TableHead>
+                      <TableHead className="py-3 px-4">Occupancy Status</TableHead>
+                      <TableHead className="py-3 px-4 text-right">Deposit Held (₹)</TableHead>
+                      <TableHead className="py-3 px-4 text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.length > 0 ? (
                       rows.map((row: any) => (
-                        <TableRow key={row.tenantId}>
-                          <TableCell className="font-medium text-xs">{row.tenantName}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{row.email || 'N/A'}</TableCell>
-                          <TableCell className="text-xs">{row.phone || 'N/A'}</TableCell>
-                          <TableCell>
-                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                              row.status === 'active' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
+                        <TableRow key={row.tenantId} className="hover:bg-muted/40">
+                          <TableCell className="font-medium text-xs py-3.5 px-4">{row.tenantName}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground py-3.5 px-4">{row.email || 'N/A'}</TableCell>
+                          <TableCell className="text-xs py-3.5 px-4">{row.phone || 'N/A'}</TableCell>
+                          <TableCell className="py-3.5 px-4">
+                            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                              row.status === 'active' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
                             }`}>
                               {row.status.toUpperCase()}
                             </span>
                           </TableCell>
-                          <TableCell className="text-right font-bold text-xs text-emerald-600">{formatCurrency(row.depositAmount)}</TableCell>
-                          <TableCell className="text-right">
-                            <Button size="sm" variant="outline" onClick={() => handleProcessRefund(row.tenantName)} className="rounded-xl h-8.5 text-xs font-semibold">
-                              <CheckCircle2 className="mr-1 h-3.5 w-3.5 text-emerald-600" /> Settle Refund
+                          <TableCell className="text-right font-bold text-xs text-emerald-600 py-3.5 px-4 font-mono">{formatCurrency(row.depositAmount)}</TableCell>
+                          <TableCell className="text-right py-3.5 px-4">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleProcessRefund(row.tenantId, row.tenantName)}
+                              className="rounded-xl h-9 px-4 py-2 text-xs font-semibold border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 gap-2 shadow-2xs transition-all shrink-0"
+                            >
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" /> Settle Refund
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -164,6 +171,22 @@ export default function SecurityDepositLedgerPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Interactive Settlement & Refund Modal */}
+      {settlementTenant && (
+        <CheckoutSettlementModal
+          isOpen={!!settlementTenant}
+          onClose={() => setSettlementTenant(null)}
+          tenantId={settlementTenant.id}
+          tenantName={settlementTenant.name}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['accountant', 'security-deposits'] });
+            queryClient.invalidateQueries({ queryKey: ['accountant', 'ledger'] });
+            queryClient.invalidateQueries({ queryKey: ['accountant', 'overview'] });
+            toast.success(`Deposit settlement processed successfully!`);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
 import { formatCurrency, resolveFileUrl } from '@/lib/format';
 import { useDebounce } from '@/lib/hooks/use-debounce';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Building as BuildingType } from '@/lib/types';
 
 interface Occupant {
@@ -45,13 +46,12 @@ interface RoomSheetItem {
   floorNumber?: number;
   floorName: string;
   capacity: number;
-  occupiedCount: number;
-  lastReadingValue: number;
-  lastReadingDate: string;
-  defaultUnitRate: number;
-  defaultSplitMode: string;
-  occupants: Occupant[];
-  // Editable form state
+  occupiedCount?: number;
+  lastReadingValue?: number;
+  lastReadingDate?: string;
+  defaultUnitRate?: number;
+  defaultSplitMode?: string;
+  occupants?: Occupant[];
   currentReading?: number;
   unitRate?: number;
   freeAllowanceUnits?: number;
@@ -62,14 +62,22 @@ interface RoomSheetItem {
   hasSavedDraft?: boolean;
   status?: string;
   calculatedUnits?: number;
+  previousReading?: number;
+  unitsConsumed?: number;
+  ratePerUnit?: number;
+  freeAllowance?: number;
+  fixedCharge?: number;
+  readingProofUrl?: string;
+  invoiceId?: string;
+  readingDate?: string;
   calculatedAmount?: number;
   tenantSplits?: any[];
 }
 
 export default function UtilitiesPage() {
   const queryClient = useQueryClient();
+  const { selectedPropertyId: globalPropertyId, setSelectedPropertyId: setGlobalPropertyId } = usePropertyStore();
 
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>('ALL');
   const [billingMonth, setBillingMonth] = useState<number>(new Date().getMonth() + 1);
   const [billingYear, setBillingYear] = useState<number>(new Date().getFullYear());
@@ -77,6 +85,25 @@ export default function UtilitiesPage() {
   const [defaultFreeAllowance, setDefaultFreeAllowance] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const debouncedSearch = useDebounce(searchTerm, 400);
+
+  // Fetch properties
+  const { data: properties } = useQuery({
+    queryKey: ['utilities-properties-minimal'],
+    queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
+  });
+
+  const activePropertyId = useMemo(() => {
+    if (globalPropertyId && globalPropertyId !== 'ALL') {
+      return globalPropertyId;
+    }
+    return properties && properties.length > 0 ? properties[0].id : '';
+  }, [globalPropertyId, properties]);
+
+  const setSelectedPropertyId = (newId: string) => {
+    setGlobalPropertyId(newId);
+  };
+
+  const selectedPropertyId = activePropertyId;
 
   // Pagination state
   const [page, setPage] = useState<number>(0);
@@ -93,12 +120,6 @@ export default function UtilitiesPage() {
     setPage(0);
   }, [selectedPropertyId, selectedBuildingId, billingMonth, billingYear, debouncedSearch]);
 
-  // Fetch properties
-  const { data: properties } = useQuery({
-    queryKey: ['utilities-properties-minimal'],
-    queryFn: () => api.get<any[]>('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
-  });
-
   // Fetch buildings for the property
   const { data: buildings } = useQuery({
     queryKey: ['utilities-buildings', selectedPropertyId],
@@ -109,13 +130,6 @@ export default function UtilitiesPage() {
     }),
     enabled: !!selectedPropertyId,
   });
-
-  // Set default selected property once properties load
-  useEffect(() => {
-    if (properties && properties.length > 0 && !selectedPropertyId) {
-      setSelectedPropertyId(properties[0].id);
-    }
-  }, [properties, selectedPropertyId]);
 
   // Dedicated Server-Side Utility Statistics Query
   const { data: serverStats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
@@ -681,7 +695,7 @@ export default function UtilitiesPage() {
 
                       {/* Active Roommates */}
                       <td className="py-3.5 px-3">
-                        {item.occupants.length === 0 ? (
+                        {(!item.occupants || item.occupants.length === 0) ? (
                           <span className="text-muted-foreground italic">Vacant</span>
                         ) : (
                           <div className="space-y-1 max-w-[170px]">

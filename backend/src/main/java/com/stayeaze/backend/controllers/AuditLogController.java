@@ -30,40 +30,17 @@ public class AuditLogController {
     @Autowired
     private com.stayeaze.backend.repository.UserRepository userRepository;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        if (SecurityContextHolder.getContext().getAuthentication() == null) return null;
-        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        if (principal instanceof UserDetailsImpl userDetails) {
-            if (userDetails.getOrgId() != null) {
-                return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
-            }
-        }
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        if (username != null) {
-            com.stayeaze.backend.models.User user = userRepository.findByEmail(username).orElseGet(() ->
-                    userRepository.findByMobile(username).orElse(null));
-            if (user != null && user.getOrganization() != null) {
-                return user.getOrganization();
-            }
-        }
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
         return organizationRepository.findAll().stream().findFirst().orElse(null);
     }
 
     private boolean isSuperAdminUser() {
-        if (SecurityContextHolder.getContext().getAuthentication() == null) return false;
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth.getAuthorities() != null) {
-            boolean hasSuperAdminRole = auth.getAuthorities().stream()
-                    .anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_SUPER_ADMIN") || a.getAuthority().equalsIgnoreCase("SUPER_ADMIN"));
-            if (hasSuperAdminRole) return true;
-        }
-        if (auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
-            com.stayeaze.backend.models.User user = userRepository.findById(userDetails.getId()).orElse(null);
-            if (user != null && user.getRoles() != null) {
-                return user.getRoles().stream().anyMatch(r -> r.getName() != null && (r.getName().equalsIgnoreCase("SUPER_ADMIN") || r.getName().equalsIgnoreCase("ROLE_SUPER_ADMIN")));
-            }
-        }
-        return false;
+        return securityUtils.isSuperAdmin();
     }
 
     @GetMapping

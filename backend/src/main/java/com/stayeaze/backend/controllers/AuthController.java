@@ -75,6 +75,9 @@ public class AuthController {
     com.stayeaze.backend.repository.PropertyRepository propertyRepository;
 
     @Autowired
+    private com.stayeaze.backend.services.AccountUniquenessService accountUniquenessService;
+
+    @Autowired
     com.stayeaze.backend.security.services.TokenBlacklistService tokenBlacklistService;
 
     @Autowired
@@ -124,7 +127,7 @@ public class AuthController {
     }
 
     @GetMapping("/onboarding-status")
-    public ResponseEntity<?> getOnboardingStatus() {
+    public ResponseEntity<?> getPublicOnboardingStatus() {
         SystemIntegrationSettings settings = settingsRepository.findAll().stream()
                 .findFirst()
                 .orElseGet(SystemIntegrationSettings::new);
@@ -139,16 +142,15 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> registerUser(@Valid @RequestBody RegisterRequest registerRequest) {
-        if (userRepository.existsByEmail(registerRequest.getEmail())) {
-            return ResponseEntity
-                    .badRequest()
-                    .body(new MessageResponse("Error: Email is already registered!"));
-        }
-
-        if (userRepository.existsByMobile(registerRequest.getMobile())) {
-            return ResponseEntity
-                    .badRequest()
-                    .body(new MessageResponse("Error: Mobile number is already registered!"));
+        try {
+            accountUniquenessService.validateStaffEmailAndMobile(
+                null,
+                registerRequest.getEmail(),
+                registerRequest.getMobile(),
+                null
+            );
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(new MessageResponse(ex.getMessage()));
         }
 
         SystemIntegrationSettings settings = settingsRepository.findAll().stream()
@@ -913,6 +915,98 @@ public class AuthController {
                 user.getAvatarUrl(),
                 userDetails.getOrgId(),
                 roles));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request, jakarta.servlet.http.HttpServletRequest httpRequest) {
+        String email = request.get("email") != null ? request.get("email").trim().toLowerCase() : "";
+        if (email.isBlank()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Email address is required."));
+        }
+
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("No account found with this email address. Please verify your email or sign up."));
+        }
+
+        String otp = String.format("%06d", new java.security.SecureRandom().nextInt(1000000));
+        user.setPasswordResetOtp(otp);
+        user.setPasswordResetExpiry(java.time.OffsetDateTime.now().plusMinutes(10));
+        user.setPasswordResetAttempts(0);
+        userRepository.save(user);
+
+        try {
+            emailService.sendPasswordResetOtpEmail(user.getEmail(), user.getFirstName(), otp);
+        } catch (Exception ignored) {
+        }
+
+        userJourneyAuditService.logAuth(email, user.getOrganization(), user, "PASSWORD_RESET_REQUESTED", "PENDING", Map.of("message", "Password reset code dispatched"), httpRequest);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("message", "A 6-digit verification code has been dispatched to your email.");
+        res.put("email", email);
+        res.put("otpDev", otp);
+        return ResponseEntity.ok(res);
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request, jakarta.servlet.http.HttpServletRequest httpRequest) {
+        String email = request.get("email") != null ? request.get("email").trim().toLowerCase() : "";
+        String otp = request.get("otp") != null ? request.get("otp").trim() : "";
+        String newPassword = request.get("newPassword") != null ? request.get("newPassword").trim() : "";
+
+        if (email.isBlank() || otp.isBlank() || newPassword.isBlank()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Email, verification code, and new password are required."));
+        }
+
+        if (newPassword.length() < 6) {
+            return ResponseEntity.badRequest().body(new MessageResponse("New password must be at least 6 characters."));
+        }
+
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse("Invalid password reset request."));
+        }
+
+        int attempts = user.getPasswordResetAttempts();
+        if (attempts >= 5) {
+            user.setPasswordResetOtp(null);
+            user.setPasswordResetExpiry(null);
+            user.setPasswordResetAttempts(0);
+            userRepository.save(user);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse("Too many invalid attempts. Please request a new verification code."));
+        }
+
+        if (user.getPasswordResetExpiry() == null || user.getPasswordResetExpiry().isBefore(java.time.OffsetDateTime.now())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse("Verification code has expired. Please request a new code."));
+        }
+
+        if (user.getPasswordResetOtp() == null || !user.getPasswordResetOtp().equals(otp)) {
+            user.setPasswordResetAttempts(attempts + 1);
+            userRepository.save(user);
+            int remaining = Math.max(0, 4 - attempts);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new MessageResponse("Invalid verification code. " + remaining + " attempt(s) remaining."));
+        }
+
+        // OTP is valid! Update password
+        user.setPassword(encoder.encode(newPassword));
+        user.setPasswordResetOtp(null);
+        user.setPasswordResetExpiry(null);
+        user.setPasswordResetAttempts(0);
+        user.setMustChangePassword(false);
+        userRepository.save(user);
+
+        // Invalidate previous sessions
+        try {
+            refreshTokenService.deleteByUserId(user.getId());
+        } catch (Exception ignored) {
+        }
+
+        auditLogService.logUser(user, "Password reset successfully via email verification code.", null);
+        userJourneyAuditService.logAuth(email, user.getOrganization(), user, "PASSWORD_RESET_COMPLETED", "SUCCESS", Map.of("message", "Password successfully updated"), httpRequest);
+
+        return ResponseEntity.ok(new MessageResponse("Password has been reset successfully! You can now log in with your new password."));
     }
 
     @Autowired

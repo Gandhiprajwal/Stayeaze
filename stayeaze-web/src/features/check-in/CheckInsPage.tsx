@@ -17,6 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import { formatCurrency, formatDate, formatRoomName } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 import { validateRequired, validateEmail, validatePhone, validateIdNumber, validateNumber } from '@/lib/validation';
@@ -133,6 +134,7 @@ export default function CheckInsPage() {
     }),
   });
 
+  const { selectedPropertyId } = usePropertyStore();
   const [manualPaymentSettled, setManualPaymentSettled] = useState(false);
 
   function openCreate() {
@@ -141,7 +143,8 @@ export default function CheckInsPage() {
     setEditing(null);
     setSelectedRoomId('');
     const defaultDep = Number(defaultDepData?.defaultSecurityDeposit || 0);
-    form.reset({ ...emptyForm, depositPaid: defaultDep });
+    const defaultProp = selectedPropertyId && selectedPropertyId !== 'ALL' ? selectedPropertyId : '';
+    form.reset({ ...emptyForm, propertyId: defaultProp, depositPaid: defaultDep });
     setDialogOpen(true);
   }
 

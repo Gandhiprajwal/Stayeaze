@@ -68,6 +68,15 @@ public class User {
     @Column(name = "two_factor_otp_expiry")
     private OffsetDateTime twoFactorOtpExpiry;
 
+    @Column(name = "password_reset_otp", length = 10)
+    private String passwordResetOtp;
+
+    @Column(name = "password_reset_expiry")
+    private OffsetDateTime passwordResetExpiry;
+
+    @Column(name = "password_reset_attempts")
+    private Integer passwordResetAttempts = 0;
+
     @Column(name = "created_at", updatable = false)
 
     private OffsetDateTime createdAt = OffsetDateTime.now();
@@ -266,6 +275,30 @@ public class User {
 
     public void setTenantId(UUID tenantId) {
         this.tenantId = tenantId;
+    }
+
+    public String getPasswordResetOtp() {
+        return passwordResetOtp;
+    }
+
+    public void setPasswordResetOtp(String passwordResetOtp) {
+        this.passwordResetOtp = passwordResetOtp;
+    }
+
+    public OffsetDateTime getPasswordResetExpiry() {
+        return passwordResetExpiry;
+    }
+
+    public void setPasswordResetExpiry(OffsetDateTime passwordResetExpiry) {
+        this.passwordResetExpiry = passwordResetExpiry;
+    }
+
+    public Integer getPasswordResetAttempts() {
+        return passwordResetAttempts != null ? passwordResetAttempts : 0;
+    }
+
+    public void setPasswordResetAttempts(Integer passwordResetAttempts) {
+        this.passwordResetAttempts = passwordResetAttempts;
     }
 }
 

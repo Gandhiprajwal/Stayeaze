@@ -18,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Building, Property } from '@/lib/types';
 import { occupancyRate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
@@ -28,6 +29,7 @@ const statuses = [{ value: 'active', label: 'Active' }, { value: 'inactive', lab
 const emptyForm = { name: '', code: '', propertyId: '', status: 'active' as Building['status'] };
 
 export default function BuildingsPage() {
+  const { selectedPropertyId } = usePropertyStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Building | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Building | null>(null);
@@ -50,7 +52,9 @@ export default function BuildingsPage() {
 
   function openCreate() {
     setEditing(null);
-    const defaultPropId = properties && properties.length > 0 ? properties[0].id : '';
+    const defaultPropId = selectedPropertyId && selectedPropertyId !== 'ALL'
+      ? selectedPropertyId
+      : properties && properties.length > 0 ? properties[0].id : '';
     form.reset({ ...emptyForm, propertyId: defaultPropId });
     setDialogOpen(true);
   }

@@ -16,6 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Floor } from '@/lib/types';
 import type { Building as BuildingType } from '@/lib/types';
 import { occupancyRate } from '@/lib/format';
@@ -36,6 +37,7 @@ const emptyForm: FormValues = {
 };
 
 export default function FloorsPage() {
+  const { selectedPropertyId } = usePropertyStore();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Floor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Floor | null>(null);
@@ -69,7 +71,7 @@ export default function FloorsPage() {
 
   function openCreate() {
     setEditing(null);
-    setSelectedPropId('');
+    setSelectedPropId(selectedPropertyId && selectedPropertyId !== 'ALL' ? selectedPropertyId : '');
     form.reset(emptyForm);
     setDialogOpen(true);
   }

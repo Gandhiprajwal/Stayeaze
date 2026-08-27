@@ -64,6 +64,9 @@ public class BuildingController {
     @Autowired
     private TenantRepository tenantRepository;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Building populateBuildingStats(Building b) {
         if (b == null) return null;
         List<Floor> bFloors = floorRepository.findByBuildingId(b.getId());
@@ -89,19 +92,13 @@ public class BuildingController {
                     rBedCount = r.getSharing();
                 }
                 totalBeds += rBedCount;
-                for (Bed bed : rBeds) {
-                    boolean isOcc = "OCCUPIED".equalsIgnoreCase(bed.getStatus());
-                    if (!isOcc && activeTenants != null) {
-                        for (Tenant t : activeTenants) {
-                            boolean statusOk = t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus());
-                            if (statusOk && r.getRoomNumber() != null && r.getRoomNumber().equalsIgnoreCase(t.getRoomNumber())
-                                    && bed.getBedNumber() != null && bed.getBedNumber().equalsIgnoreCase(t.getBedNumber())) {
-                                isOcc = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (isOcc) occupiedBeds++;
+                if (activeTenants != null) {
+                    String rNum = r.getRoomNumber();
+                    occupiedBeds += (int) activeTenants.stream().filter(t -> {
+                        String ts = t.getStatus();
+                        boolean isOut = "CHECKED_OUT".equalsIgnoreCase(ts) || "ARCHIVED".equalsIgnoreCase(ts);
+                        return !isOut && rNum != null && rNum.equalsIgnoreCase(t.getRoomNumber());
+                    }).count();
                 }
             }
         }
@@ -112,9 +109,9 @@ public class BuildingController {
     }
 
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
@@ -224,17 +221,17 @@ public class BuildingController {
     @GetMapping("/buildings")
     public ResponseEntity<?> getFlatBuildings(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
-        boolean isSuperAdmin = isSuperAdminUser();
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) UUID propertyId) {
+        boolean isSuperAdmin = securityUtils.isSuperAdmin();
         Organization organization = !isSuperAdmin ? getLoggedUserOrg() : null;
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
 
-        // Property-restricted users: bypass cache (filtered list is user-specific)
-        User user = !isSuperAdmin ? userRepository.findById(userDetails.getId()).orElse(null) : null;
-        if (organization != null && user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (organization != null && (assignedProps != null || propertyId != null)) {
             List<Building> buildings = buildingRepository.findByOrganizationId(organization.getId()).stream()
-                    .filter(b -> b.getProperty() != null && user.getPropertyIds().contains(b.getProperty().getId()))
+                    .filter(b -> b.getProperty() != null)
+                    .filter(b -> assignedProps == null || assignedProps.contains(b.getProperty().getId()))
+                    .filter(b -> propertyId == null || propertyId.equals(b.getProperty().getId()))
                     .collect(Collectors.toList());
             buildings.forEach(this::populateBuildingStats);
             List<BuildingDTO> dtos = buildings.stream().map(BuildingDTO::fromEntity).collect(Collectors.toList());
@@ -245,6 +242,11 @@ public class BuildingController {
         List<BuildingDTO> all = (isSuperAdmin || organization == null)
                 ? buildingService.getAllBuildings()
                 : buildingService.getBuildingsByOrg(organization);
+
+        if (propertyId != null) {
+            all = all.stream().filter(b -> propertyId.equals(b.getPropertyId())).collect(Collectors.toList());
+        }
+
         return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
     }
 

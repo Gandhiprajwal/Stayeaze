@@ -49,24 +49,12 @@ public class VisitorController {
     @Autowired
     private WebSocketNotificationService webSocketNotificationService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        if (principal instanceof UserDetailsImpl userDetails) {
-            if (userDetails.getOrgId() != null) {
-                return organizationRepository.findById(userDetails.getOrgId())
-                        .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
-            }
-        } else if (principal instanceof org.springframework.security.core.userdetails.UserDetails userDetails) {
-            java.util.Optional<com.stayeaze.backend.models.User> uOpt = userRepository.findByEmail(userDetails.getUsername());
-            if (uOpt.isPresent() && uOpt.get().getOrganization() != null) {
-                return uOpt.get().getOrganization();
-            }
-        } else if (principal instanceof String email) {
-            java.util.Optional<com.stayeaze.backend.models.User> uOpt = userRepository.findByEmail(email);
-            if (uOpt.isPresent() && uOpt.get().getOrganization() != null) {
-                return uOpt.get().getOrganization();
-            }
-        }
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
         List<Organization> orgs = organizationRepository.findAll();
         if (!orgs.isEmpty()) {
             return orgs.get(0);
@@ -119,9 +107,21 @@ public class VisitorController {
     public ResponseEntity<?> getFlatVisitors(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int pageSize,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID propertyId) {
         Organization organization = getLoggedUserOrg();
         List<Visitor> visitors = visitorRepository.findByOrganizationIdNative(organization.getId());
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            visitors = visitors.stream()
+                    .filter(v -> v.getProperty() != null && assignedProps.contains(v.getProperty().getId()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        if (propertyId != null) {
+            visitors = visitors.stream()
+                    .filter(v -> v.getProperty() != null && propertyId.equals(v.getProperty().getId()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
         if (status != null && !status.isBlank()) {
             visitors = visitors.stream()
                     .filter(v -> status.equalsIgnoreCase(v.getStatus()))

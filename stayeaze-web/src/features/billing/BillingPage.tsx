@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import api from '@/lib/api';
+import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Invoice, InvoiceIssuerSnapshot, Property, Tenant } from '@/lib/types';
 import { formatCurrency, formatDate, numberToWords } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm, useBulkDelete } from '@/lib/hooks/use-crud';
@@ -55,6 +56,7 @@ const emptyForm = {
 export default function BillingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { selectedPropertyId } = usePropertyStore();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
@@ -80,8 +82,11 @@ export default function BillingPage() {
   });
 
   const { data: invoices } = useQuery({
-    queryKey: ['billing-stats'],
-    queryFn: () => api.get<{ data: Invoice[] }>(ENDPOINT, { params: { pageSize: 200 } }).then((r) => r.data.data),
+    queryKey: ['billing-stats', selectedPropertyId],
+    queryFn: () => {
+      const p = selectedPropertyId !== 'ALL' ? { propertyId: selectedPropertyId, pageSize: 500 } : { pageSize: 500 };
+      return api.get<{ data: Invoice[] }>(ENDPOINT, { params: p }).then((r) => r.data.data);
+    },
   });
   // Old invoices created before issuer snapshots use the current organization profile as a fallback.
   const { data: currentBillingProfile } = useQuery({
@@ -277,7 +282,8 @@ export default function BillingPage() {
   }
 
   function openCreate() {
-    form.reset(emptyForm);
+    const defaultProp = selectedPropertyId && selectedPropertyId !== 'ALL' ? selectedPropertyId : '';
+    form.reset({ ...emptyForm, propertyId: defaultProp });
     setDialogOpen(true);
   }
 
@@ -474,8 +480,7 @@ export default function BillingPage() {
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t">
                   <Button
-                    size="sm"
-                    className="h-8.5 rounded-xl text-xs flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                    className="h-9.5 px-4 rounded-xl text-xs sm:text-sm flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 shadow-xs"
                     disabled={approveUtrMut.isPending || rejectUtrMut.isPending}
                     onClick={() => setApprovingInvoice({
                       id: inv.id,
@@ -485,12 +490,11 @@ export default function BillingPage() {
                       paymentRef: inv.paymentReference,
                     })}
                   >
-                    <Check className="mr-1 h-3.5 w-3.5" /> Approve
+                    <Check className="h-4 w-4 shrink-0" /> Approve
                   </Button>
                   <Button
-                    size="sm"
                     variant="outline"
-                    className="h-8.5 rounded-xl text-xs text-rose-600 border-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                    className="h-9.5 px-3.5 rounded-xl text-xs sm:text-sm text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/80 bg-rose-50/50 dark:bg-rose-950/30 hover:bg-rose-100/60 dark:hover:bg-rose-900/50 gap-1.5"
                     disabled={approveUtrMut.isPending || rejectUtrMut.isPending}
                     onClick={() => {
                       setRejectReason('');
@@ -502,7 +506,7 @@ export default function BillingPage() {
                       });
                     }}
                   >
-                    <X className="mr-1 h-3.5 w-3.5" /> Reject
+                    <X className="h-4 w-4 shrink-0" /> Reject
                   </Button>
                 </div>
               </div>
@@ -856,8 +860,8 @@ export default function BillingPage() {
               <Receipt className="h-4.5 w-4.5 text-primary shrink-0" /> Official Rent Receipt
             </DialogTitle>
             <div className="flex items-center gap-2">
-              <Button size="sm" onClick={handlePrintInvoice} className="h-8.5 rounded-xl text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-xs">
-                <Printer className="mr-1.5 h-3.5 w-3.5" /> Print / Save PDF
+              <Button onClick={handlePrintInvoice} className="h-9.5 px-4 rounded-xl text-xs sm:text-sm bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-xs gap-2">
+                <Printer className="h-4 w-4 shrink-0" /> Print / Save PDF
               </Button>
             </div>
           </DialogHeader>
@@ -1116,7 +1120,7 @@ export default function BillingPage() {
             </div>
           )}
 
-          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-3 border-t">
             <Button
               variant="outline"
               className="rounded-xl h-10 w-full sm:w-auto font-medium"
@@ -1171,7 +1175,7 @@ export default function BillingPage() {
             </div>
           )}
 
-          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-3 border-t">
             <Button
               variant="outline"
               className="rounded-xl h-10 w-full sm:w-auto font-medium"

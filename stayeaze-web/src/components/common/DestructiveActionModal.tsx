@@ -69,9 +69,9 @@ export function DestructiveActionModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md p-0 rounded-2xl overflow-hidden border shadow-2xl bg-card gap-0">
+      <DialogContent className="max-w-md p-0 rounded-2xl overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 gap-0">
         {/* Top Header */}
-        <div className="p-5 pb-4 flex items-start gap-3.5 border-b bg-muted/30">
+        <div className="p-5 pb-4 flex items-start gap-3.5 border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900">
           {getHeaderIcon()}
           <div className="space-y-1 min-w-0 flex-1">
             <DialogTitle className="text-base font-black tracking-tight text-foreground">
@@ -118,32 +118,30 @@ export function DestructiveActionModal({
         </div>
 
         {/* Footer Actions */}
-        <DialogFooter className="p-4 bg-muted/20 border-t flex items-center justify-end gap-2">
+        <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 p-4 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900">
           <Button
             type="button"
             variant="outline"
-            size="sm"
             onClick={handleClose}
             disabled={loading}
-            className="text-xs rounded-xl h-9 font-medium"
+            className="h-9 px-4 text-xs font-semibold"
           >
             {cancelLabel}
           </Button>
           <Button
             type="button"
-            size="sm"
             onClick={() => {
               if (isConfirmed) {
                 onConfirm();
               }
             }}
             disabled={!isConfirmed || loading}
-            className={`text-xs rounded-xl h-9 px-4 font-bold shadow-xs transition-all ${
+            className={`h-9 px-4 text-xs font-semibold shadow-xs transition-all ${
               variant === 'danger'
-                ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20'
+                ? 'bg-rose-600 hover:bg-rose-700 text-white'
                 : variant === 'warning'
-                ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20'
-                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'
+                ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
             }`}
           >
             {loading ? (

@@ -15,6 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -28,18 +29,32 @@ public class MaintenanceController {
     @Autowired
     private OrganizationRepository organizationRepository;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
     @GetMapping
     public ResponseEntity<?> getAllMaintenanceTasks(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) UUID propertyId) {
         Organization organization = getLoggedUserOrg();
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null || propertyId != null) {
+            List<Maintenance> filtered = maintenanceRepository.findByOrganizationId(organization.getId()).stream()
+                    .filter(m -> m.getPropertyId() != null)
+                    .filter(m -> assignedProps == null || assignedProps.contains(m.getPropertyId()))
+                    .filter(m -> propertyId == null || propertyId.equals(m.getPropertyId()))
+                    .collect(java.util.stream.Collectors.toList());
+            return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(filtered, page, pageSize));
+        }
+
         org.springframework.data.domain.Pageable pageable =
                 org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
         org.springframework.data.domain.Page<Maintenance> pageResult = maintenanceRepository.findByOrganizationId(organization.getId(), pageable);
@@ -51,6 +66,9 @@ public class MaintenanceController {
     public ResponseEntity<?> createMaintenanceTask(@Valid @RequestBody Maintenance request) {
         Organization organization = getLoggedUserOrg();
         request.setOrganization(organization);
+        if (request.getPropertyId() != null) {
+            securityUtils.validatePropertyAccess(request.getPropertyId());
+        }
         
         if (request.getTicketNumber() == null || request.getTicketNumber().isEmpty()) {
             request.setTicketNumber("MNT-" + String.valueOf(System.currentTimeMillis()).substring(8));

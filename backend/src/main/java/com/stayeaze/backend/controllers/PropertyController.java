@@ -61,20 +61,12 @@ public class PropertyController {
     @Autowired
     private com.stayeaze.backend.repository.OnboardingLeadRepository onboardingLeadRepository;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        if (principal instanceof UserDetailsImpl userDetails) {
-            if (userDetails.getOrgId() != null) {
-                return organizationRepository.findById(userDetails.getOrgId())
-                        .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
-            }
-        }
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userRepository.findByEmail(username).orElseGet(() ->
-                userRepository.findByMobile(username).orElse(null));
-        if (user != null && user.getOrganization() != null) {
-            return user.getOrganization();
-        }
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
         return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
@@ -319,27 +311,14 @@ public class PropertyController {
             int totalPages = (total == 0) ? 1 : (int) Math.ceil((double) total / pageSize);
             return ResponseEntity.ok(new com.stayeaze.backend.payload.response.PageResponse<>(pageSlice, (long) total, page, pageSize, totalPages));
         } else {
-            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                    .getAuthentication().getPrincipal();
-            User user = userRepository.findById(userDetails.getId()).orElse(null);
-            List<PropertySummaryDTO> summaries;
-            if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
-                List<Property> props = propertyRepository.findByIdIn(user.getPropertyIds());
-                if (props.isEmpty() && user.getOrganization() != null) {
-                    summaries = propertyService.getPropertySummariesByOrganization(user.getOrganization());
-                } else {
-                    props = propertyService.populatePropertiesStats(props);
-                    summaries = props.stream()
-                            .map(PropertySummaryDTO::fromEntity)
-                            .collect(Collectors.toList());
-                }
-            } else if (user != null && user.getOrganization() != null) {
-                summaries = propertyService.getPropertySummariesByOrganization(user.getOrganization());
-            } else if (userDetails != null && userDetails.getOrgId() != null) {
-                Organization org = organizationRepository.findById(userDetails.getOrgId()).orElse(null);
-                summaries = propertyService.getPropertySummariesByOrganization(org);
-            } else {
-                summaries = new ArrayList<>();
+            Organization organization = getLoggedUserOrg();
+            List<PropertySummaryDTO> summaries = propertyService.getPropertySummariesByOrganization(organization);
+
+            Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+            if (assignedProps != null) {
+                summaries = summaries.stream()
+                        .filter(p -> assignedProps.contains(p.getId()))
+                        .collect(Collectors.toList());
             }
             return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(summaries, page, pageSize));
         }
@@ -347,31 +326,25 @@ public class PropertyController {
 
     @GetMapping("/minimal")
     public ResponseEntity<?> getMinimalProperties() {
-        Object principal = SecurityContextHolder.getContext().getAuthentication() != null
-                ? SecurityContextHolder.getContext().getAuthentication().getPrincipal()
-                : null;
-
-        if (!(principal instanceof UserDetailsImpl userDetails)) {
-            return ResponseEntity.ok(new ArrayList<>());
-        }
-
-        boolean isSuperAdmin = isSuperAdminUser();
+        boolean isSuperAdmin = securityUtils.isSuperAdmin();
 
         List<MinimalPropertyDTO> properties;
         if (isSuperAdmin) {
             properties = propertyService.getMinimalPropertiesForSuperAdmin();
         } else {
-            UUID orgId = userDetails.getOrgId();
-            if (orgId != null) {
-                List<com.stayeaze.backend.projection.MinimalPropertyView> views = propertyRepository.findMinimalByOrgIdNative(orgId);
+            Organization org = getLoggedUserOrg();
+            if (org != null) {
+                List<com.stayeaze.backend.projection.MinimalPropertyView> views = propertyRepository.findMinimalByOrgIdNative(org.getId());
                 properties = views != null ? views.stream().map(MinimalPropertyDTO::fromProjection).collect(Collectors.toList()) : new ArrayList<>();
             } else {
-                User user = userRepository.findById(userDetails.getId()).orElse(null);
-                if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
-                    properties = propertyService.getMinimalPropertiesByIds(user.getPropertyIds());
-                } else {
-                    properties = new ArrayList<>();
-                }
+                properties = new ArrayList<>();
+            }
+
+            Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+            if (assignedProps != null) {
+                properties = properties.stream()
+                        .filter(p -> assignedProps.contains(p.getId()))
+                        .collect(Collectors.toList());
             }
         }
 
@@ -533,29 +506,108 @@ public class PropertyController {
         return ResponseEntity.ok(PropertyDTO.fromEntity(propertyService.populatePropertyStats(updated)));
     }
 
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<?> deleteProperty(@PathVariable UUID id) {
+    @GetMapping("/{id}/pre-delete-summary")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER') or hasRole('ADMIN')")
+    public ResponseEntity<?> getPropertyPreDeleteSummary(@PathVariable UUID id) {
         boolean isSuperAdmin = isSuperAdminUser();
-
-        Property property;
-        if (isSuperAdmin) {
-            property = propertyRepository.findByIdSuperAdmin(id).orElse(null);
-        } else {
-            Organization organization = getLoggedUserOrg();
-            property = propertyRepository.findByIdAndOrganization(id, organization)
-                    .orElse(null);
-        }
+        Organization organization = getLoggedUserOrg();
+        Property property = isSuperAdmin ? propertyRepository.findByIdSuperAdmin(id).orElse(null)
+                : propertyRepository.findByIdAndOrganization(id, organization).orElse(null);
 
         if (property == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new MessageResponse("Error: Property not found or unauthorized."));
         }
 
-        // Archive rather than hard-deleting
-        property.setStatus("ARCHIVED");
-        propertyService.saveProperty(property);
+        Map<String, Object> summary = propertyService.getPropertyPreDeleteSummary(id, organization);
+        return ResponseEntity.ok(summary);
+    }
 
-        return ResponseEntity.ok(new MessageResponse("Property successfully archived."));
+    @GetMapping("/{id}/export-snapshot")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER') or hasRole('ADMIN')")
+    public ResponseEntity<?> exportPropertySnapshot(@PathVariable UUID id) {
+        boolean isSuperAdmin = isSuperAdminUser();
+        Organization organization = getLoggedUserOrg();
+        Property property = isSuperAdmin ? propertyRepository.findByIdSuperAdmin(id).orElse(null)
+                : propertyRepository.findByIdAndOrganization(id, organization).orElse(null);
+
+        if (property == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Error: Property not found or unauthorized."));
+        }
+
+        Map<String, Object> snapshot = propertyService.exportPropertySnapshot(id, organization);
+        return ResponseEntity.ok(snapshot);
+    }
+
+    @PutMapping("/{id}/archive")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER') or hasRole('ADMIN')")
+    public ResponseEntity<?> archivePropertyEndpoint(@PathVariable UUID id) {
+        return handleArchive(id);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER') or hasRole('ADMIN')")
+    public ResponseEntity<?> deleteProperty(@PathVariable UUID id) {
+        return handleArchive(id);
+    }
+
+    private ResponseEntity<?> handleArchive(UUID id) {
+        boolean isSuperAdmin = isSuperAdminUser();
+        Organization organization = getLoggedUserOrg();
+        Property property = isSuperAdmin ? propertyRepository.findByIdSuperAdmin(id).orElse(null)
+                : propertyRepository.findByIdAndOrganization(id, organization).orElse(null);
+
+        if (property == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Error: Property not found or unauthorized."));
+        }
+
+        propertyService.archivePropertyCascade(id, organization);
+        return ResponseEntity.ok(new MessageResponse("Property and its spaces successfully archived."));
+    }
+
+    @PutMapping("/{id}/restore")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER') or hasRole('ADMIN')")
+    public ResponseEntity<?> restoreProperty(@PathVariable UUID id) {
+        boolean isSuperAdmin = isSuperAdminUser();
+        Organization organization = getLoggedUserOrg();
+        Property property = isSuperAdmin ? propertyRepository.findByIdSuperAdmin(id).orElse(null)
+                : propertyRepository.findByIdAndOrganization(id, organization).orElse(null);
+
+        if (property == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Error: Property not found or unauthorized."));
+        }
+
+        propertyService.restorePropertyCascade(id, organization);
+        return ResponseEntity.ok(new MessageResponse("Property and spaces successfully restored to active."));
+    }
+
+    @DeleteMapping("/{id}/permanent")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER') or hasRole('ADMIN')")
+    public ResponseEntity<?> permanentPurgeProperty(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "false") boolean autoArchiveTenants) {
+        boolean isSuperAdmin = isSuperAdminUser();
+        Organization organization = getLoggedUserOrg();
+        Property property = isSuperAdmin ? propertyRepository.findByIdSuperAdmin(id).orElse(null)
+                : propertyRepository.findByIdAndOrganization(id, organization).orElse(null);
+
+        if (property == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Error: Property not found or unauthorized."));
+        }
+
+        try {
+            propertyService.permanentPurgeProperty(id, organization, autoArchiveTenants);
+            return ResponseEntity.ok(new MessageResponse("Property and all associated assets successfully purged permanently."));
+        } catch (IllegalStateException ex) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new MessageResponse(ex.getMessage()));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponse("Error during property purge: " + ex.getMessage()));
+        }
     }
 }

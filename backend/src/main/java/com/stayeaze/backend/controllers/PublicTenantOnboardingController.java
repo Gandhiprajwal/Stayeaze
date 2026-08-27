@@ -71,6 +71,9 @@ public class PublicTenantOnboardingController {
     private AuditLogService auditLogService;
 
     @Autowired
+    private com.stayeaze.backend.services.AccountUniquenessService accountUniquenessService;
+
+    @Autowired
     private SystemConfigRepository systemConfigRepository;
 
     @Autowired
@@ -415,8 +418,15 @@ public class PublicTenantOnboardingController {
 
             boolean isOnlinePaid = "RAZORPAY".equalsIgnoreCase(paymentMethod) && razorpayPaymentId != null && !razorpayPaymentId.isBlank();
 
-            String cleanMobile = mobile.trim();
-            String cleanEmail = email.trim().toLowerCase();
+            String cleanMobile = accountUniquenessService.normalizeMobile(mobile);
+            String cleanEmail = accountUniquenessService.normalizeEmail(email);
+
+            // Universal Uniqueness Validation
+            try {
+                accountUniquenessService.validateTenantEmailAndMobile(org, cleanEmail, cleanMobile, null, null);
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().body(new MessageResponse(ex.getMessage()));
+            }
 
             Tenant tenant = tenantRepository.findFirstByMobile(cleanMobile)
                     .or(() -> tenantRepository.findFirstByEmail(cleanEmail))

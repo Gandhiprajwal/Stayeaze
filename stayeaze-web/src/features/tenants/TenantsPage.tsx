@@ -1009,25 +1009,25 @@ export default function TenantsPage() {
         confirmLabel="Permanently Delete" onConfirm={confirmPermanentDelete} loading={isDeletingPermanent} />
 
       <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
-        <DialogContent id="reception-qr-print-poster" className="w-[calc(100vw-2rem)] max-w-sm rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl p-0 shadow-2xl max-h-[88vh] overflow-hidden">
-          <div className="p-4 sm:p-5 space-y-2.5 overflow-y-auto max-h-[86vh]">
-            <DialogHeader className="space-y-1">
-              <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/20">
-                <QrCode className="h-4.5 w-4.5" />
+        <DialogContent id="reception-qr-print-poster" className="w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-0 shadow-2xl max-h-[88vh] overflow-hidden">
+          <div className="p-5 space-y-3 overflow-y-auto max-h-[86vh]">
+            <DialogHeader className="space-y-1.5">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/20">
+                <QrCode className="h-5 w-5" />
               </div>
-              <DialogTitle className="text-base sm:text-lg font-bold text-foreground text-center">Reception QR Onboarding</DialogTitle>
+              <DialogTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-white text-center">Reception QR Onboarding</DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground text-center">
                 Print this QR poster at reception for guest check-in.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="text-left space-y-1">
-              <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Property</Label>
+            <div className="text-left space-y-1.5">
+              <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Property</Label>
               <Select value={effectiveQrPropId} onValueChange={setQrPropertyId}>
-                <SelectTrigger className="bg-card border-border/80 text-foreground h-8 text-xs rounded-xl">
+                <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-foreground h-10 text-xs sm:text-sm font-medium rounded-xl shadow-2xs">
                   <SelectValue placeholder="Select property..." />
                 </SelectTrigger>
-                <SelectContent className="rounded-xl border-border/80 bg-popover/95 backdrop-blur-xl text-xs">
+                <SelectContent className="rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm shadow-xl">
                   {(properties ?? []).map((p: any) => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
@@ -1035,14 +1035,14 @@ export default function TenantsPage() {
               </Select>
             </div>
 
-            <div className="bg-white p-2.5 rounded-xl border-2 border-primary/30 shadow-md mx-auto w-fit">
-              <img src={qrCodeImageUrl} alt="Reception QR Code" className="h-36 w-36 sm:h-40 sm:w-40 rounded-md mx-auto" />
-              <div className="mt-1 text-[9px] font-bold tracking-widest text-slate-700 uppercase text-center">Scan to Onboard & Pay</div>
+            <div className="bg-white p-3 rounded-2xl border-2 border-primary/30 shadow-sm mx-auto w-fit">
+              <img src={qrCodeImageUrl} alt="Reception QR Code" className="h-36 w-36 sm:h-40 sm:w-40 rounded-lg mx-auto" />
+              <div className="mt-1.5 text-[10px] font-extrabold tracking-widest text-slate-800 uppercase text-center">Scan to Onboard & Pay</div>
             </div>
 
-            <div className="text-xs text-foreground bg-muted/40 px-3 py-1.5 rounded-xl border border-border/60 space-y-0.5">
+            <div className="text-xs text-foreground bg-white dark:bg-slate-900 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs space-y-1">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-[10px] uppercase font-semibold tracking-wide">Link</span>
+                <span className="text-[10px] uppercase font-bold tracking-wide text-slate-500 dark:text-slate-400">Link</span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1051,32 +1051,30 @@ export default function TenantsPage() {
                     setTimeout(() => setCopiedLink(false), 2000);
                     toast({ title: 'Copied!', description: 'Onboarding URL copied to clipboard.' });
                   }}
-                  className="text-primary hover:underline flex items-center gap-1 font-mono text-[10px] no-print"
+                  className="text-primary hover:underline flex items-center gap-1 font-mono text-[10px] no-print font-semibold"
                 >
                   {copiedLink ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
                   {copiedLink ? 'Copied' : 'Copy'}
                 </button>
               </div>
-              <div className="font-mono text-[10px] text-primary truncate">{onboardUrl}</div>
+              <div className="font-mono text-[11px] text-primary truncate">{onboardUrl}</div>
             </div>
 
-            <div className="flex items-center gap-2 no-print pt-1">
+            <div className="flex items-center gap-2.5 no-print pt-2">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={handlePrintQRCode}
-                className="flex-1 rounded-xl border-border/80 bg-card hover:bg-muted text-foreground h-8.5 text-xs font-semibold"
+                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs h-10 px-4 text-xs sm:text-sm font-semibold gap-2 transition-all"
               >
-                <Printer className="mr-1.5 h-3.5 w-3.5" /> Print Poster
+                <Printer className="h-4 w-4 shrink-0" /> Print Poster
               </Button>
               <Button
                 type="button"
-                size="sm"
                 onClick={() => window.open(`/onboard?p=${effectiveQrPropId}`, '_blank')}
-                className="flex-1 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs h-8.5 text-xs"
+                className="flex-1 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-xs h-10 px-4 text-xs sm:text-sm gap-2 transition-all"
               >
-                <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Test Portal
+                <ExternalLink className="h-4 w-4 shrink-0" /> Test Portal
               </Button>
             </div>
           </div>

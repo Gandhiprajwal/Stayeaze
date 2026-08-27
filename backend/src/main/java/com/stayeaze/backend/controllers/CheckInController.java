@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -45,13 +46,12 @@ public class CheckInController {
     @Autowired
     private PropertyRepository propertyRepository;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        if (userDetails != null && userDetails.getOrgId() != null) {
-            return organizationRepository.findById(userDetails.getOrgId())
-                    .orElseGet(() -> organizationRepository.findAll().stream().findFirst().orElse(null));
-        }
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
         return organizationRepository.findAll().stream().findFirst()
                 .orElse(null);
     }
@@ -144,7 +144,8 @@ public class CheckInController {
     @Transactional(readOnly = true)
     public ResponseEntity<?> getAllCheckIns(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) UUID propertyId) {
         Organization organization = getLoggedUserOrg();
         if (organization == null) {
             return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(new java.util.ArrayList<>(), page, pageSize));
@@ -299,21 +300,17 @@ public class CheckInController {
                     String vEmail = t.getEmail();
                     if ((vEmail == null || vEmail.isBlank()) && tenantBooking != null) {
                         vEmail = tenantBooking.getTenantEmail();
-                        if (vEmail == null && tenantBooking.getTenant() != null) vEmail = tenantBooking.getTenant().getEmail();
                     }
+                    virtual.setTenantEmail(vEmail);
+
                     String vPhone = t.getMobile();
                     if ((vPhone == null || vPhone.isBlank()) && tenantBooking != null) {
                         vPhone = tenantBooking.getTenantPhone();
-                        if (vPhone == null && tenantBooking.getTenant() != null) vPhone = tenantBooking.getTenant().getMobile();
                     }
-                    virtual.setTenantEmail(vEmail);
                     virtual.setTenantPhone(vPhone);
 
-                    if (tenantBooking != null) {
-                        virtual.setBookingId(tenantBooking.getId());
-                        if (tenantBooking.getAdvanceAmount() != null) {
-                            virtual.setAdvanceAmount(tenantBooking.getAdvanceAmount());
-                        }
+                    if (tenantBooking != null && tenantBooking.getAdvanceAmount() != null) {
+                        virtual.setAdvanceAmount(tenantBooking.getAdvanceAmount());
                     }
 
                     // Discover paid invoices for this tenant
@@ -356,6 +353,19 @@ public class CheckInController {
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            checkIns = checkIns.stream()
+                    .filter(c -> c.getPropertyId() != null && assignedProps.contains(c.getPropertyId()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
+
+        if (propertyId != null) {
+            checkIns = checkIns.stream()
+                    .filter(c -> propertyId.equals(c.getPropertyId()))
+                    .collect(java.util.stream.Collectors.toList());
         }
 
         List<com.stayeaze.backend.payload.response.CheckInDTO> dtoList = checkIns.stream()

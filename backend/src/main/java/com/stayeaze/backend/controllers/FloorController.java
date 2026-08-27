@@ -98,14 +98,18 @@ public class FloorController {
         return f;
     }
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        if (userDetails.getOrgId() == null) return null;
-        return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
+                .orElse(null);
     }
 
     private Building getAuthorizedBuilding(UUID propertyId, UUID buildingId) {
+        securityUtils.validatePropertyAccess(propertyId);
         Organization organization = getLoggedUserOrg();
         Property property = propertyRepository.findByIdAndOrganization(propertyId, organization)
                 .orElseThrow(() -> new IllegalArgumentException("Property not found or unauthorized"));
@@ -148,10 +152,17 @@ public class FloorController {
     @GetMapping("/floors")
     public ResponseEntity<?> getFlatFloors(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
-        Organization organization = null;
-        try { organization = getLoggedUserOrg(); } catch (Exception ignored) {}
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) UUID propertyId) {
+        Organization organization = getLoggedUserOrg();
         List<com.stayeaze.backend.payload.response.FloorDTO> all = floorService.getFloorsByOrg(organization);
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            all = all.stream().filter(f -> f.getPropertyId() != null && assignedProps.contains(f.getPropertyId())).collect(java.util.stream.Collectors.toList());
+        }
+        if (propertyId != null) {
+            all = all.stream().filter(f -> propertyId.equals(f.getPropertyId())).collect(java.util.stream.Collectors.toList());
+        }
         return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
     }
 

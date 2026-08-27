@@ -16,6 +16,7 @@ import api from '@/lib/api';
 
 const LoginPage = lazy(() => import('@/features/auth/LoginPage'));
 const SignUpPage = lazy(() => import('@/features/auth/SignUpPage'));
+const ForgotPasswordPage = lazy(() => import('@/features/auth/ForgotPasswordPage'));
 const PublicTenantOnboardingPage = lazy(() => import('@/features/public/PublicTenantOnboardingPage'));
 const HomePage = lazy(() => import('@/features/public/HomePage'));
 const AboutPage = lazy(() => import('@/features/public/AboutPage'));
@@ -147,6 +148,7 @@ export default function App() {
             <Routes>
               <Route path="/login" element={hasValidSession ? <Navigate to={landingRoute} replace /> : <LoginPage />} />
               <Route path="/signup" element={hasValidSession ? <Navigate to={landingRoute} replace /> : <SignUpPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/onboard" element={<PublicTenantOnboardingPage />} />
 
               <Route

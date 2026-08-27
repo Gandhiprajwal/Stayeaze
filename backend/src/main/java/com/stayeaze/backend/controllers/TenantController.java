@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -91,20 +92,15 @@ public class TenantController {
     @Autowired
     private com.stayeaze.backend.services.CredentialService credentialService;
 
+    @Autowired
+    private com.stayeaze.backend.services.AccountUniquenessService accountUniquenessService;
+
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        if (principal instanceof UserDetailsImpl userDetails) {
-            if (userDetails.getOrgId() != null) {
-                return organizationRepository.findById(userDetails.getOrgId())
-                        .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
-            }
-        }
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userRepository.findByEmail(username).orElseGet(() ->
-                userRepository.findByMobile(username).orElse(null));
-        if (user != null && user.getOrganization() != null) {
-            return user.getOrganization();
-        }
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
         return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
@@ -116,6 +112,16 @@ public class TenantController {
         UUID propertyId = null;
         if (req.get("propertyId") != null && !req.get("propertyId").toString().isBlank()) {
             try { propertyId = UUID.fromString(req.get("propertyId").toString()); } catch (Exception ignored) {}
+        }
+
+        String tEmail = req.get("tenantEmail") != null ? req.get("tenantEmail").toString() : null;
+        String tPhone = req.get("tenantPhone") != null ? req.get("tenantPhone").toString() : null;
+        if (tEmail != null || tPhone != null) {
+            try {
+                accountUniquenessService.validateTenantEmailAndMobile(organization, tEmail, tPhone, null, null);
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().body(new MessageResponse(ex.getMessage()));
+            }
         }
         
         java.math.BigDecimal rent = java.math.BigDecimal.ZERO;
@@ -213,21 +219,17 @@ public class TenantController {
             }
         }
 
-        // 1. Uniqueness scoped to the active organization (active/pending residents)
-        if (request.getMobile() != null && !request.getMobile().isBlank()) {
-            boolean mobileExists = tenantRepository.findByOrganization(organization).stream()
-                    .anyMatch(t -> !"CHECKED_OUT".equalsIgnoreCase(t.getStatus()) && !"ARCHIVED".equalsIgnoreCase(t.getStatus()) && request.getMobile().trim().equalsIgnoreCase(t.getMobile()));
-            if (mobileExists) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: Mobile number already registered to an active resident in this organization!"));
-            }
-        }
-
-        if (request.getEmail() != null && !request.getEmail().isBlank()) {
-            boolean emailExists = tenantRepository.findByOrganization(organization).stream()
-                    .anyMatch(t -> !"CHECKED_OUT".equalsIgnoreCase(t.getStatus()) && !"ARCHIVED".equalsIgnoreCase(t.getStatus()) && t.getEmail() != null && request.getEmail().trim().equalsIgnoreCase(t.getEmail()));
-            if (emailExists) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: Email address already registered to an active resident in this organization!"));
-            }
+        // 1. Universal Uniqueness Validation across Staff and Active Residents
+        try {
+            accountUniquenessService.validateTenantEmailAndMobile(
+                organization,
+                request.getEmail(),
+                request.getMobile(),
+                request.getEmergencyContactMobile(),
+                null
+            );
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(new MessageResponse(ex.getMessage()));
         }
 
         if (request.getRoomNumber() != null && !request.getRoomNumber().isBlank() &&
@@ -294,25 +296,27 @@ public class TenantController {
 
         Tenant saved = tenantRepository.save(tenant);
 
-        // 2. Cross-Organization User Account Linking:
-        // If a global user account exists with this email or mobile, re-activate and link it to this organization and tenant profile
+        // 2. Safe Tenant User Account Linking (Only link if already a dedicated ROLE_TENANT, never hijack staff)
         if (request.getEmail() != null && !request.getEmail().isBlank()) {
-            String tEmail = request.getEmail().trim().toLowerCase();
+            String tEmail = accountUniquenessService.normalizeEmail(request.getEmail());
             userRepository.findByEmail(tEmail).ifPresent(user -> {
-                user.setOrganization(organization);
-                user.setTenantId(saved.getId());
-                user.setStatus("ACTIVE");
-                user.setLockedUntil(null);
-                user.setFailedAttempts(0);
-                if (saved.getFirstName() != null && !saved.getFirstName().isBlank()) {
-                    user.setFirstName(saved.getFirstName());
+                boolean isTenantRole = user.getRoles() != null && user.getRoles().stream().anyMatch(r -> "ROLE_TENANT".equalsIgnoreCase(r.getName()));
+                if (isTenantRole) {
+                    user.setOrganization(organization);
+                    user.setTenantId(saved.getId());
+                    user.setStatus("ACTIVE");
+                    user.setLockedUntil(null);
+                    user.setFailedAttempts(0);
+                    if (saved.getFirstName() != null && !saved.getFirstName().isBlank()) {
+                        user.setFirstName(saved.getFirstName());
+                    }
+                    if (saved.getPropertyId() != null) {
+                        List<UUID> pIds = new ArrayList<>();
+                        pIds.add(saved.getPropertyId());
+                        user.setPropertyIds(pIds);
+                    }
+                    userRepository.save(user);
                 }
-                if (saved.getPropertyId() != null) {
-                    List<UUID> pIds = new ArrayList<>();
-                    pIds.add(saved.getPropertyId());
-                    user.setPropertyIds(pIds);
-                }
-                userRepository.save(user);
             });
         }
 
@@ -402,7 +406,7 @@ public class TenantController {
         // Auto-provision User Account & Credentials Dispatch for Tenant
         try {
             if (saved.getEmail() != null && !saved.getEmail().isBlank()) {
-                String tEmail = saved.getEmail().trim().toLowerCase();
+                String tEmail = accountUniquenessService.normalizeEmail(saved.getEmail());
                 User user = userRepository.findByEmail(tEmail).orElse(null);
                 String tempPassword = credentialService.generateSecurePassword();
                 if (user == null) {
@@ -424,7 +428,7 @@ public class TenantController {
                     }
 
                     userRepository.save(user);
-                } else {
+                } else if (user.getRoles() != null && user.getRoles().stream().anyMatch(r -> "ROLE_TENANT".equalsIgnoreCase(r.getName()))) {
                     user.setTenantId(saved.getId());
                     if (user.getOrganization() == null) {
                         user.setOrganization(organization);
@@ -480,6 +484,8 @@ public class TenantController {
         int successCount = 0;
         int failCount = 0;
         List<java.util.Map<String, Object>> importResults = new ArrayList<>();
+        java.util.Set<String> seenEmails = new java.util.HashSet<>();
+        java.util.Set<String> seenMobiles = new java.util.HashSet<>();
 
         for (int i = 0; i < items.size(); i++) {
             com.stayeaze.backend.payload.request.TenantBulkImportRequest item = items.get(i);
@@ -490,7 +496,17 @@ public class TenantController {
             rowResult.put("mobile", item.getMobile());
 
             try {
-                // 1. Resolve Target Property
+                // 1. Universal Validation (Intra-file duplicate check & Database collisions with staff/residents)
+                accountUniquenessService.validateBulkImportRow(
+                    organization,
+                    item.getEmail(),
+                    item.getMobile(),
+                    i + 1,
+                    seenEmails,
+                    seenMobiles
+                );
+
+                // 2. Resolve Target Property
                 Property targetProperty = defaultProperty;
                 if (item.getPropertyId() != null) {
                     targetProperty = propertyRepository.findById(item.getPropertyId()).orElse(defaultProperty);
@@ -504,17 +520,8 @@ public class TenantController {
                     }
                 }
 
-                // 2. Validate/Check duplicates in organization
-                String cleanEmail = (item.getEmail() != null && !item.getEmail().isBlank()) ? item.getEmail().trim().toLowerCase() : null;
-                String cleanMobile = (item.getMobile() != null && !item.getMobile().isBlank()) ? item.getMobile().replaceAll("[^0-9]", "") : null;
-
-                if (cleanEmail != null && tenantRepository.existsByOrganizationAndEmail(organization, cleanEmail)) {
-                    rowResult.put("status", "SKIPPED");
-                    rowResult.put("message", "A tenant with email " + cleanEmail + " already exists in this organization.");
-                    importResults.add(rowResult);
-                    failCount++;
-                    continue;
-                }
+                String cleanEmail = accountUniquenessService.normalizeEmail(item.getEmail());
+                String cleanMobile = accountUniquenessService.normalizeMobile(item.getMobile());
 
                 // 3. Create Tenant Entity
                 Tenant tenant = new Tenant();
@@ -720,18 +727,10 @@ public class TenantController {
     @GetMapping
     public ResponseEntity<?> getAllTenants(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) UUID propertyId) {
         Organization organization = getLoggedUserOrg();
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
-
-        org.springframework.data.domain.Pageable pageable =
-                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
-
-        User user = !isSuperAdmin && userDetails != null ? userRepository.findById(userDetails.getId()).orElse(null) : null;
+        boolean isSuperAdmin = securityUtils.isSuperAdmin();
 
         List<Tenant> tenants;
         if (isSuperAdmin) {
@@ -742,13 +741,17 @@ public class TenantController {
             tenants = Collections.emptyList();
         }
 
-        if (user != null && user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
-            List<Tenant> scoped = tenants.stream()
-                    .filter(t -> t.getPropertyId() != null && user.getPropertyIds().contains(t.getPropertyId()))
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            tenants = tenants.stream()
+                    .filter(t -> t.getPropertyId() != null && assignedProps.contains(t.getPropertyId()))
                     .collect(Collectors.toList());
-            if (!scoped.isEmpty()) {
-                tenants = scoped;
-            }
+        }
+
+        if (propertyId != null) {
+            tenants = tenants.stream()
+                    .filter(t -> propertyId.equals(t.getPropertyId()))
+                    .collect(Collectors.toList());
         }
 
         List<MinimalTenantDTO> dtos = tenants.stream().map(MinimalTenantDTO::fromEntity).collect(Collectors.toList());
@@ -756,9 +759,23 @@ public class TenantController {
     }
 
     @GetMapping("/minimal")
-    public ResponseEntity<?> getMinimalTenants() {
+    public ResponseEntity<?> getMinimalTenants(@RequestParam(required = false) UUID propertyId) {
         Organization organization = getLoggedUserOrg();
         List<Tenant> tenants = tenantRepository.findByOrganization(organization);
+
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            tenants = tenants.stream()
+                    .filter(t -> t.getPropertyId() != null && assignedProps.contains(t.getPropertyId()))
+                    .collect(Collectors.toList());
+        }
+
+        if (propertyId != null) {
+            tenants = tenants.stream()
+                    .filter(t -> propertyId.equals(t.getPropertyId()))
+                    .collect(Collectors.toList());
+        }
+
         List<MinimalTenantDTO> dtos = tenants.stream()
                 .map(MinimalTenantDTO::fromEntity)
                 .collect(Collectors.toList());
@@ -776,13 +793,25 @@ public class TenantController {
         long pendingOnboarding;
         long noticePeriod;
 
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+
         if (propertyId != null) {
+            securityUtils.validatePropertyAccess(propertyId);
             total = tenantRepository.countByPropertyId(propertyId);
             active = tenantRepository.countByPropertyIdAndStatus(propertyId, "ACTIVE");
             checkedIn = tenantRepository.countByPropertyIdAndStatus(propertyId, "CHECKED_IN");
             pendingOnboarding = tenantRepository.countByPropertyIdAndStatus(propertyId, "PENDING")
                     + tenantRepository.countByPropertyIdAndStatus(propertyId, "ONBOARDING");
             noticePeriod = tenantRepository.countByPropertyIdAndStatus(propertyId, "NOTICE_PERIOD");
+        } else if (assignedProps != null) {
+            List<Tenant> tenants = tenantRepository.findByOrganization(organization).stream()
+                    .filter(t -> t.getPropertyId() != null && assignedProps.contains(t.getPropertyId()))
+                    .collect(Collectors.toList());
+            total = tenants.size();
+            active = tenants.stream().filter(t -> "ACTIVE".equalsIgnoreCase(t.getStatus())).count();
+            checkedIn = tenants.stream().filter(t -> "CHECKED_IN".equalsIgnoreCase(t.getStatus())).count();
+            pendingOnboarding = tenants.stream().filter(t -> "PENDING".equalsIgnoreCase(t.getStatus()) || "ONBOARDING".equalsIgnoreCase(t.getStatus())).count();
+            noticePeriod = tenants.stream().filter(t -> "NOTICE_PERIOD".equalsIgnoreCase(t.getStatus())).count();
         } else {
             total = tenantRepository.countByOrganization(organization);
             active = tenantRepository.countByOrganizationAndStatus(organization, "ACTIVE");
@@ -893,22 +922,17 @@ public class TenantController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant profile not found."));
         }
 
-        String reqMobile = request.getMobile();
-        if (reqMobile != null && !reqMobile.isBlank() && organization != null) {
-            boolean mobileTakenByOther = tenantRepository.findByOrganization(organization).stream()
-                .anyMatch(t -> !t.getId().equals(id) && !"CHECKED_OUT".equalsIgnoreCase(t.getStatus()) && !"ARCHIVED".equalsIgnoreCase(t.getStatus()) && reqMobile.trim().equalsIgnoreCase(t.getMobile()));
-            if (mobileTakenByOther) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: Mobile number already registered to another active resident in this organization!"));
-            }
-        }
-
-        String reqEmail = request.getEmail();
-        if (reqEmail != null && !reqEmail.isBlank() && organization != null) {
-            boolean emailTakenByOther = tenantRepository.findByOrganization(organization).stream()
-                .anyMatch(t -> !t.getId().equals(id) && !"CHECKED_OUT".equalsIgnoreCase(t.getStatus()) && !"ARCHIVED".equalsIgnoreCase(t.getStatus()) && t.getEmail() != null && reqEmail.trim().equalsIgnoreCase(t.getEmail()));
-            if (emailTakenByOther) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: Email address already registered to another active resident in this organization!"));
-            }
+        // Universal Uniqueness Validation (Staff & Other Active Residents)
+        try {
+            accountUniquenessService.validateTenantEmailAndMobile(
+                organization,
+                request.getEmail(),
+                request.getMobile(),
+                request.getEmergencyContactMobile(),
+                id
+            );
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(new MessageResponse(ex.getMessage()));
         }
 
         if (request.getRoomNumber() != null && !request.getRoomNumber().isBlank() &&
@@ -1035,6 +1059,24 @@ public class TenantController {
         return ResponseEntity.ok(updated);
     }
 
+    private void freeTenantBed(Tenant tenant) {
+        if (tenant == null || tenant.getBedNumber() == null || tenant.getRoomNumber() == null) return;
+        try {
+            bedRepository.findAll().stream()
+                    .filter(b -> tenant.getRoomNumber().equalsIgnoreCase(b.getRoom() != null ? b.getRoom().getRoomNumber() : null)
+                            && tenant.getBedNumber().equalsIgnoreCase(b.getBedNumber()))
+                    .findFirst().ifPresent(b -> {
+                        b.setStatus("AVAILABLE");
+                        bedRepository.save(b);
+                        if (b.getRoom() != null && b.getRoom().getFloor() != null) {
+                            occupancySyncService.syncStatsAndEvictCaches(b.getRoom().getFloor());
+                        }
+                    });
+        } catch (Exception e) {
+            System.err.println("Warning freeing bed for tenant: " + e.getMessage());
+        }
+    }
+
     @DeleteMapping("/{id}")
     @org.springframework.transaction.annotation.Transactional
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN')")
@@ -1058,11 +1100,14 @@ public class TenantController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant profile not found."));
         }
 
+        // Free up assigned Bed and make room vacant
+        freeTenantBed(tenant);
+
         tenant.setStatus("ARCHIVED");
         tenantRepository.save(tenant);
         auditLogService.logCurrent("Archived tenant record: " + (tenant.getFirstName() != null ? tenant.getFirstName() : "") + " " + (tenant.getLastName() != null ? tenant.getLastName() : ""), null);
         occupancySyncService.syncStatsAndEvictCaches(null);
-        return ResponseEntity.ok(new MessageResponse("Tenant archived successfully."));
+        return ResponseEntity.ok(new MessageResponse("Tenant archived successfully and bed freed."));
     }
 
     @DeleteMapping("/{id}/permanent")
@@ -1087,6 +1132,9 @@ public class TenantController {
         if (tenant == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant profile not found."));
         }
+
+        // Free up assigned Bed and make room vacant before deletion
+        freeTenantBed(tenant);
 
         // Cascade delete child records with exact table and column matching
         try {
@@ -1132,7 +1180,7 @@ public class TenantController {
         tenantRepository.delete(tenant);
         auditLogService.logCurrent("Permanently deleted tenant record and all associated history for: " + (tenant.getFirstName() != null ? tenant.getFirstName() : "") + " " + (tenant.getLastName() != null ? tenant.getLastName() : ""), null);
         occupancySyncService.syncStatsAndEvictCaches(null);
-        return ResponseEntity.ok(new MessageResponse("Tenant and all associated records permanently deleted."));
+        return ResponseEntity.ok(new MessageResponse("Tenant and all associated records permanently deleted and bed released."));
     }
 
     @PutMapping("/{id}/unarchive")
@@ -1144,25 +1192,55 @@ public class TenantController {
                 .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
 
         Tenant tenant;
+        Organization organization = null;
         if (isSuperAdmin) {
             tenant = tenantRepository.findById(id).orElse(null);
         } else {
-            Organization organization = getLoggedUserOrg();
-            tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
-            if (tenant == null) {
-                tenant = tenantRepository.findById(id).orElse(null);
-            }
+            organization = getLoggedUserOrg();
+            tenant = tenantRepository.findByIdAndOrganization(id, organization)
+                    .orElseGet(() -> tenantRepository.findById(id).orElse(null));
         }
 
         if (tenant == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant profile not found."));
         }
 
+        if (organization == null) {
+            organization = tenant.getOrganization();
+        }
+
+        if (tenant.getBedNumber() != null && tenant.getRoomNumber() != null && organization != null) {
+            final String targetRoom = tenant.getRoomNumber();
+            final String targetBed = tenant.getBedNumber();
+            boolean bedAlreadyTaken = tenantRepository.findByOrganization(organization).stream().anyMatch(t -> {
+                String ts = t.getStatus();
+                boolean isCheckedOut = "CHECKED_OUT".equalsIgnoreCase(ts) || "ARCHIVED".equalsIgnoreCase(ts);
+                return !t.getId().equals(id) && !isCheckedOut &&
+                    targetRoom.equalsIgnoreCase(t.getRoomNumber()) &&
+                    targetBed.equalsIgnoreCase(t.getBedNumber());
+            });
+            if (bedAlreadyTaken) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: Bed " + tenant.getBedNumber() + " in Room " + tenant.getRoomNumber() + " is currently occupied by another active resident. Please reassign the room/bed before unarchiving."));
+            }
+
+            // Re-occupy Bed
+            bedRepository.findAll().stream()
+                    .filter(b -> targetRoom.equalsIgnoreCase(b.getRoom() != null ? b.getRoom().getRoomNumber() : null)
+                            && targetBed.equalsIgnoreCase(b.getBedNumber()))
+                    .findFirst().ifPresent(b -> {
+                        b.setStatus("OCCUPIED");
+                        bedRepository.save(b);
+                        if (b.getRoom() != null && b.getRoom().getFloor() != null) {
+                            occupancySyncService.syncStatsAndEvictCaches(b.getRoom().getFloor());
+                        }
+                    });
+        }
+
         tenant.setStatus("ACTIVE");
         Tenant updated = tenantRepository.save(tenant);
-        auditLogService.logCurrent("Unarchived tenant record: " + updated.getName(), null);
+        auditLogService.logCurrent("Unarchived tenant record: " + (updated.getFirstName() != null ? updated.getFirstName() : "") + " " + (updated.getLastName() != null ? updated.getLastName() : ""), null);
         occupancySyncService.syncStatsAndEvictCaches(null);
-        return ResponseEntity.ok(new MessageResponse("Tenant successfully unarchived."));
+        return ResponseEntity.ok(new MessageResponse("Tenant successfully unarchived and bed marked occupied."));
     }
 
     @PostMapping("/{id}/send-credentials")

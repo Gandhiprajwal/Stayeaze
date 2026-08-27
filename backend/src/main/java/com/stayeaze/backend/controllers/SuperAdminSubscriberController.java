@@ -596,7 +596,21 @@ public class SuperAdminSubscriberController {
         OrganizationBillingProfile bp = organizationBillingProfileRepository.findByOrganization(org)
                 .orElseGet(() -> new OrganizationBillingProfile(org));
 
-        if (body.containsKey("planName")) bp.setSubscriptionPlanName((String) body.get("planName"));
+        if (body.containsKey("planName")) {
+            String newPlan = (String) body.get("planName");
+            bp.setSubscriptionPlanName(newPlan);
+            boolean isEnt = newPlan.toLowerCase().contains("enterprise") || newPlan.toLowerCase().contains("custom");
+            Optional<SaaSPlan> spOpt = saasPlanRepository.findByNameIgnoreCase(newPlan);
+            if (spOpt.isPresent() && Boolean.TRUE.equals(spOpt.get().getAllowCustomBranding())) {
+                isEnt = true;
+            }
+            if (isEnt) {
+                bp.setCustomBrandingEnabled(true);
+            } else {
+                bp.setCustomBrandingEnabled(false);
+                bp.setHideStayEazeBranding(false);
+            }
+        }
         if (body.containsKey("planPrice")) {
             try {
                 java.math.BigDecimal price = new java.math.BigDecimal(body.get("planPrice").toString());

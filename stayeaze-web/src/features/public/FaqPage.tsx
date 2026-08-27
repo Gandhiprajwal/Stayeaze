@@ -17,24 +17,32 @@ export default function FaqPage() {
       a: 'Each property owner provides their own Razorpay Key ID and Secret under Settings -> Organization -> Razorpay Payment Gateway. When tenants pay rent online, payments land directly in that specific property bank account without mixing funds across properties or Super Admin.',
     },
     {
+      q: 'How does automated electricity sub-meter billing work?',
+      a: 'StayEaze allows property managers to record monthly electricity meter units (kWh) per room or per bed. The system automatically computes the consumption, applies your configured rate per unit, and seamlessly adds it as an itemized line item on the tenant rent invoice.',
+    },
+    {
+      q: 'How does the reception QR code standee work for check-ins?',
+      a: 'You can print an official QR standee poster directly from the Residents module. Prospective walk-in residents simply scan the QR code with their mobile phone, upload their Aadhaar/PAN photo, fill in emergency contacts, and submit their application. The manager receives an alert and approves the check-in with 1 click.',
+    },
+    {
+      q: 'How are security deposit deductions handled on tenant checkout?',
+      a: 'StayEaze includes an automated checkout settlement engine. When a resident moves out, the system automatically checks notice period compliance, lets you add itemized room repair or deep-cleaning deductions, deducts pending utility bills, and produces an official signed refund voucher with bank NEFT/UPI transaction details.',
+    },
+    {
+      q: 'Are the rent receipts valid for HRA tax exemption claims?',
+      a: 'Yes. StayEaze produces official rent receipts formatted for House Rent Allowance (HRA) tax exemption claims under Indian Income Tax Section 10(13A). Receipts feature your Landlord PAN, property address, tenant Aadhaar verification badge, and an anti-fraud verification QR code.',
+    },
+    {
       q: 'What happens during the 14-day free trial?',
-      a: 'You get full access to all features on the Professional plan with zero risk and no credit card required. You can seed pre-filled sample buildings, floors, rooms, and beds to test immediately.',
+      a: 'You get full access to all features on the Professional plan with zero risk and no credit card required. You can seed pre-filled sample buildings, floors, rooms, and beds to test all features immediately.',
     },
     {
       q: 'Can I add multiple buildings and floors to a single property?',
-      a: 'Yes! StayEaze provides a visual hierarchy allowing you to create multiple buildings (e.g., Tower A, Tower B), assign floor numbers, create room numbers with AC/Non-AC types, and configure bed capacities.',
-    },
-    {
-      q: 'How are rent invoices and WhatsApp receipts sent?',
-      a: 'When rent is recorded or billed, StayEaze generates an itemized official PDF receipt complete with security verification QR codes, Landlord PAN, and PG registration details, and automatically dispatches receipt notices via WhatsApp.',
-    },
-    {
-      q: 'Is tenant data compliant with DPDP 2023 and privacy regulations?',
-      a: 'Yes. All tenant Aadhaar/PAN identity documents and payment receipts are 256-bit encrypted. Access is strictly constrained by role permissions and logged in system audit trails.',
+      a: 'Yes! StayEaze provides a visual hierarchy allowing you to create multiple buildings (e.g., Tower A, Tower B), assign floor numbers, create room numbers with AC/Non-AC types, and configure bed capacities with single, double, or triple sharing.',
     },
     {
       q: 'Can Super Admin access or assist with my property setup?',
-      a: 'Super Admin has support impersonation capability to log into your back-office console to assist with initial setup or troubleshooting upon your support request.',
+      a: 'Super Admin has secure support impersonation capability to temporarily assist with initial setup or troubleshooting upon your request.',
     },
   ];
 

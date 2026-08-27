@@ -157,6 +157,18 @@ export default function SettingsPage() {
   });
 
   const { branding, refetchBranding } = useBranding();
+  const canUseCustomBranding = Boolean(
+    (user?.role === 'ADMIN' || user?.role === 'OWNER') &&
+    (branding.isEnterprise || branding.allowCustomBranding)
+  );
+
+  useEffect(() => {
+    if (activeTab === 'branding' && !canUseCustomBranding) {
+      setActiveTab('profile');
+      setSearchParams({ tab: 'profile' });
+    }
+  }, [activeTab, canUseCustomBranding, setSearchParams]);
+
   const [brandingLoading, setBrandingLoading] = useState(false);
   const [brandingForm, setBrandingForm] = useState({
     customBrandingEnabled: false,
@@ -517,7 +529,7 @@ export default function SettingsPage() {
                   <Building2 className="mr-1.5 h-3.5 w-3.5" /> Organization
                 </TabsTrigger>
               )}
-              {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
+              {canUseCustomBranding && (
                 <TabsTrigger value="branding" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
                   <Palette className="mr-1.5 h-3.5 w-3.5 text-purple-500" /> Custom Branding
                 </TabsTrigger>
@@ -943,8 +955,9 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Enterprise White-Label Custom Branding */}
-        <TabsContent value="branding">
-          <Card className="max-w-3xl border shadow-sm">
+        {canUseCustomBranding && (
+          <TabsContent value="branding">
+            <Card className="max-w-3xl border shadow-sm">
             <CardHeader className="border-b bg-purple-50/50 dark:bg-purple-950/20">
               <div className="flex items-center justify-between">
                 <div>
@@ -1151,6 +1164,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
         <TabsContent value="subscription">
           <Card className="max-w-3xl border shadow-sm">

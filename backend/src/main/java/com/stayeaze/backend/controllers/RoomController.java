@@ -58,6 +58,9 @@ public class RoomController {
     @Autowired
     private com.stayeaze.backend.services.RoomService roomService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Room populateRoomStats(Room room) {
         if (room == null) return null;
         List<Bed> beds = bedRepository.findByRoomId(room.getId());
@@ -87,36 +90,31 @@ public class RoomController {
 
         int occ = 0;
         int res = 0;
-        for (Bed b : beds) {
-            boolean isOccupied = "OCCUPIED".equalsIgnoreCase(b.getStatus());
-            boolean isReserved = "RESERVED".equalsIgnoreCase(b.getStatus()) || "BOOKED".equalsIgnoreCase(b.getStatus());
-
-            if (!isOccupied && activeTenants != null) {
+        for (Bed bed : beds) {
+            boolean isOcc = "OCCUPIED".equalsIgnoreCase(bed.getStatus());
+            boolean isRes = "RESERVED".equalsIgnoreCase(bed.getStatus());
+            if (!isOcc && !isRes && activeTenants != null) {
                 for (Tenant t : activeTenants) {
                     boolean statusOk = t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus());
-                    if (statusOk && room.getRoomNumber() != null && room.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) 
-                            && b.getBedNumber() != null && b.getBedNumber().equalsIgnoreCase(t.getBedNumber())) {
-                        isOccupied = true;
-                        b.setStatus("OCCUPIED");
-                        bedRepository.save(b);
+                    if (statusOk && room.getRoomNumber() != null && room.getRoomNumber().equalsIgnoreCase(t.getRoomNumber())
+                            && bed.getBedNumber() != null && bed.getBedNumber().equalsIgnoreCase(t.getBedNumber())) {
+                        isOcc = true;
                         break;
                     }
                 }
             }
-
-            if (isOccupied) {
-                occ++;
-            } else if (isReserved) {
-                res++;
-            }
+            if (isOcc) occ++;
+            if (isRes) res++;
         }
         room.setOccupied(occ);
 
-        // Dynamic room status calculation based on bed occupancy & reservation
-        String currStatus = room.getStatus();
-        if (currStatus == null || (!"MAINTENANCE".equalsIgnoreCase(currStatus) && !"BLOCKED".equalsIgnoreCase(currStatus) && !"ARCHIVED".equalsIgnoreCase(currStatus))) {
+        // Auto-compute status if currently not archived / maintenance
+        String curr = room.getStatus();
+        if (curr == null || (!curr.equalsIgnoreCase("archived") && !curr.equalsIgnoreCase("maintenance"))) {
             int totalBeds = beds.size();
-            if (totalBeds > 0) {
+            if (totalBeds == 0) {
+                room.setStatus("available");
+            } else {
                 if (occ == totalBeds) {
                     room.setStatus("occupied");
                 } else if (res == totalBeds) {
@@ -134,13 +132,14 @@ public class RoomController {
     }
 
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        if (userDetails.getOrgId() == null) return null;
-        return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
+                .orElse(null);
     }
 
     private Floor getAuthorizedFloor(UUID propertyId, UUID buildingId, UUID floorId) {
+        securityUtils.validatePropertyAccess(propertyId);
         Organization organization = getLoggedUserOrg();
         Property property = propertyRepository.findByIdAndOrganization(propertyId, organization)
                 .orElseThrow(() -> new IllegalArgumentException("Property not found or unauthorized"));
@@ -195,10 +194,17 @@ public class RoomController {
     @GetMapping("/rooms")
     public ResponseEntity<?> getFlatRooms(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
-        Organization organization = null;
-        try { organization = getLoggedUserOrg(); } catch (Exception ignored) {}
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) UUID propertyId) {
+        Organization organization = getLoggedUserOrg();
         List<com.stayeaze.backend.payload.response.RoomDTO> all = roomService.getRoomsByOrg(organization);
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+        if (assignedProps != null) {
+            all = all.stream().filter(r -> r.getPropertyId() != null && assignedProps.contains(r.getPropertyId())).collect(Collectors.toList());
+        }
+        if (propertyId != null) {
+            all = all.stream().filter(r -> propertyId.equals(r.getPropertyId())).collect(Collectors.toList());
+        }
         return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
     }
 
