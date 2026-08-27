@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class SecurityRateLimitFilter extends OncePerRequestFilter {
 
-    private static final int MAX_REQUESTS_PER_MINUTE = 100;
+    private static final int AUTH_MAX_ATTEMPTS_PER_MINUTE = 15;
     private final Map<String, RateTracker> rateLimitMap = new ConcurrentHashMap<>();
 
     public void clearRateLimits() {
@@ -63,7 +63,7 @@ public class SecurityRateLimitFilter extends OncePerRequestFilter {
         }
 
         String uri = request.getRequestURI();
-        if (uri != null && (uri.endsWith("/auth/login") || uri.endsWith("/auth/signin"))) {
+        if (uri != null && (uri.contains("/auth/login") || uri.contains("/auth/signin") || uri.contains("/auth/verify-2fa"))) {
             String clientIp = request.getHeader("X-Forwarded-For");
             if (clientIp == null || clientIp.isBlank()) {
                 clientIp = request.getRemoteAddr();
@@ -83,10 +83,18 @@ public class SecurityRateLimitFilter extends OncePerRequestFilter {
             });
 
             RateTracker tracker = rateLimitMap.get(finalIp);
-            if (tracker != null && tracker.count.get() > MAX_REQUESTS_PER_MINUTE) {
+            if (tracker != null && tracker.count.get() > AUTH_MAX_ATTEMPTS_PER_MINUTE) {
+                long remainingSeconds = Math.max(1, (tracker.resetTime - now) / 1000);
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+                response.setHeader("Retry-After", String.valueOf(remainingSeconds));
                 response.setContentType("application/json");
-                response.getWriter().write("{\"error\": \"Too many login attempts. Rate limit exceeded. Please wait 1 minute.\"}");
+                response.getWriter().write(String.format("""
+                    {
+                        "status": 429,
+                        "error": "Too Many Requests",
+                        "message": "Too many authentication attempts. Please wait %d seconds before trying again."
+                    }
+                """, remainingSeconds));
                 return;
             }
         }

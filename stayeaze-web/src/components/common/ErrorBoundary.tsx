@@ -50,7 +50,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-6 relative overflow-hidden transition-colors duration-300">
+        <div role="alert" aria-live="assertive" className="min-h-screen flex items-center justify-center bg-background text-foreground p-6 relative overflow-hidden transition-colors duration-300">
           <div className="max-w-xl w-full bg-card border border-border rounded-3xl p-8 shadow-2xl space-y-6">
             <div className="flex items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800/50 text-rose-600 dark:text-rose-400 shrink-0">
