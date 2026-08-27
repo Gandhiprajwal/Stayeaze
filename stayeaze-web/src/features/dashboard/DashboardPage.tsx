@@ -113,9 +113,9 @@ export default function DashboardPage() {
 
   const activeTenantTrend = undefined;
 
-  const { data: allUsers } = useQuery({
+  const { data: usersData } = useQuery({
     queryKey: ['dashboard', 'all-users'],
-    queryFn: () => api.get<{ data: any[] }>('/users', { params: { pageSize: 100 } }).then((r) => r.data?.data || []),
+    queryFn: () => api.get<{ data: any[]; total?: number }>('/users', { params: { pageSize: 1 } }).then((r) => r.data),
     enabled: user?.role === 'SUPER_ADMIN',
   });
 
@@ -284,7 +284,7 @@ export default function DashboardPage() {
 
   if (user?.role === 'SUPER_ADMIN') {
     const subscribersList: any[] = Array.isArray(subscribersData) ? subscribersData : [];
-    const totalSaaSUsers = allUsers?.length ?? 0;
+    const totalSaaSUsers = usersData?.total ?? usersData?.data?.length ?? 0;
     const totalSaaSProps = properties?.length ?? subscribersList.length ?? 0;
 
     const saasMonthlyRevenue = subscribersList.reduce((acc, s) => acc + (Number(s.planPrice ?? s.subscriptionPlanPrice) || 0), 0);
