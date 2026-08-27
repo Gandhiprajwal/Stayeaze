@@ -569,7 +569,7 @@ export default function DashboardPage() {
               <CardTitle>SaaS Subscription Revenues & Profit</CardTitle>
               <CardDescription>Monthly growth trend based on active tenant billing cycles</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-hidden min-h-0 min-w-0">
               <ResponsiveContainer width="100%" height={280}>
                 <AreaChart data={saasGrowthData} margin={{ left: -10, right: 10 }}>
                   <defs>
@@ -713,7 +713,7 @@ export default function DashboardPage() {
             <CardTitle>Revenue & Collections</CardTitle>
             <CardDescription>Last 7 months performance</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-hidden min-h-0 min-w-0">
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={revenueTrend} margin={{ left: -10, right: 10 }}>
                 <defs>
@@ -780,7 +780,7 @@ export default function DashboardPage() {
             <CardTitle>Occupancy by Building</CardTitle>
             <CardDescription>Beds occupied vs available</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-hidden min-h-0 min-w-0">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={occupancyByProperty} margin={{ left: -10, right: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />

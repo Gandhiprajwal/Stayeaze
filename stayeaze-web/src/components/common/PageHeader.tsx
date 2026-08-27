@@ -30,7 +30,7 @@ export function PageHeader({ title, description, icon: Icon, actions, className 
         </div>
       </div>
       {actions && (
-        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap w-full sm:w-auto">
           {actions}
         </div>
       )}

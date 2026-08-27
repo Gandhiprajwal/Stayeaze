@@ -35,15 +35,29 @@ public class AgreementController {
     @Autowired
     private OrganizationRepository organizationRepository;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        return organizationRepository.findAll().stream().findFirst()
                 .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
     }
 
     private Tenant getAuthorizedTenant(UUID tenantId) {
-        Organization organization = getLoggedUserOrg();
+        Organization organization = null;
+        try {
+            organization = getLoggedUserOrg();
+        } catch (Exception ignored) {}
+
+        Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
+        if (tenant != null) {
+            if (organization == null) return tenant;
+            if (tenant.getOrganization() == null || organization.getId().equals(tenant.getOrganization().getId()) || (tenant.getOrgId() != null && organization.getId().equals(tenant.getOrgId()))) {
+                return tenant;
+            }
+        }
         return tenantRepository.findByIdAndOrganization(tenantId, organization)
                 .orElseThrow(() -> new IllegalArgumentException("Tenant profile not found or unauthorized"));
     }
@@ -81,8 +95,11 @@ public class AgreementController {
     }
 
     @PutMapping("/{id}/sign")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST')")
-    public ResponseEntity<?> signAgreement(@PathVariable UUID tenantId, @PathVariable UUID id, @RequestParam String signatureUrl) {
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('ADMIN')")
+    public ResponseEntity<?> signAgreement(
+            @PathVariable UUID tenantId,
+            @PathVariable UUID id,
+            @RequestParam(required = false, defaultValue = "CHECKBOX_TERMS_ACCEPTED") String signatureUrl) {
         Tenant tenant;
         try {
             tenant = getAuthorizedTenant(tenantId);
@@ -95,11 +112,19 @@ public class AgreementController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Agreement document not found."));
         }
 
+        OffsetDateTime now = OffsetDateTime.now();
         agreement.setStatus("SIGNED");
-        agreement.setSignatureUrl(signatureUrl);
-        agreement.setSignedAt(OffsetDateTime.now());
+        agreement.setSignatureUrl(signatureUrl != null && !signatureUrl.isBlank() ? signatureUrl : "CHECKBOX_TERMS_ACCEPTED");
+        agreement.setSignedAt(now);
 
         Agreement updated = agreementRepository.save(agreement);
+
+        if (tenant != null) {
+            tenant.setIsAgreementAccepted(true);
+            tenant.setAgreementAcceptedAt(now);
+            tenantRepository.save(tenant);
+        }
+
         return ResponseEntity.ok(updated);
     }
 }

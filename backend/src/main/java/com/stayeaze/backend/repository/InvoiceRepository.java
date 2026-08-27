@@ -19,10 +19,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     Optional<Invoice> findByIdAndTenant(UUID id, Tenant tenant);
     boolean existsByInvoiceNumber(String invoiceNumber);
 
-    @Query("SELECT i FROM Invoice i WHERE i.tenant.organization.id = :orgId")
+    @Query("SELECT i FROM Invoice i JOIN FETCH i.tenant t WHERE t.organization.id = :orgId")
     List<Invoice> findByOrganizationId(@Param("orgId") UUID orgId);
 
-    @Query("SELECT i FROM Invoice i WHERE i.tenant.organization.id = :orgId")
+    @Query("SELECT i FROM Invoice i JOIN FETCH i.tenant t WHERE t.organization.id = :orgId")
     Page<Invoice> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
     @Query("SELECT COUNT(i) FROM Invoice i WHERE i.tenant.propertyId = :propertyId AND i.issueDate >= :startDate AND i.issueDate <= :endDate")
@@ -31,8 +31,11 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     @Query(value = "SELECT i.* FROM invoices i JOIN tenants t ON i.tenant_id = t.id WHERE t.org_id = CAST(:orgId AS uuid)", nativeQuery = true)
     List<Invoice> findByOrganizationIdNative(@Param("orgId") UUID orgId);
 
-    @Query("SELECT i FROM Invoice i WHERE i.tenant.organization.id = :orgId AND (:propertyId IS NULL OR i.tenant.propertyId = :propertyId)")
+    @Query("SELECT i FROM Invoice i JOIN FETCH i.tenant t WHERE t.organization.id = :orgId AND (:propertyId IS NULL OR t.propertyId = :propertyId)")
     List<Invoice> findByOrganizationIdAndOptionalPropertyId(@Param("orgId") UUID orgId, @Param("propertyId") UUID propertyId);
+
+    @Query("SELECT i FROM Invoice i JOIN FETCH i.tenant t")
+    List<Invoice> findAllWithTenant();
 
     Page<Invoice> findAll(Pageable pageable);
 }

@@ -21,16 +21,16 @@ public interface ComplaintRepository extends JpaRepository<Complaint, UUID> {
     @Query(value = "SELECT * FROM complaints WHERE id = CAST(:id AS uuid)", nativeQuery = true)
     Optional<Complaint> findByIdNative(@Param("id") UUID id);
 
-    @Query("SELECT c FROM Complaint c WHERE c.tenant.organization.id = :orgId")
+    @Query("SELECT c FROM Complaint c LEFT JOIN FETCH c.tenant t LEFT JOIN FETCH c.room r WHERE t.organization.id = :orgId")
     List<Complaint> findByOrganizationId(@Param("orgId") UUID orgId);
 
-    @Query("SELECT c FROM Complaint c WHERE c.tenant.organization.id = :orgId")
+    @Query("SELECT c FROM Complaint c LEFT JOIN FETCH c.tenant t LEFT JOIN FETCH c.room r WHERE t.organization.id = :orgId")
     Page<Complaint> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
     @Query(value = "SELECT c.* FROM complaints c JOIN tenants t ON c.tenant_id = t.id WHERE t.org_id = CAST(:orgId AS uuid)", nativeQuery = true)
     List<Complaint> findByOrganizationIdNative(@Param("orgId") UUID orgId);
 
-    @Query("SELECT c FROM Complaint c WHERE c.tenant.organization.id = :orgId AND (:propertyId IS NULL OR c.tenant.propertyId = :propertyId)")
+    @Query("SELECT c FROM Complaint c LEFT JOIN FETCH c.tenant t LEFT JOIN FETCH c.room r WHERE t.organization.id = :orgId AND (:propertyId IS NULL OR t.propertyId = :propertyId)")
     List<Complaint> findByOrganizationIdAndOptionalPropertyId(@Param("orgId") UUID orgId, @Param("propertyId") UUID propertyId);
 
     @Query(value = "SELECT count(*) FROM complaints c " +

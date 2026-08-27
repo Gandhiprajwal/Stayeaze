@@ -119,7 +119,7 @@ export function PropertySwitcher() {
           variant="outline"
           size="sm"
           className={cn(
-            'group relative h-9 sm:h-10 gap-1.5 sm:gap-2.5 px-2 sm:px-3.5 mx-0.5 sm:mx-2 rounded-xl border border-border/80 bg-background/90 text-sm font-medium transition-all hover:bg-accent/80 hover:border-primary/50 shadow-xs hover:shadow-sm focus-visible:ring-2 focus-visible:ring-primary/20 shrink min-w-0 max-w-[130px] xs:max-w-[180px] sm:max-w-[240px] md:max-w-[280px]',
+            'group relative h-9 sm:h-10 gap-1.5 sm:gap-2.5 px-2 sm:px-3.5 mx-0.5 sm:mx-2 rounded-xl border border-border/80 bg-background/90 text-sm font-medium transition-all hover:bg-accent/80 hover:border-primary/50 shadow-xs hover:shadow-sm focus-visible:ring-2 focus-visible:ring-primary/20 shrink min-w-0 max-w-[160px] sm:max-w-[240px] md:max-w-[280px]',
             selectedPropertyId !== 'ALL' && 'border-primary/40 bg-primary/5 text-primary hover:bg-primary/10'
           )}
           title={
@@ -147,7 +147,7 @@ export function PropertySwitcher() {
             {selectedPropertyId === 'ALL' ? (
               <Badge
                 variant="secondary"
-                className="hidden sm:inline-flex px-1.5 py-0.5 text-[10px] font-bold h-4.5 bg-muted text-muted-foreground shrink-0 rounded-full"
+                className="hidden sm:inline-flex px-1.5 py-0.5 text-[10px] font-bold h-4 bg-muted text-muted-foreground shrink-0 rounded-full"
               >
                 {properties.length}
               </Badge>
@@ -169,7 +169,7 @@ export function PropertySwitcher() {
         align="center"
         sideOffset={8}
         collisionPadding={16}
-        className="w-[calc(100vw-32px)] max-w-[320px] sm:w-80 p-2.5 rounded-2xl shadow-xl border-border/80 backdrop-blur bg-popover/98 mx-auto"
+        className="w-[calc(100vw-32px)] max-w-[320px] sm:w-80 p-2.5 rounded-2xl shadow-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 mx-auto"
       >
         <div className="px-2 py-1.5 flex items-center justify-between">
           <div>

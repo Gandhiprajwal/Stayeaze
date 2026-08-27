@@ -537,8 +537,8 @@ export function NotificationBell() {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-84 sm:w-96 p-0 shadow-xl border border-border/80">
-        <DropdownMenuLabel className="flex items-center justify-between px-3.5 py-3 bg-muted/40">
+      <DropdownMenuContent align="end" sideOffset={8} className="w-[calc(100vw-2rem)] max-w-sm sm:w-96 p-0 shadow-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden">
+        <DropdownMenuLabel className="flex items-center justify-between px-3.5 py-3 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-sm">Notifications</span>
             {alertCount > 0 && (

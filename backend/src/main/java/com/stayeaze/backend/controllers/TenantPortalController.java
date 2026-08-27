@@ -78,19 +78,22 @@ public class TenantPortalController {
         }
         UserDetailsImpl userDetails = (UserDetailsImpl) principal;
         User user = userRepository.findById(userDetails.getId()).orElse(null);
-        if (user == null) return null;
+        if (user == null)
+            return null;
 
         Organization userOrg = user.getOrganization();
 
         if (user.getTenantId() != null) {
             Tenant t = tenantRepository.findByIdSuperAdmin(user.getTenantId()).orElse(null);
-            if (t != null && (userOrg == null || (t.getOrganization() != null && t.getOrganization().getId().equals(userOrg.getId())))) {
+            if (t != null && (userOrg == null
+                    || (t.getOrganization() != null && t.getOrganization().getId().equals(userOrg.getId())))) {
                 return t;
             }
         }
 
-        // Fallback: match by email or mobile strictly within the active user organization and active status
-        List<Tenant> tenants = userOrg != null 
+        // Fallback: match by email or mobile strictly within the active user
+        // organization and active status
+        List<Tenant> tenants = userOrg != null
                 ? tenantRepository.findByOrganization(userOrg)
                 : tenantRepository.findAllSuperAdmin();
 
@@ -98,10 +101,12 @@ public class TenantPortalController {
             if ("CHECKED_OUT".equalsIgnoreCase(t.getStatus()) || "ARCHIVED".equalsIgnoreCase(t.getStatus())) {
                 continue;
             }
-            if (t.getEmail() != null && user.getEmail() != null && t.getEmail().trim().equalsIgnoreCase(user.getEmail().trim())) {
+            if (t.getEmail() != null && user.getEmail() != null
+                    && t.getEmail().trim().equalsIgnoreCase(user.getEmail().trim())) {
                 return t;
             }
-            if (t.getMobile() != null && user.getMobile() != null && t.getMobile().trim().equals(user.getMobile().trim())) {
+            if (t.getMobile() != null && user.getMobile() != null
+                    && t.getMobile().trim().equals(user.getMobile().trim())) {
                 return t;
             }
         }
@@ -129,9 +134,9 @@ public class TenantPortalController {
             List<Tenant> allTenants = tenantRepository.findAllSuperAdmin();
             for (Tenant other : allTenants) {
                 if (!other.getId().equals(tenant.getId()) &&
-                    "ACTIVE".equalsIgnoreCase(other.getStatus()) &&
-                    tenant.getRoomNumber().equalsIgnoreCase(other.getRoomNumber()) &&
-                    (tenant.getPropertyId() == null || tenant.getPropertyId().equals(other.getPropertyId()))) {
+                        "ACTIVE".equalsIgnoreCase(other.getStatus()) &&
+                        tenant.getRoomNumber().equalsIgnoreCase(other.getRoomNumber()) &&
+                        (tenant.getPropertyId() == null || tenant.getPropertyId().equals(other.getPropertyId()))) {
                     Map<String, Object> rm = new HashMap<>();
                     rm.put("name", other.getName());
                     rm.put("bedNumber", other.getBedNumber());
@@ -187,8 +192,10 @@ public class TenantPortalController {
         response.put("bedNumber", tenant.getBedNumber());
         response.put("rent", tenant.getRent());
         response.put("deposit", tenant.getDeposit());
-        response.put("advanceBalance", tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
-        response.put("advanceRentPaid", tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
+        response.put("advanceBalance",
+                tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
+        response.put("advanceRentPaid",
+                tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
         response.put("leaseStart", tenant.getLeaseStart());
         response.put("leaseEnd", tenant.getLeaseEnd());
         response.put("status", tenant.getStatus());
@@ -218,8 +225,11 @@ public class TenantPortalController {
             if (tenant.getRoomNumber() != null && !tenant.getRoomNumber().isBlank()) {
                 List<Room> allRooms = roomRepository.findAll();
                 for (Room r : allRooms) {
-                    if (r != null && r.getRoomNumber() != null && r.getRoomNumber().trim().equalsIgnoreCase(tenant.getRoomNumber().trim())) {
-                        if (property == null || (r.getFloor() != null && r.getFloor().getBuilding() != null && r.getFloor().getBuilding().getProperty() != null && property.getId().equals(r.getFloor().getBuilding().getProperty().getId()))) {
+                    if (r != null && r.getRoomNumber() != null
+                            && r.getRoomNumber().trim().equalsIgnoreCase(tenant.getRoomNumber().trim())) {
+                        if (property == null || (r.getFloor() != null && r.getFloor().getBuilding() != null
+                                && r.getFloor().getBuilding().getProperty() != null
+                                && property.getId().equals(r.getFloor().getBuilding().getProperty().getId()))) {
                             tenantRoom = r;
                             break;
                         }
@@ -237,10 +247,12 @@ public class TenantPortalController {
                     tenantRoom = bed.getRoom();
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         // DSA Inverted Index Algorithm:
-        // Build O(1) fast lookup index maps from centralized property.wifiNetworksJson if configured
+        // Build O(1) fast lookup index maps from centralized property.wifiNetworksJson
+        // if configured
         Map<String, Map<String, Object>> hubRoomMap = new HashMap<>();
         Map<String, Map<String, Object>> hubFloorMap = new HashMap<>();
         Map<String, Map<String, Object>> hubBuildingMap = new HashMap<>();
@@ -249,7 +261,9 @@ public class TenantPortalController {
         if (property != null && property.getWifiNetworksJson() != null && !property.getWifiNetworksJson().isBlank()) {
             try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                List<Map<String, Object>> hubNetworks = mapper.readValue(property.getWifiNetworksJson(), new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+                List<Map<String, Object>> hubNetworks = mapper.readValue(property.getWifiNetworksJson(),
+                        new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {
+                        });
                 if (hubNetworks != null) {
                     for (Map<String, Object> net : hubNetworks) {
                         String coverageType = (String) net.getOrDefault("coverageType", "ALL_PROPERTY");
@@ -267,36 +281,43 @@ public class TenantPortalController {
                                         }
                                         if (bldNames != null) {
                                             for (String bn : bldNames) {
-                                                if (bn != null) hubRoomMap.put(bn.trim().toLowerCase() + ":::" + rmL, net);
+                                                if (bn != null)
+                                                    hubRoomMap.put(bn.trim().toLowerCase() + ":::" + rmL, net);
                                             }
                                         }
                                     }
                                 }
                             }
-                        } else if ("FLOORS".equalsIgnoreCase(coverageType) || "FLOOR_WISE".equalsIgnoreCase(coverageType)) {
+                        } else if ("FLOORS".equalsIgnoreCase(coverageType)
+                                || "FLOOR_WISE".equalsIgnoreCase(coverageType)) {
                             List<String> floorIds = (List<String>) net.get("coveredFloorIds");
                             if (floorIds != null) {
                                 for (String fid : floorIds) {
-                                    if (fid != null) hubFloorMap.put(fid.trim().toLowerCase(), net);
+                                    if (fid != null)
+                                        hubFloorMap.put(fid.trim().toLowerCase(), net);
                                 }
                             }
                             List<String> floorNames = (List<String>) net.get("coveredFloorNames");
                             if (floorNames != null) {
                                 for (String fn : floorNames) {
-                                    if (fn != null) hubFloorMap.put(fn.trim().toLowerCase(), net);
+                                    if (fn != null)
+                                        hubFloorMap.put(fn.trim().toLowerCase(), net);
                                 }
                             }
-                        } else if ("BUILDINGS".equalsIgnoreCase(coverageType) || "BUILDING_WISE".equalsIgnoreCase(coverageType)) {
+                        } else if ("BUILDINGS".equalsIgnoreCase(coverageType)
+                                || "BUILDING_WISE".equalsIgnoreCase(coverageType)) {
                             List<String> buildingIds = (List<String>) net.get("coveredBuildingIds");
                             if (buildingIds != null) {
                                 for (String bid : buildingIds) {
-                                    if (bid != null) hubBuildingMap.put(bid.trim().toLowerCase(), net);
+                                    if (bid != null)
+                                        hubBuildingMap.put(bid.trim().toLowerCase(), net);
                                 }
                             }
                             List<String> buildingNames = (List<String>) net.get("coveredBuildingNames");
                             if (buildingNames != null) {
                                 for (String bn : buildingNames) {
-                                    if (bn != null) hubBuildingMap.put(bn.trim().toLowerCase(), net);
+                                    if (bn != null)
+                                        hubBuildingMap.put(bn.trim().toLowerCase(), net);
                                 }
                             }
                         } else if (hubPropertyDefault == null) {
@@ -304,14 +325,18 @@ public class TenantPortalController {
                         }
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         // Priority 1: Hub Room-Specific Router
         String tenantRoomNum = tenant.getRoomNumber() != null ? tenant.getRoomNumber().trim().toLowerCase() : null;
-        String tenantBldName = tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getBuilding() != null && tenantRoom.getFloor().getBuilding().getName() != null
-                ? tenantRoom.getFloor().getBuilding().getName().trim().toLowerCase() : null;
-        String bldRoomKey = (tenantBldName != null && tenantRoomNum != null) ? (tenantBldName + ":::" + tenantRoomNum) : null;
+        String tenantBldName = tenantRoom != null && tenantRoom.getFloor() != null
+                && tenantRoom.getFloor().getBuilding() != null && tenantRoom.getFloor().getBuilding().getName() != null
+                        ? tenantRoom.getFloor().getBuilding().getName().trim().toLowerCase()
+                        : null;
+        String bldRoomKey = (tenantBldName != null && tenantRoomNum != null) ? (tenantBldName + ":::" + tenantRoomNum)
+                : null;
 
         if (bldRoomKey != null && hubRoomMap.containsKey(bldRoomKey)) {
             Map<String, Object> net = hubRoomMap.get(bldRoomKey);
@@ -325,43 +350,55 @@ public class TenantPortalController {
             resolvedWifiType = "ROOM " + tenant.getRoomNumber() + " WI-FI";
         }
         // Priority 2: Hub Floor-Specific Router
-        else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getId() != null && hubFloorMap.containsKey(tenantRoom.getFloor().getId().toString().toLowerCase())) {
+        else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getId() != null
+                && hubFloorMap.containsKey(tenantRoom.getFloor().getId().toString().toLowerCase())) {
             Map<String, Object> net = hubFloorMap.get(tenantRoom.getFloor().getId().toString().toLowerCase());
             resolvedWifiSsid = (String) net.get("ssid");
             resolvedWifiPassword = (String) net.get("password");
             resolvedWifiType = tenantRoom.getFloor().getName().toUpperCase() + " WI-FI";
-        } else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getName() != null && hubFloorMap.containsKey(tenantRoom.getFloor().getName().trim().toLowerCase())) {
+        } else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getName() != null
+                && hubFloorMap.containsKey(tenantRoom.getFloor().getName().trim().toLowerCase())) {
             Map<String, Object> net = hubFloorMap.get(tenantRoom.getFloor().getName().trim().toLowerCase());
             resolvedWifiSsid = (String) net.get("ssid");
             resolvedWifiPassword = (String) net.get("password");
             resolvedWifiType = tenantRoom.getFloor().getName().toUpperCase() + " WI-FI";
         }
         // Priority 3: Hub Building-Specific Router (e.g. "Tower B Building Wi-Fi")
-        else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getBuilding() != null && tenantRoom.getFloor().getBuilding().getId() != null && hubBuildingMap.containsKey(tenantRoom.getFloor().getBuilding().getId().toString().toLowerCase())) {
-            Map<String, Object> net = hubBuildingMap.get(tenantRoom.getFloor().getBuilding().getId().toString().toLowerCase());
+        else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getBuilding() != null
+                && tenantRoom.getFloor().getBuilding().getId() != null
+                && hubBuildingMap.containsKey(tenantRoom.getFloor().getBuilding().getId().toString().toLowerCase())) {
+            Map<String, Object> net = hubBuildingMap
+                    .get(tenantRoom.getFloor().getBuilding().getId().toString().toLowerCase());
             resolvedWifiSsid = (String) net.get("ssid");
             resolvedWifiPassword = (String) net.get("password");
             resolvedWifiType = tenantRoom.getFloor().getBuilding().getName().toUpperCase() + " BUILDING WI-FI";
-        } else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getBuilding() != null && tenantRoom.getFloor().getBuilding().getName() != null && hubBuildingMap.containsKey(tenantRoom.getFloor().getBuilding().getName().trim().toLowerCase())) {
-            Map<String, Object> net = hubBuildingMap.get(tenantRoom.getFloor().getBuilding().getName().trim().toLowerCase());
+        } else if (tenantRoom != null && tenantRoom.getFloor() != null && tenantRoom.getFloor().getBuilding() != null
+                && tenantRoom.getFloor().getBuilding().getName() != null
+                && hubBuildingMap.containsKey(tenantRoom.getFloor().getBuilding().getName().trim().toLowerCase())) {
+            Map<String, Object> net = hubBuildingMap
+                    .get(tenantRoom.getFloor().getBuilding().getName().trim().toLowerCase());
             resolvedWifiSsid = (String) net.get("ssid");
             resolvedWifiPassword = (String) net.get("password");
             resolvedWifiType = tenantRoom.getFloor().getBuilding().getName().toUpperCase() + " BUILDING WI-FI";
         }
-        // Priority 4: Hub Property Default Router or Property Entity Wi-Fi or System Fallback
+        // Priority 4: Hub Property Default Router or Property Entity Wi-Fi or System
+        // Fallback
         else if (hubPropertyDefault != null && hubPropertyDefault.get("password") != null) {
             resolvedWifiSsid = (String) hubPropertyDefault.get("ssid");
             resolvedWifiPassword = (String) hubPropertyDefault.get("password");
             resolvedWifiType = "PROPERTY WI-FI";
-        } else if (property != null && property.getWifiPassword() != null && !property.getWifiPassword().trim().isBlank()) {
+        } else if (property != null && property.getWifiPassword() != null
+                && !property.getWifiPassword().trim().isBlank()) {
             resolvedWifiPassword = property.getWifiPassword().trim();
             resolvedWifiSsid = property.getWifiSsid() != null && !property.getWifiSsid().trim().isBlank()
                     ? property.getWifiSsid().trim()
                     : property.getName().replaceAll("\\s+", "_") + "_Tenant_HighSpeed";
             resolvedWifiType = "PROPERTY WI-FI";
         } else {
-            resolvedWifiSsid = property != null ? property.getName().replaceAll("\\s+", "_") + "_Tenant_HighSpeed" : "StayEaze_HighSpeed_WiFi";
-            resolvedWifiPassword = "StayEaze@" + (property != null && property.getCity() != null ? property.getCity() : "2026");
+            resolvedWifiSsid = property != null ? property.getName().replaceAll("\\s+", "_") + "_Tenant_HighSpeed"
+                    : "StayEaze_HighSpeed_WiFi";
+            resolvedWifiPassword = "StayEaze@"
+                    + (property != null && property.getCity() != null ? property.getCity() : "2026");
             resolvedWifiType = "PROPERTY WI-FI";
         }
 
@@ -370,7 +407,8 @@ public class TenantPortalController {
         response.put("wifiType", resolvedWifiType);
 
         boolean isInitialPaid = totalPendingAmount.compareTo(BigDecimal.ZERO) == 0;
-        boolean isDeskPending = "PENDING_CHECKIN".equalsIgnoreCase(tenant.getStatus()) || "PENDING_PAYMENT_APPROVAL".equalsIgnoreCase(tenant.getStatus());
+        boolean isDeskPending = "PENDING_CHECKIN".equalsIgnoreCase(tenant.getStatus())
+                || "PENDING_PAYMENT_APPROVAL".equalsIgnoreCase(tenant.getStatus());
         boolean isKycVerified = "VERIFIED".equalsIgnoreCase(tenant.getKycStatus());
         boolean isAgreementAccepted = Boolean.TRUE.equals(tenant.getIsAgreementAccepted());
         boolean onboardingComplete = isInitialPaid && isKycVerified && isAgreementAccepted;
@@ -385,14 +423,17 @@ public class TenantPortalController {
             billingProfile = organizationBillingProfileRepository.findByOrganization(org).orElse(null);
         }
 
-        String propName = property != null && property.getName() != null && !property.getName().isBlank() 
-                ? property.getName() 
+        String propName = property != null && property.getName() != null && !property.getName().isBlank()
+                ? property.getName()
                 : (org != null ? org.getName() : "Property Accommodation");
 
-        boolean hasRazorpay = (property != null && property.getRazorpayKeyId() != null && !property.getRazorpayKeyId().isBlank()) ||
-                              (billingProfile != null && billingProfile.getRazorpayKeyId() != null && !billingProfile.getRazorpayKeyId().isBlank());
+        boolean hasRazorpay = (property != null && property.getRazorpayKeyId() != null
+                && !property.getRazorpayKeyId().isBlank()) ||
+                (billingProfile != null && billingProfile.getRazorpayKeyId() != null
+                        && !billingProfile.getRazorpayKeyId().isBlank());
 
-        // Resolve Bank & UPI Details with Priority: Property specific > Org Billing Profile > Org Legal Info
+        // Resolve Bank & UPI Details with Priority: Property specific > Org Billing
+        // Profile > Org Legal Info
         String accName = null;
         String bName = null;
         String accNum = null;
@@ -400,26 +441,43 @@ public class TenantPortalController {
         String upi = null;
 
         if (property != null) {
-            if (property.getBankAccountName() != null && !property.getBankAccountName().isBlank()) accName = property.getBankAccountName();
-            if (property.getBankName() != null && !property.getBankName().isBlank()) bName = property.getBankName();
-            if (property.getBankAccountNumber() != null && !property.getBankAccountNumber().isBlank()) accNum = property.getBankAccountNumber();
-            if (property.getBankIfsc() != null && !property.getBankIfsc().isBlank()) ifsc = property.getBankIfsc();
-            if (property.getUpiVpa() != null && !property.getUpiVpa().isBlank()) upi = property.getUpiVpa();
+            if (property.getBankAccountName() != null && !property.getBankAccountName().isBlank())
+                accName = property.getBankAccountName();
+            if (property.getBankName() != null && !property.getBankName().isBlank())
+                bName = property.getBankName();
+            if (property.getBankAccountNumber() != null && !property.getBankAccountNumber().isBlank())
+                accNum = property.getBankAccountNumber();
+            if (property.getBankIfsc() != null && !property.getBankIfsc().isBlank())
+                ifsc = property.getBankIfsc();
+            if (property.getUpiVpa() != null && !property.getUpiVpa().isBlank())
+                upi = property.getUpiVpa();
         }
 
         if (billingProfile != null) {
-            if (accName == null || accName.isBlank()) accName = billingProfile.getBankAccountName() != null && !billingProfile.getBankAccountName().isBlank() ? billingProfile.getBankAccountName() : billingProfile.getLegalName();
-            if (bName == null || bName.isBlank()) bName = billingProfile.getBankName();
-            if (accNum == null || accNum.isBlank()) accNum = billingProfile.getBankAccountNumber();
-            if (ifsc == null || ifsc.isBlank()) ifsc = billingProfile.getBankIfsc();
-            if (upi == null || upi.isBlank()) upi = billingProfile.getUpiVpa();
+            if (accName == null || accName.isBlank())
+                accName = billingProfile.getBankAccountName() != null && !billingProfile.getBankAccountName().isBlank()
+                        ? billingProfile.getBankAccountName()
+                        : billingProfile.getLegalName();
+            if (bName == null || bName.isBlank())
+                bName = billingProfile.getBankName();
+            if (accNum == null || accNum.isBlank())
+                accNum = billingProfile.getBankAccountNumber();
+            if (ifsc == null || ifsc.isBlank())
+                ifsc = billingProfile.getBankIfsc();
+            if (upi == null || upi.isBlank())
+                upi = billingProfile.getUpiVpa();
         }
 
-        if (accName == null || accName.isBlank()) accName = propName;
-        if (bName == null || bName.isBlank()) bName = "Primary Current Bank Account";
-        if (accNum == null || accNum.isBlank()) accNum = "Contact Reception Desk";
-        if (ifsc == null || ifsc.isBlank()) ifsc = "N/A";
-        if (upi == null || upi.isBlank()) upi = org != null && org.getSubdomain() != null ? org.getSubdomain() + "@upi" : "Contact Reception for QR";
+        if (accName == null || accName.isBlank())
+            accName = propName;
+        if (bName == null || bName.isBlank())
+            bName = "Primary Current Bank Account";
+        if (accNum == null || accNum.isBlank())
+            accNum = "Contact Reception Desk";
+        if (ifsc == null || ifsc.isBlank())
+            ifsc = "N/A";
+        if (upi == null || upi.isBlank())
+            upi = org != null && org.getSubdomain() != null ? org.getSubdomain() + "@upi" : "Contact Reception for QR";
 
         Map<String, Object> bankDetails = new HashMap<>();
         bankDetails.put("accountName", accName);
@@ -442,7 +500,8 @@ public class TenantPortalController {
 
         response.put("roommates", roommates);
         response.put("totalPendingAmount", totalPendingAmount);
-        response.put("advanceBalance", tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
+        response.put("advanceBalance",
+                tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
         response.put("unpaidInvoicesCount", unpaidInvoicesCount);
         response.put("openComplaintsCount", openComplaintsCount);
 
@@ -487,13 +546,16 @@ public class TenantPortalController {
                 }
 
                 if (itemList.isEmpty()) {
-                    // If items list is empty in DB, construct exact items based on invoice amount & tenant rent/deposit
+                    // If items list is empty in DB, construct exact items based on invoice amount &
+                    // tenant rent/deposit
                     BigDecimal total = inv.getAmountDue() != null ? inv.getAmountDue() : BigDecimal.ZERO;
                     BigDecimal tenantRent = tenant.getRent() != null ? tenant.getRent() : BigDecimal.ZERO;
-                    BigDecimal tenantDeposit = tenant.getSecurityDeposit() != null ? tenant.getSecurityDeposit() : BigDecimal.ZERO;
+                    BigDecimal tenantDeposit = tenant.getSecurityDeposit() != null ? tenant.getSecurityDeposit()
+                            : BigDecimal.ZERO;
 
                     // Check if this invoice is the onboarding move-in invoice (Rent + Deposit)
-                    if (tenantDeposit.compareTo(BigDecimal.ZERO) > 0 && tenantRent.compareTo(BigDecimal.ZERO) > 0 && total.compareTo(tenantRent.add(tenantDeposit)) == 0) {
+                    if (tenantDeposit.compareTo(BigDecimal.ZERO) > 0 && tenantRent.compareTo(BigDecimal.ZERO) > 0
+                            && total.compareTo(tenantRent.add(tenantDeposit)) == 0) {
                         Map<String, Object> rentItem = new HashMap<>();
                         rentItem.put("description", "First Month Room Accommodation Rent");
                         rentItem.put("amount", tenantRent);
@@ -520,7 +582,8 @@ public class TenantPortalController {
                 result.add(map);
             }
 
-            // If no invoices exist yet, generate and persist a default initial invoice based on tenant's rent + deposit
+            // If no invoices exist yet, generate and persist a default initial invoice
+            // based on tenant's rent + deposit
             if (result.isEmpty() && tenant.getRent() != null && tenant.getRent().compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal dep = tenant.getSecurityDeposit() != null ? tenant.getSecurityDeposit() : BigDecimal.ZERO;
                 BigDecimal totalInitial = tenant.getRent().add(dep);
@@ -541,7 +604,7 @@ public class TenantPortalController {
                 initialInv.setAmountPaid(BigDecimal.ZERO);
                 initialInv.setStatus("UNPAID");
                 initialInv.setPaymentMethod("RAZORPAY");
-                
+
                 Invoice savedInv = invoiceRepository.save(initialInv);
 
                 List<Map<String, Object>> initialItems = new ArrayList<>();
@@ -635,7 +698,8 @@ public class TenantPortalController {
                         }
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         Complaint saved = complaintRepository.save(complaint);
@@ -644,15 +708,18 @@ public class TenantPortalController {
             Map<String, Object> payload = new HashMap<>();
             payload.put("type", "COMPLAINT_CREATED");
             payload.put("title", "🛠️ New Complaint Ticket!");
-            payload.put("message", (saved.getTicketNumber() != null ? saved.getTicketNumber() : "TKT") + ": " + (saved.getDescription() != null ? saved.getDescription() : "New complaint logged"));
+            payload.put("message", (saved.getTicketNumber() != null ? saved.getTicketNumber() : "TKT") + ": "
+                    + (saved.getDescription() != null ? saved.getDescription() : "New complaint logged"));
             payload.put("complaintId", saved.getId());
             payload.put("ticketNumber", saved.getTicketNumber());
             payload.put("status", saved.getStatus());
             payload.put("category", saved.getCategory());
-            payload.put("tenantName", (tenant.getFirstName() + " " + (tenant.getLastName() != null ? tenant.getLastName() : "")).trim());
+            payload.put("tenantName",
+                    (tenant.getFirstName() + " " + (tenant.getLastName() != null ? tenant.getLastName() : "")).trim());
 
             webSocketNotificationService.broadcastTopic("/topic/complaints", payload);
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
@@ -670,9 +737,11 @@ public class TenantPortalController {
             docs = new java.util.ArrayList<>();
         }
 
-        // If no explicit TenantDocument row exists yet, but tenant has idNumber/idType, auto-synthesize an initial document entry
+        // If no explicit TenantDocument row exists yet, but tenant has idNumber/idType,
+        // auto-synthesize an initial document entry
         if (docs.isEmpty() && tenant.getIdNumber() != null && !tenant.getIdNumber().isBlank()) {
-            TenantDocument initialDoc = new TenantDocument(tenant, tenant.getIdType() != null ? tenant.getIdType().toUpperCase() : "AADHAAR", tenant.getIdNumber());
+            TenantDocument initialDoc = new TenantDocument(tenant,
+                    tenant.getIdType() != null ? tenant.getIdType().toUpperCase() : "AADHAAR", tenant.getIdNumber());
             initialDoc.setVerificationStatus(tenant.getKycStatus() != null ? tenant.getKycStatus() : "PENDING");
             initialDoc.setFileUrl(null);
             TenantDocument saved = tenantDocumentRepository.save(initialDoc);
@@ -779,7 +848,8 @@ public class TenantPortalController {
         String purpose = req.getOrDefault("purpose", "Personal Visit");
 
         if (visitorName == null || mobileNumber == null) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Visitor name and mobile number are required."));
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Visitor name and mobile number are required."));
         }
 
         Visitor visitor = new Visitor(tenant, visitorName, mobileNumber);
@@ -812,14 +882,16 @@ public class TenantPortalController {
         lease.put("monthlyRent", tenant.getRent() != null ? tenant.getRent() : BigDecimal.valueOf(8000));
         lease.put("securityDeposit", tenant.getDeposit() != null ? tenant.getDeposit() : BigDecimal.valueOf(10000));
         lease.put("leaseStart", tenant.getLeaseStart() != null ? tenant.getLeaseStart() : LocalDate.now().toString());
-        lease.put("leaseEnd", tenant.getLeaseEnd() != null ? tenant.getLeaseEnd() : LocalDate.now().plusMonths(11).toString());
+        lease.put("leaseEnd",
+                tenant.getLeaseEnd() != null ? tenant.getLeaseEnd() : LocalDate.now().plusMonths(11).toString());
         lease.put("isSigned", Boolean.TRUE.equals(tenant.getIsAgreementAccepted()));
-        lease.put("signedAt", tenant.getAgreementAcceptedAt() != null ? tenant.getAgreementAcceptedAt().toString() : null);
+        lease.put("signedAt",
+                tenant.getAgreementAcceptedAt() != null ? tenant.getAgreementAcceptedAt().toString() : null);
 
         return ResponseEntity.ok(lease);
     }
 
-    @PostMapping({"/lease/sign", "/agreement/sign"})
+    @PostMapping({ "/lease/sign", "/agreement/sign" })
     @PreAuthorize("hasAnyRole('TENANT', 'ADMIN', 'PROPERTY_MANAGER')")
     public ResponseEntity<?> signTenantLease(@RequestBody(required = false) Map<String, String> req) {
         Tenant tenant = getAuthenticatedTenant();
@@ -839,7 +911,8 @@ public class TenantPortalController {
     public ResponseEntity<?> getRefundAccount() {
         Tenant tenant = getAuthenticatedTenant();
         if (tenant == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Tenant accommodation profile not found."));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Tenant accommodation profile not found."));
         }
 
         Map<String, Object> map = new HashMap<>();
@@ -854,12 +927,15 @@ public class TenantPortalController {
         if (depositPaid == null || depositPaid.compareTo(BigDecimal.ZERO) == 0) {
             try {
                 if (tenant.getOrganization() != null) {
-                    OrganizationBillingProfile profile = organizationBillingProfileRepository.findByOrganization(tenant.getOrganization()).orElse(null);
-                    if (profile != null && profile.getDefaultSecurityDeposit() != null && profile.getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+                    OrganizationBillingProfile profile = organizationBillingProfileRepository
+                            .findByOrganization(tenant.getOrganization()).orElse(null);
+                    if (profile != null && profile.getDefaultSecurityDeposit() != null
+                            && profile.getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
                         depositPaid = profile.getDefaultSecurityDeposit();
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         map.put("depositAmount", depositPaid != null ? depositPaid : BigDecimal.ZERO);
         return ResponseEntity.ok(map);
@@ -870,7 +946,8 @@ public class TenantPortalController {
     public ResponseEntity<?> updateRefundAccount(@RequestBody Map<String, String> req) {
         Tenant tenant = getAuthenticatedTenant();
         if (tenant == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Tenant accommodation profile not found."));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Tenant accommodation profile not found."));
         }
 
         String upi = req.get("refundUpi");
@@ -880,7 +957,8 @@ public class TenantPortalController {
         String bank = req.get("refundBankName");
 
         if ((upi == null || upi.isBlank()) && (accNum == null || accNum.isBlank())) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Please provide either a valid UPI ID or Bank Account Number."));
+            return ResponseEntity.badRequest()
+                    .body(new MessageResponse("Please provide either a valid UPI ID or Bank Account Number."));
         }
 
         tenant.setRefundUpi(upi != null ? upi.trim() : null);
@@ -905,7 +983,8 @@ public class TenantPortalController {
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         Map<String, Object> res = new HashMap<>();
         res.put("message", "Security deposit refund account details updated successfully.");
@@ -940,14 +1019,18 @@ public class TenantPortalController {
 
         List<MeterReading> readings = meterReadingRepository.findByRoom(tenantRoom);
         readings.sort((a, b) -> {
-            int yCmp = Integer.compare(b.getBillingYear() != null ? b.getBillingYear() : 0, a.getBillingYear() != null ? a.getBillingYear() : 0);
-            if (yCmp != 0) return yCmp;
-            return Integer.compare(b.getBillingMonth() != null ? b.getBillingMonth() : 0, a.getBillingMonth() != null ? a.getBillingMonth() : 0);
+            int yCmp = Integer.compare(b.getBillingYear() != null ? b.getBillingYear() : 0,
+                    a.getBillingYear() != null ? a.getBillingYear() : 0);
+            if (yCmp != 0)
+                return yCmp;
+            return Integer.compare(b.getBillingMonth() != null ? b.getBillingMonth() : 0,
+                    a.getBillingMonth() != null ? a.getBillingMonth() : 0);
         });
 
         Set<String> seenCycles = new HashSet<>();
         for (MeterReading mr : readings) {
-            String cycleKey = (mr.getBillingYear() != null ? mr.getBillingYear() : 0) + "_" + (mr.getBillingMonth() != null ? mr.getBillingMonth() : 0);
+            String cycleKey = (mr.getBillingYear() != null ? mr.getBillingYear() : 0) + "_"
+                    + (mr.getBillingMonth() != null ? mr.getBillingMonth() : 0);
             if (!seenCycles.add(cycleKey)) {
                 continue; // Skip historical duplicates for the same cycle
             }

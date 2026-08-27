@@ -9,6 +9,16 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        xs: '480px',
+      },
+      spacing: {
+        '4.5': '1.125rem',
+        '5.5': '1.375rem',
+        '8.5': '2.125rem',
+        '9.5': '2.375rem',
+        '10.5': '2.625rem',
+      },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         heading: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],

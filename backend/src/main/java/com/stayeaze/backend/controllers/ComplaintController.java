@@ -207,6 +207,7 @@ public class ComplaintController {
 
     @GetMapping("/complaints")
     @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('STAFF') or hasRole('TENANT')")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ResponseEntity<?> getFlatComplaints(@RequestParam(required = false) UUID propertyId) {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         UserDetailsImpl userDetails = (principal instanceof UserDetailsImpl) ? (UserDetailsImpl) principal : null;
@@ -227,7 +228,9 @@ public class ComplaintController {
         }
 
         Organization organization = getLoggedUserOrg();
-        List<Complaint> complaints = complaintRepository.findByOrganizationIdNative(organization.getId());
+        List<Complaint> complaints = organization != null
+                ? complaintRepository.findByOrganizationIdNative(organization.getId())
+                : java.util.Collections.emptyList();
         Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
         if (assignedProps != null) {
             complaints = complaints.stream()

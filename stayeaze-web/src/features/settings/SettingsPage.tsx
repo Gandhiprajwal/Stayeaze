@@ -508,43 +508,43 @@ export default function SettingsPage() {
 
       <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setSearchParams({ tab: val }); }}>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 w-full">
-          <div className="w-full overflow-x-auto pb-1 scrollbar-none">
-            <TabsList className="h-10.5 p-1 rounded-xl bg-muted/60 border border-border/60 gap-1 inline-flex shrink-0">
-              <TabsTrigger value="profile" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+          <div className="w-full overflow-x-auto pb-2 scrollbar-none">
+            <TabsList className="h-10 p-1 rounded-xl bg-muted/60 border border-border/60 gap-1 inline-flex shrink-0 min-w-max">
+              <TabsTrigger value="profile" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                 <User className="mr-1.5 h-3.5 w-3.5" /> Profile
               </TabsTrigger>
-              <TabsTrigger value="appearance" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+              <TabsTrigger value="appearance" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                 <Palette className="mr-1.5 h-3.5 w-3.5" /> Appearance
               </TabsTrigger>
-              <TabsTrigger value="notifications" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+              <TabsTrigger value="notifications" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                 <Bell className="mr-1.5 h-3.5 w-3.5" /> Notifications
               </TabsTrigger>
               {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'RECEPTIONIST') && (
-                <TabsTrigger value="wifi" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                <TabsTrigger value="wifi" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                   <Wifi className="mr-1.5 h-3.5 w-3.5 text-cyan-500" /> Wi-Fi Hub
                 </TabsTrigger>
               )}
               {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'ACCOUNTANT') && (
-                <TabsTrigger value="organization" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                <TabsTrigger value="organization" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                   <Building2 className="mr-1.5 h-3.5 w-3.5" /> Organization
                 </TabsTrigger>
               )}
               {canUseCustomBranding && (
-                <TabsTrigger value="branding" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                <TabsTrigger value="branding" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                   <Palette className="mr-1.5 h-3.5 w-3.5 text-purple-500" /> Custom Branding
                 </TabsTrigger>
               )}
               {user?.role === 'SUPER_ADMIN' && (
-                <TabsTrigger value="saas-invoicing" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                <TabsTrigger value="saas-invoicing" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                   <Sparkles className="mr-1.5 h-3.5 w-3.5 text-emerald-500" /> SaaS Invoicing
                 </TabsTrigger>
               )}
               {(user?.role === 'ADMIN' || user?.role === 'OWNER') && (
-                <TabsTrigger value="subscription" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                <TabsTrigger value="subscription" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                   <Sparkles className="mr-1.5 h-3.5 w-3.5 text-amber-500" /> Subscription
                 </TabsTrigger>
               )}
-              <TabsTrigger value="security" className="rounded-lg h-8.5 px-3 text-xs sm:text-sm font-semibold shrink-0">
+              <TabsTrigger value="security" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                 <Shield className="mr-1.5 h-3.5 w-3.5" /> Security
               </TabsTrigger>
             </TabsList>

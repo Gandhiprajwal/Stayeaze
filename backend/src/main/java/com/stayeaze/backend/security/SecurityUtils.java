@@ -103,19 +103,19 @@ public class SecurityUtils {
             return null; // Unrestricted access
         }
 
+        // If user is Owner / Admin, they have unrestricted org access
+        if (isOwnerOrAdmin()) {
+            return null;
+        }
+
         User user = getCurrentUser();
         if (user == null) {
             return null;
         }
 
-        // Check if user has explicit assigned property IDs
+        // Check if user has explicit assigned property IDs (e.g. Property Manager, Staff)
         if (user.getPropertyIds() != null && !user.getPropertyIds().isEmpty()) {
             return new HashSet<>(user.getPropertyIds());
-        }
-
-        // If user is Owner / Admin and has no restricted propertyIds, they have unrestricted org access
-        if (isOwnerOrAdmin()) {
-            return null;
         }
 
         return null;

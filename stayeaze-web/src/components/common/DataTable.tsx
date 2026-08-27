@@ -963,7 +963,7 @@ export function DataTable<T extends { id: string }>({
       </div>
 
         {/* Footer / Pagination Controls */}
-        <div className="flex flex-col items-center justify-between gap-3 border-t border-border/60 bg-muted/10 px-4 py-3 sm:flex-row rounded-2xl">
+        <div className="flex flex-col items-center justify-between gap-3 border border-border/80 bg-card rounded-xl px-4 py-3 sm:flex-row shadow-2xs">
           <div className="flex items-center gap-3 text-xs sm:text-sm text-muted-foreground">
             <span>
               Showing <span className="font-semibold text-foreground">{start}</span>–<span className="font-semibold text-foreground">{end}</span> of{' '}
@@ -976,7 +976,7 @@ export function DataTable<T extends { id: string }>({
               <SelectTrigger className="h-8.5 w-[115px] text-xs rounded-lg border-border/80 bg-card">
                 <SelectValue placeholder={`${initialPageSize} / page`} />
               </SelectTrigger>
-              <SelectContent className="rounded-xl border-border/80 bg-popover/95 backdrop-blur-xl text-xs sm:text-sm">
+              <SelectContent className="rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs sm:text-sm">
                 {[10, 20, 50, 100].map((s) => (
                   <SelectItem key={s} value={String(s)}>{s} / page</SelectItem>
                 ))}
@@ -1020,5 +1020,3 @@ function DropdownMenuCheckboxRow({ label, checked, onToggle }: { label: string; 
     </DropdownMenuItem>
   );
 }
-
-void Trash2;

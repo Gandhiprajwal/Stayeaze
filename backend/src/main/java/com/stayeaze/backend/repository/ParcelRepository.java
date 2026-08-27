@@ -13,4 +13,4 @@ import java.util.UUID;
 public interface ParcelRepository extends JpaRepository<Parcel, UUID> {
     List<Parcel> findByTenant(Tenant tenant);
     Optional<Parcel> findByIdAndTenant(UUID id, Tenant tenant);
-}
+}return findByOrganizationIdAndStatus(org.getId(),status);}}

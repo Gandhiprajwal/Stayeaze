@@ -66,6 +66,7 @@ export const navSections: NavSection[] = [
       { label: 'Rooms', to: '/rooms', icon: DoorOpen, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER'] },
       { label: 'Beds', to: '/beds', icon: BedDouble, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER'] },
       { label: 'Tenants', to: '/tenants', icon: Users, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER'] },
+      { label: 'Lease Agreements', to: '/agreements', icon: ScrollText, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER'] },
       { label: 'Bookings', to: '/bookings', icon: CalendarCheck, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER'] },
       { label: 'Check-in', to: '/check-ins', icon: LogIn, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER', 'RECEPTIONIST'] },
       { label: 'Check-out', to: '/check-outs', icon: LogOut, roles: ['ADMIN', 'OWNER', 'PROPERTY_MANAGER', 'RECEPTIONIST'] },

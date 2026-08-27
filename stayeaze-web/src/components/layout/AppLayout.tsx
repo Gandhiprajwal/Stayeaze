@@ -87,8 +87,8 @@ function SidebarContent({
         )}
       </div>
 
-      {/* Nav with naturally preserved scroll position */}
-      <nav className="flex-1 space-y-5 overflow-y-auto py-4 scrollbar-thin">
+      {/* Nav with naturally preserved scroll position & independent scrollbar */}
+      <nav className="flex-1 space-y-5 overflow-y-auto overflow-x-hidden py-4 sidebar-scrollbar">
         {sections.map((section) => (
           <div key={section.title} className="px-3">
             {!sidebarCollapsed && (
@@ -267,11 +267,11 @@ export function AppLayout() {
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-background">
+    <div className="flex h-screen w-screen overflow-hidden bg-background">
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'hidden shrink-0 transition-all duration-200 lg:block',
+          'hidden shrink-0 transition-all duration-200 lg:flex lg:flex-col h-full overflow-hidden border-r border-white/10',
           sidebarCollapsed ? 'w-[72px]' : 'w-64'
         )}
       >
@@ -304,7 +304,7 @@ export function AppLayout() {
       </Sheet>
 
       {/* Main */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden">
         <SubscriptionStatusBanner />
         {isMaintenanceMode && user?.role === 'SUPER_ADMIN' && (
           <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md shrink-0">
@@ -501,9 +501,9 @@ export function AppLayout() {
           </div>
         )}
 
-        {/* Content */}
-        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full max-w-full">
-          <div className="mx-auto max-w-[1600px] w-full p-3 sm:p-6 lg:p-8 pb-32 md:pb-8">
+        {/* Content with independent scrollbar */}
+        <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full max-w-full main-page-scrollbar">
+          <div className="mx-auto max-w-[1720px] w-full p-3 sm:p-6 lg:p-8 pb-20 md:pb-8">
             <Outlet />
           </div>
         </main>
@@ -545,5 +545,3 @@ export function AppLayout() {
     </div>
   );
 }
-
-void Separator;
