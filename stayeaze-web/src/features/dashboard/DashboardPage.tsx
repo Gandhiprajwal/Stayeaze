@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import {
   Hotel, Users, Wallet, TrendingUp, Building2, CalendarCheck,
   MessageSquareWarning, ArrowUpRight, AlertTriangle,
-  Server, Cpu, Database, Activity, Mail, MessageSquare, CreditCard, Radio, Key, Zap, HardDrive, Sparkles
+  Server, Cpu, Database, Activity, Mail, MessageSquare, CreditCard, Radio, Key, Zap, HardDrive, Sparkles, DollarSign
 } from 'lucide-react';
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer,
@@ -17,8 +17,10 @@ import { StatCard } from '@/components/common/StatCard';
 import { StatusBadge, statusTone } from '@/components/common/StatusBadge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { sendRentDueReminder } from '@/lib/whatsapp';
 import { formatCurrency, formatDate, initials, occupancyRate } from '@/lib/format';
 import api from '@/lib/api';
 import type { Property, Tenant, Invoice, Payment, Complaint } from '@/lib/types';
@@ -96,6 +98,12 @@ export default function DashboardPage() {
     queryKey: ['complaints-stats', selectedPropertyId],
     queryFn: () => api.get('/complaints/stats', { params: activePropParam }).then((r) => r.data || {}),
     staleTime: 60000,
+  });
+
+  const { data: frontDeskOverview } = useQuery({
+    queryKey: ['front-desk-overview', selectedPropertyId],
+    queryFn: () => api.get('/front-desk/overview', { params: activePropParam }).then((r) => r.data || {}),
+    staleTime: 30000,
   });
 
   // Live SSE metrics with fallback to REST API stats
@@ -643,13 +651,19 @@ export default function DashboardPage() {
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="outline" asChild className="gap-1.5 rounded-xl h-10 text-xs font-semibold">
-              <Link to="/tenants"><Users className="h-4 w-4 text-primary" /> + Add Resident</Link>
+              <Link to="/check-ins"><CalendarCheck className="h-4 w-4 text-emerald-500" /> + Check-In</Link>
+            </Button>
+            <Button variant="outline" asChild className="gap-1.5 rounded-xl h-10 text-xs font-semibold">
+              <Link to="/tenants"><Users className="h-4 w-4 text-primary" /> + Resident</Link>
+            </Button>
+            <Button variant="outline" asChild className="gap-1.5 rounded-xl h-10 text-xs font-semibold">
+              <Link to="/billing"><Wallet className="h-4 w-4 text-indigo-500" /> Rent Run</Link>
             </Button>
             <Button variant="outline" asChild className="gap-1.5 rounded-xl h-10 text-xs font-semibold">
               <Link to="/utilities"><Zap className="h-4 w-4 text-amber-500" /> + Sub-Meter</Link>
             </Button>
             <Button asChild className="gap-1.5 rounded-xl h-10 text-xs font-semibold shadow-xs">
-              <Link to="/reports"><TrendingUp className="h-4 w-4" /> View Reports</Link>
+              <Link to="/reports"><TrendingUp className="h-4 w-4" /> Reports</Link>
             </Button>
           </div>
         }
@@ -669,42 +683,153 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Alerts row */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-destructive/20 bg-destructive/5">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
+      {/* Today's Operations Action Center */}
+      <Card className="rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 via-card to-card shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 border-b bg-muted/20">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold shadow-xs">
+                <Sparkles className="h-4 w-4" />
+              </div>
+              <div>
+                <CardTitle className="text-sm font-bold tracking-tight">Today's Operations Action Center</CardTitle>
+                <CardDescription className="text-xs">Immediate tasks requiring manager attention today</CardDescription>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-destructive">{overdue} Overdue invoices</p>
-              <p className="text-xs text-muted-foreground">Needs immediate follow-up</p>
+            <Badge variant="outline" className="text-[11px] font-semibold bg-background">
+              {new Date().toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {/* Action Card 1: Check-Ins */}
+          <div className="p-3.5 rounded-xl border bg-card/80 flex flex-col justify-between space-y-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Arriving Today</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">
+                  {tenants?.filter((t) => t.status === 'pending_checkin').length ?? 0}
+                </p>
+              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600">
+                <CalendarCheck className="h-4 w-4" />
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="border-warning/20 bg-warning/5">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10 text-warning">
-              <MessageSquareWarning className="h-5 w-5" />
+            <Button size="sm" variant="default" asChild className="h-7 text-xs font-semibold w-full gap-1 bg-emerald-600 hover:bg-emerald-700 text-white">
+              <Link to="/check-ins">
+                <span>Start Check-In</span>
+                <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
+
+          {/* Action Card 2: Move-Outs / Notices */}
+          <div className="p-3.5 rounded-xl border bg-card/80 flex flex-col justify-between space-y-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Notice Endings</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">
+                  {tenants?.filter((t) => t.status === 'notice_period').length ?? 0}
+                </p>
+              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-600">
+                <Users className="h-4 w-4" />
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-warning">{openComplaints} Open complaints</p>
-              <p className="text-xs text-muted-foreground">Awaiting resolution</p>
+            <Button size="sm" variant="outline" asChild className="h-7 text-xs font-semibold w-full gap-1 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950">
+              <Link to="/check-outs">
+                <span>Inspect & Settle</span>
+                <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
+
+          {/* Action Card 3: Overdue Rent */}
+          <div className="p-3.5 rounded-xl border bg-card/80 flex flex-col justify-between space-y-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Overdue Rents</p>
+                <p className="text-xl font-bold text-destructive mt-0.5">{overdue} Invoices</p>
+              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <CalendarCheck className="h-5 w-5" />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs font-semibold w-full gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20"
+              onClick={() => {
+                const overdueList = (invoices ?? []).filter(
+                  (i) => i.status === 'overdue' || (i.status === 'unpaid' && i.dueDate && new Date(i.dueDate) < new Date())
+                );
+                if (overdueList.length === 0) {
+                  toast.success('No overdue invoices found. All rents are up to date!');
+                  return;
+                }
+                const first = overdueList[0];
+                const matchedTenant = (tenants ?? []).find((t) => t.id === first.tenantId);
+                const matchedProp = (properties ?? []).find((p: any) => p.id === first.propertyId);
+                const dueAmt = (first.amount || 0) - (first.paidAmount || 0);
+
+                sendRentDueReminder({
+                  tenantName: first.tenantName || matchedTenant?.name || 'Resident',
+                  tenantMobile: matchedTenant?.phone || matchedTenant?.mobile,
+                  propertyName: selectedProperty?.name || matchedProp?.name,
+                  roomNumber: matchedTenant?.roomNumber,
+                  bedNumber: matchedTenant?.bedNumber,
+                  amountDue: dueAmt > 0 ? dueAmt : first.amount,
+                  dueDate: first.dueDate,
+                });
+                toast.success(`WhatsApp reminder opened for ${first.tenantName || 'tenant'}!`);
+              }}
+            >
+              <span>Remind via WA</span>
+              <ArrowUpRight className="h-3 w-3" />
+            </Button>
+          </div>
+
+          {/* Action Card 4: Open Complaints */}
+          <div className="p-3.5 rounded-xl border bg-card/80 flex flex-col justify-between space-y-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Open Complaints</p>
+                <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-0.5">{openComplaints}</p>
+              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600">
+                <MessageSquareWarning className="h-4 w-4" />
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium">{tenants?.filter((t) => t.status === 'notice_period').length ?? 0} Notice periods</p>
-              <p className="text-xs text-muted-foreground">Pending check-out</p>
+            <Button size="sm" variant="outline" asChild className="h-7 text-xs font-semibold w-full gap-1 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950">
+              <Link to="/complaints">
+                <span>View & Resolve</span>
+                <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
+
+          {/* Action Card 5: Front Desk Shift Cash Handover */}
+          <div className="p-3.5 rounded-xl border bg-card/80 flex flex-col justify-between space-y-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Desk Shift Cash</p>
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  {formatCurrency(frontDeskOverview?.pendingCashAmount || 0)}
+                </p>
+              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600">
+                <DollarSign className="h-4 w-4" />
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <Button size="sm" variant="outline" asChild className="h-7 text-xs font-semibold w-full gap-1 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950">
+              <Link to="/receptionist">
+                <span>Verify & Deposit</span>
+                <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-3">

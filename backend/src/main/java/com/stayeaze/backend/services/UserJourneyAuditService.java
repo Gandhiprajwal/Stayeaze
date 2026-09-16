@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.models.User;
 import com.stayeaze.backend.models.UserJourneyAudit;
-import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.UserJourneyAuditRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -17,7 +16,6 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 public class UserJourneyAuditService {
@@ -26,9 +24,6 @@ public class UserJourneyAuditService {
 
     @Autowired
     private UserJourneyAuditRepository auditRepository;
-
-    @Autowired
-    private OrganizationRepository organizationRepository;
 
     @Autowired
     private ObjectMapper objectMapper;

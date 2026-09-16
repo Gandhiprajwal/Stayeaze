@@ -4,7 +4,6 @@ import com.stayeaze.backend.models.AuditLog;
 import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.repository.AuditLogRepository;
 import com.stayeaze.backend.repository.OrganizationRepository;
-import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;

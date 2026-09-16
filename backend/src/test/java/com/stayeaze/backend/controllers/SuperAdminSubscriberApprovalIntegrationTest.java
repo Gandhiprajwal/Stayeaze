@@ -44,9 +44,6 @@ public class SuperAdminSubscriberApprovalIntegrationTest {
     private RoleRepository roleRepository;
 
     @Autowired
-    private PropertyRepository propertyRepository;
-
-    @Autowired
     private ObjectMapper objectMapper;
 
     private Organization pendingOrg1;

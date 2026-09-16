@@ -22,7 +22,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -68,6 +67,9 @@ public class SupportTicketController {
     @Autowired(required = false)
     private com.stayeaze.backend.services.WebSocketNotificationService webSocketNotificationService;
 
+    @Autowired
+    private com.stayeaze.backend.services.InvoiceSequenceService invoiceSequenceService;
+
     private UserDetailsImpl getCurrentUserDetails() {
         if (SecurityContextHolder.getContext().getAuthentication() == null) {
             return null;
@@ -110,6 +112,7 @@ public class SupportTicketController {
      */
     @PostMapping
     @PreAuthorize("isAuthenticated()")
+    @org.springframework.cache.annotation.CacheEvict(value = "support_ticket_stats", allEntries = true)
     public ResponseEntity<?> createSupportTicket(@RequestBody Map<String, Object> body) {
         UserDetailsImpl userDetails = getCurrentUserDetails();
         Organization org = null;
@@ -156,18 +159,8 @@ public class SupportTicketController {
             priority = "MEDIUM";
         }
 
-        // Generate unique ticket reference: APP-YYYYMM-XXXX
-        String datePrefix = OffsetDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMM"));
-        String randomSuffix = String.format("%04d", new Random().nextInt(10000));
-        String ticketNumber = "APP-" + datePrefix + "-" + randomSuffix;
-
-        // Ensure uniqueness
-        int attempts = 0;
-        while (supportTicketRepository.findByTicketNumber(ticketNumber).isPresent() && attempts < 5) {
-            randomSuffix = String.format("%04d", new Random().nextInt(10000));
-            ticketNumber = "APP-" + datePrefix + "-" + randomSuffix;
-            attempts++;
-        }
+        // Generate sequential ticket reference: SUP/FY/0001
+        String ticketNumber = invoiceSequenceService.nextSupportTicketNumber();
 
         SupportTicket ticket = new SupportTicket(ticketNumber, org, user, title, description, category, priority);
         ticket.setContactEmail(contactEmail);
@@ -721,6 +714,7 @@ public class SupportTicketController {
      */
     @GetMapping("/stats")
     @PreAuthorize("isAuthenticated()")
+    @org.springframework.cache.annotation.Cacheable(value = "support_ticket_stats", key = "(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication() != null ? T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() : 'anon')")
     public ResponseEntity<?> getTicketStats() {
         Map<String, Object> stats = new HashMap<>();
         if (isPlatformStaff()) {

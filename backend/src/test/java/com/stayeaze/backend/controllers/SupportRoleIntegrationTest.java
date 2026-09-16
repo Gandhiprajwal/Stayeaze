@@ -122,7 +122,7 @@ public class SupportRoleIntegrationTest {
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id", notNullValue()))
-                .andExpect(jsonPath("$.ticketNumber", startsWith("APP-")))
+                .andExpect(jsonPath("$.ticketNumber", startsWith("SUP/")))
                 .andExpect(jsonPath("$.status", is("OPEN")))
                 .andExpect(jsonPath("$.priority", is("HIGH")))
                 .andExpect(jsonPath("$.category", is("PAYMENT_GATEWAY")));
@@ -690,7 +690,7 @@ public class SupportRoleIntegrationTest {
     @WithMockUser(username = "tenant.rahul@test.com", roles = "TENANT")
     void testTenantCanRaiseApplicationSupportTicket() throws Exception {
         Role tenantRole = roleRepository.findByName("TENANT").orElseGet(() -> roleRepository.save(new Role("TENANT", "{}")));
-        User tenantUser = userRepository.findByEmail("tenant.rahul@test.com").orElseGet(() -> {
+        userRepository.findByEmail("tenant.rahul@test.com").orElseGet(() -> {
             User u = new User(testOrg, "tenant.rahul@test.com", "pass123", "9876543299");
             u.setFirstName("Rahul Tenant");
             u.setRoles(Set.of(tenantRole));
@@ -708,7 +708,7 @@ public class SupportRoleIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.ticketNumber", startsWith("APP-")))
+                .andExpect(jsonPath("$.ticketNumber", startsWith("SUP/")))
                 .andExpect(jsonPath("$.category", is("PAYMENT_GATEWAY")));
     }
 
@@ -717,7 +717,7 @@ public class SupportRoleIntegrationTest {
     @WithMockUser(username = "receptionist.priya@test.com", roles = "RECEPTIONIST")
     void testStaffMemberCanRaiseSupportTicket() throws Exception {
         Role staffRole = roleRepository.findByName("RECEPTIONIST").orElseGet(() -> roleRepository.save(new Role("RECEPTIONIST", "{}")));
-        User staffUser = userRepository.findByEmail("receptionist.priya@test.com").orElseGet(() -> {
+        userRepository.findByEmail("receptionist.priya@test.com").orElseGet(() -> {
             User u = new User(testOrg, "receptionist.priya@test.com", "pass123", "9876543297");
             u.setFirstName("Priya Receptionist");
             u.setRoles(Set.of(staffRole));
@@ -735,7 +735,7 @@ public class SupportRoleIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(payload)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.ticketNumber", startsWith("APP-")))
+                .andExpect(jsonPath("$.ticketNumber", startsWith("SUP/")))
                 .andExpect(jsonPath("$.title", is("Check-in Visitor QR Scanner Error")));
     }
 }

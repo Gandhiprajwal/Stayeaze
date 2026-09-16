@@ -122,4 +122,21 @@ public class NotificationLogControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status", is("SENT")));
     }
+
+    @Test
+    @DisplayName("POST /notification-logs/broadcast-announcement - Broadcast announcement to organization users")
+    void testBroadcastAnnouncement() throws Exception {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("title", "Water Supply Maintenance");
+        payload.put("message", "Scheduled maintenance on Sunday 10am to 1pm.");
+        payload.put("priority", "HIGH");
+        payload.put("targetAudience", "ALL");
+
+        mockMvc.perform(post("/api/v1/notification-logs/broadcast-announcement")
+                .with(authentication(auth))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(payload)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetOrgsCount", greaterThanOrEqualTo(1)));
+    }
 }

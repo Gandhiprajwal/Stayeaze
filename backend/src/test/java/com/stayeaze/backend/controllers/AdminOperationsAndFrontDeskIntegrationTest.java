@@ -61,12 +61,6 @@ public class AdminOperationsAndFrontDeskIntegrationTest {
     private TenantRepository tenantRepository;
 
     @Autowired
-    private ComplaintRepository complaintRepository;
-
-    @Autowired
-    private VisitorRepository visitorRepository;
-
-    @Autowired
     private EntityManager entityManager;
 
     private Organization testOrg;
@@ -87,7 +81,7 @@ public class AdminOperationsAndFrontDeskIntegrationTest {
         testOrg = organizationRepository.saveAndFlush(testOrg);
 
         String email = "owner_ops_" + System.currentTimeMillis() + "@stayeaze.com";
-        String mobile = "98" + (System.currentTimeMillis() % 100000000L);
+        String mobile = "98" + String.format("%08d", Math.abs(System.currentTimeMillis() % 100000000L));
         ownerUser = new User(testOrg, email, "password123", mobile);
         ownerUser.setFirstName("Deepak Joshi");
         ownerUser.setRoles(new HashSet<>(Collections.singleton(ownerRole)));
@@ -105,6 +99,7 @@ public class AdminOperationsAndFrontDeskIntegrationTest {
         testProperty.setAddress("Kalyani Nagar, Pune");
         testProperty.setCity("Pune");
         testProperty.setState("Maharashtra");
+        testProperty.setStatus("ACTIVE");
         testProperty = propertyRepository.saveAndFlush(testProperty);
 
         testBuilding = new Building();
@@ -113,7 +108,7 @@ public class AdminOperationsAndFrontDeskIntegrationTest {
         testBuilding.setCode("MAIN-W");
         testBuilding = buildingRepository.saveAndFlush(testBuilding);
 
-        String tenantMobile = "97" + (System.currentTimeMillis() % 100000000L);
+        String tenantMobile = "97" + String.format("%08d", Math.abs(System.currentTimeMillis() % 100000000L));
         testTenant = new Tenant(testOrg, "Vikas", "Patil", tenantMobile);
         testTenant.setEmail("vikas.patil." + System.currentTimeMillis() + "@gmail.com");
         testTenant.setPropertyId(testProperty.getId());

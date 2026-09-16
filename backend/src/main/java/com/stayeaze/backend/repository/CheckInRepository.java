@@ -22,5 +22,7 @@ public interface CheckInRepository extends JpaRepository<CheckIn, UUID> {
     @Query("SELECT c FROM CheckIn c WHERE c.organization.id = :orgId")
     Page<CheckIn> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
+    boolean existsByCode(String code);
+
     Page<CheckIn> findAll(Pageable pageable);
 }

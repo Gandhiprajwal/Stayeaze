@@ -13,7 +13,7 @@ import { toast } from '@/hooks/use-toast';
 import api from '@/lib/api';
 import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Property, Room, Bed } from '@/lib/types';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, getTodayIsoDate, formatToLocalIsoDate } from '@/lib/format';
 
 interface QuickAddTenantModalProps {
   open: boolean;
@@ -22,30 +22,53 @@ interface QuickAddTenantModalProps {
   properties: Property[];
   rooms: Room[];
   beds: Bed[];
+  initialPropertyId?: string;
+  initialRoomId?: string;
+  initialRoomNumber?: string;
+  initialBedNumber?: string;
+  initialRent?: number;
 }
 
-export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties, rooms, beds }: QuickAddTenantModalProps) {
-  const { selectedPropertyId } = usePropertyStore();
+export function QuickAddTenantModal({
+  open,
+  onOpenChange,
+  onSuccess,
+  properties,
+  rooms,
+  beds,
+  initialPropertyId,
+  initialRoomId,
+  initialRoomNumber,
+  initialBedNumber,
+  initialRent,
+}: QuickAddTenantModalProps) {
+  const selectedPropertyId = usePropertyStore((s) => s.selectedPropertyId);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form State
+  // Tenant Details
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male');
-  const [propertyId, setPropertyId] = useState(selectedPropertyId !== 'ALL' ? selectedPropertyId : '');
-  const [roomId, setRoomId] = useState('');
-  const [roomNumber, setRoomNumber] = useState('');
-  const [bedNumber, setBedNumber] = useState('');
+  const [propertyId, setPropertyId] = useState(initialPropertyId || (selectedPropertyId !== 'ALL' ? selectedPropertyId : ''));
+  const [roomId, setRoomId] = useState(initialRoomId || '');
+  const [roomNumber, setRoomNumber] = useState(initialRoomNumber || '');
+  const [bedNumber, setBedNumber] = useState(initialBedNumber || '');
 
   // Financials & Move-in
-  const [rent, setRent] = useState(8000);
-  const [deposit, setDeposit] = useState(16000);
-  const [leaseStart, setLeaseStart] = useState(new Date().toISOString().slice(0, 10));
+  const [rent, setRent] = useState(initialRent || 8000);
+  const [deposit, setDeposit] = useState(initialRent ? initialRent * 2 : 16000);
+  const [leaseStart, setLeaseStart] = useState(getTodayIsoDate());
   const [leaseEnd, setLeaseEnd] = useState('');
   const [depositAlreadyPaid, setDepositAlreadyPaid] = useState(true);
   const [openingBalanceDue, setOpeningBalanceDue] = useState(0);
+
+  // Corporate B2B Sponsorship State
+  const [billingResponsibility, setBillingResponsibility] = useState<'SELF_PAY' | 'CORPORATE_SPONSORED'>('SELF_PAY');
+  const [corporateCompanyName, setCorporateCompanyName] = useState('');
+  const [corporateGstin, setCorporateGstin] = useState('');
+  const [utilityResponsibility, setUtilityResponsibility] = useState<'CORPORATE_COVERED' | 'OCCUPANT_SELF_PAY'>('CORPORATE_COVERED');
 
   // KYC & Emergency
   const [occupation, setOccupation] = useState('');
@@ -55,14 +78,26 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
   const [emergencyContact, setEmergencyContact] = useState('');
   const [sendCredentials, setSendCredentials] = useState(true);
 
-  // Auto-fill property if only 1 exists or if global property is selected
+  // Auto-fill property and initial selection on open
   useEffect(() => {
-    if (selectedPropertyId && selectedPropertyId !== 'ALL') {
-      setPropertyId(selectedPropertyId);
-    } else if (properties.length === 1 && !propertyId) {
-      setPropertyId(properties[0].id);
+    if (open) {
+      if (initialPropertyId) {
+        setPropertyId(initialPropertyId);
+      } else if (selectedPropertyId && selectedPropertyId !== 'ALL') {
+        setPropertyId(selectedPropertyId);
+      } else if (properties.length === 1 && !propertyId) {
+        setPropertyId(properties[0].id);
+      }
+
+      if (initialRoomId) setRoomId(initialRoomId);
+      if (initialRoomNumber) setRoomNumber(initialRoomNumber);
+      if (initialBedNumber) setBedNumber(initialBedNumber);
+      if (initialRent) {
+        setRent(initialRent);
+        setDeposit(initialRent * 2);
+      }
     }
-  }, [selectedPropertyId, properties, open]);
+  }, [open, initialPropertyId, initialRoomId, initialRoomNumber, initialBedNumber, initialRent, selectedPropertyId, properties]);
 
   function resetForm() {
     setStep(1);
@@ -76,7 +111,7 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
     setBedNumber('');
     setRent(8000);
     setDeposit(16000);
-    setLeaseStart(new Date().toISOString().slice(0, 10));
+    setLeaseStart(getTodayIsoDate());
     setLeaseEnd('');
     setDepositAlreadyPaid(true);
     setOpeningBalanceDue(0);
@@ -117,6 +152,10 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
         emergencyContactName: emergencyName.trim() || undefined,
         emergencyContactMobile: emergencyContact.trim() || undefined,
         paymentMethod: depositAlreadyPaid ? 'CASH' : undefined,
+        billingResponsibility,
+        corporateCompanyName: billingResponsibility === 'CORPORATE_SPONSORED' ? corporateCompanyName.trim() || undefined : undefined,
+        corporateGstin: billingResponsibility === 'CORPORATE_SPONSORED' ? corporateGstin.trim() || undefined : undefined,
+        utilityResponsibility: billingResponsibility === 'CORPORATE_SPONSORED' ? utilityResponsibility : undefined,
         status: 'active',
       };
 
@@ -130,8 +169,8 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
             propertyId,
             roomNumber,
             amount: openingBalanceDue,
-            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-            issueDate: leaseStart || new Date().toISOString().slice(0, 10),
+            dueDate: getTodayIsoDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+            issueDate: leaseStart || getTodayIsoDate(),
             status: 'unpaid',
             items: [{ description: 'Previous Outstanding Rent Balance', amount: openingBalanceDue }],
           });
@@ -274,7 +313,7 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
                       if (matched && (matched as any).propertyId && !propertyId) {
                         setPropertyId((matched as any).propertyId);
                       }
-                      if (defaultRent && rent === 8000) setRent(defaultRent);
+                      if (defaultRent && defaultRent > 0) setRent(defaultRent);
                     }}
                     onSelectBed={(bNum) => {
                       setBedNumber(bNum);
@@ -303,12 +342,94 @@ export function QuickAddTenantModal({ open, onOpenChange, onSuccess, properties,
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold">Monthly Rent (₹) *</Label>
-                  <Input type="number" min={0} value={rent} onChange={e => setRent(Number(e.target.value))} />
+                  <Input
+                    type="number"
+                    min={0}
+                    value={rent}
+                    readOnly
+                    className="bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed text-slate-700 dark:text-slate-300 font-mono font-medium"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Auto-fetched from selected room rate.</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold">Security Deposit (₹) *</Label>
-                  <Input type="number" min={0} value={deposit} onChange={e => setDeposit(Number(e.target.value))} />
+                  <Input
+                    type="number"
+                    min={0}
+                    value={deposit}
+                    readOnly
+                    className="bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed text-slate-700 dark:text-slate-300 font-mono font-medium"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Auto-configured by property billing policy.</p>
                 </div>
+              </div>
+
+              {/* Corporate B2B Sponsorship Box */}
+              <div className="p-3.5 rounded-xl border border-indigo-200/70 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                    <Building className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+                    Billing & Lease Sponsorship
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">Select whether this resident pays their own rent or is sponsored by a corporate bulk booking client.</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBillingResponsibility('SELF_PAY')}
+                    className={`px-3 py-2 text-xs font-semibold rounded-lg border text-left transition-all ${billingResponsibility === 'SELF_PAY' ? 'bg-white dark:bg-slate-900 border-indigo-600 text-indigo-700 dark:text-indigo-300 shadow-xs ring-1 ring-indigo-600' : 'bg-transparent border-slate-200 dark:border-slate-800 text-muted-foreground hover:bg-slate-100/50'}`}
+                  >
+                    👤 Self-Pay (Resident Pays)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillingResponsibility('CORPORATE_SPONSORED')}
+                    className={`px-3 py-2 text-xs font-semibold rounded-lg border text-left transition-all ${billingResponsibility === 'CORPORATE_SPONSORED' ? 'bg-white dark:bg-slate-900 border-indigo-600 text-indigo-700 dark:text-indigo-300 shadow-xs ring-1 ring-indigo-600' : 'bg-transparent border-slate-200 dark:border-slate-800 text-muted-foreground hover:bg-slate-100/50'}`}
+                  >
+                    🏢 Corporate Sponsored (B2B)
+                  </button>
+                </div>
+
+                {billingResponsibility === 'CORPORATE_SPONSORED' && (
+                  <div className="space-y-3 pt-2 border-t border-indigo-200/50 dark:border-indigo-900/40">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-semibold">Corporate Company Name *</Label>
+                        <Input
+                          placeholder="e.g. Infosys Ltd / TCS"
+                          value={corporateCompanyName}
+                          onChange={e => setCorporateCompanyName(e.target.value)}
+                          className="h-8 text-xs bg-white dark:bg-slate-900"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[11px] font-semibold">Company GSTIN (Optional)</Label>
+                        <Input
+                          placeholder="e.g. 29AAAAA0000A1Z5"
+                          value={corporateGstin}
+                          onChange={e => setCorporateGstin(e.target.value)}
+                          className="h-8 text-xs bg-white dark:bg-slate-900"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-semibold">Utility / Electricity Policy</Label>
+                      <Select value={utilityResponsibility} onValueChange={(v: any) => setUtilityResponsibility(v)}>
+                        <SelectTrigger className="h-8 text-xs bg-white dark:bg-slate-900">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="CORPORATE_COVERED">🏢 Corporate Covers All (Zero Tenant Bills)</SelectItem>
+                          <SelectItem value="OCCUPANT_SELF_PAY">⚡ Employee Pays Metered Electricity / Add-ons</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
+                      ✓ Base room rent will be excluded from monthly resident runs to prevent revenue double-counting.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="p-3.5 rounded-xl border bg-muted/30 space-y-3">

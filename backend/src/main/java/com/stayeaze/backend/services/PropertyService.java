@@ -251,12 +251,6 @@ public class PropertyService {
     private com.stayeaze.backend.repository.ComplaintRepository complaintRepository;
 
     @Autowired
-    private com.stayeaze.backend.repository.MaintenanceRepository maintenanceRepository;
-
-    @Autowired
-    private com.stayeaze.backend.repository.VisitorRepository visitorRepository;
-
-    @Autowired
     private com.stayeaze.backend.repository.UserRepository userRepository;
 
     @Autowired

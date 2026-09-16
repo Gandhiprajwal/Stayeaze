@@ -15,7 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Service
-public class RefreshTokenService {
+public class RefreshTokenService implements IRefreshTokenService {
     @Value("${jwt.refresh-expiration}")
     private Long refreshTokenDurationMs;
 

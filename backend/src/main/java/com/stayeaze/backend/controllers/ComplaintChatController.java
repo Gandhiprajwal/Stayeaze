@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -35,9 +36,35 @@ public class ComplaintChatController {
     @Autowired
     private WebSocketNotificationService webSocketNotificationService;
 
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
     // Fetch complaint ticket chat history
     @GetMapping("/{id}/messages")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getComplaintChatHistory(@PathVariable UUID id) {
+        Complaint complaint = complaintRepository.findById(id)
+                .orElseGet(() -> complaintRepository.findByIdNative(id).orElse(null));
+        if (complaint == null) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(Map.of("message", "Error: Complaint ticket not found."));
+        }
+
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
+            boolean isTenant = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_TENANT"));
+            if (isTenant && userDetails.getEmail() != null) {
+                if (complaint.getTenant() == null || complaint.getTenant().getEmail() == null || !userDetails.getEmail().equalsIgnoreCase(complaint.getTenant().getEmail())) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(Map.of("message", "Unauthorized access to complaint chat."));
+                }
+            } else if (!securityUtils.isSuperAdmin()) {
+                UUID complaintOrgId = (complaint.getTenant() != null && complaint.getTenant().getOrganization() != null)
+                        ? complaint.getTenant().getOrganization().getId() : null;
+                if (userDetails.getOrgId() != null && complaintOrgId != null && !userDetails.getOrgId().equals(complaintOrgId)) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(Map.of("message", "Unauthorized access to complaint chat."));
+                }
+            }
+        }
+
         List<ComplaintChatMessage> messages = chatMessageRepository.findByComplaintIdNative(id);
 
         List<Map<String, Object>> response = new ArrayList<>();
@@ -57,11 +84,28 @@ public class ComplaintChatController {
 
     // HTTP Post fallback for chat message
     @PostMapping("/{id}/messages")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> sendComplaintChatMessage(@PathVariable UUID id, @RequestBody Map<String, Object> body) {
         Complaint complaint = complaintRepository.findById(id)
                 .orElseGet(() -> complaintRepository.findByIdNative(id).orElse(null));
         if (complaint == null) {
             return ResponseEntity.badRequest().body(Map.of("message", "Error: Complaint ticket not found."));
+        }
+
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
+            boolean isTenant = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_TENANT"));
+            if (isTenant && userDetails.getEmail() != null) {
+                if (complaint.getTenant() == null || complaint.getTenant().getEmail() == null || !userDetails.getEmail().equalsIgnoreCase(complaint.getTenant().getEmail())) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(Map.of("message", "Unauthorized to post on this complaint."));
+                }
+            } else if (!securityUtils.isSuperAdmin()) {
+                UUID complaintOrgId = (complaint.getTenant() != null && complaint.getTenant().getOrganization() != null)
+                        ? complaint.getTenant().getOrganization().getId() : null;
+                if (userDetails.getOrgId() != null && complaintOrgId != null && !userDetails.getOrgId().equals(complaintOrgId)) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(Map.of("message", "Unauthorized to post on this complaint."));
+                }
+            }
         }
 
         String messageText = body.get("message") != null ? body.get("message").toString().trim() : "";

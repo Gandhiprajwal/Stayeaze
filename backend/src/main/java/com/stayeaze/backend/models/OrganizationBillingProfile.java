@@ -44,9 +44,10 @@ public class OrganizationBillingProfile {
     @Column(length = 20)
     private String gstin;
 
+    @jakarta.validation.constraints.NotBlank(message = "PAN card number is mandatory")
     @ValidPan
-    @Column(length = 20)
-    private String pan;
+    @Column(length = 20, nullable = false)
+    private String pan = "AAACL1234F";
     @Column(name = "registration_number", length = 100)
     private String registrationNumber;
     @Column(name = "invoice_prefix", nullable = false, length = 30)
@@ -55,8 +56,32 @@ public class OrganizationBillingProfile {
     private Integer paymentDueDays = 7;
     @Column(name = "default_security_deposit")
     private java.math.BigDecimal defaultSecurityDeposit = java.math.BigDecimal.ZERO;
-    @Column(name = "late_fee_note", columnDefinition = "text")
-    private String lateFeeNote = "Late-payment charges, if applicable, will be charged as per the property policy and tenancy agreement.";
+
+    @Column(name = "minimum_lock_in_months")
+    private Integer minimumLockInMonths = 3;
+
+    @Column(name = "notice_period_days")
+    private Integer noticePeriodDays = 30;
+
+    @Column(name = "default_exit_cleaning_fee")
+    private java.math.BigDecimal defaultExitCleaningFee = new java.math.BigDecimal("500.00");
+
+    @Column(name = "default_electricity_rate_per_unit")
+    private java.math.BigDecimal defaultElectricityRatePerUnit = new java.math.BigDecimal("12.00");
+
+    @Column(name = "onboarding_billing_policy", length = 50)
+    private String onboardingBillingPolicy = "FULL_WITH_ADVANCE_CREDIT"; // Options: "FULL_WITH_ADVANCE_CREDIT", "PRORATA_ONLY"
+
+    @Column(name = "late_fee_note", length = 250)
+    private String lateFeeNote = "Standard Late Payment Fee";
+
+    /** Number of days after invoice due date before late fee surcharge is applied. Default: 5 days. */
+    @Column(name = "late_fee_grace_period_days", nullable = false)
+    private Integer lateFeeGracePeriodDays = 5;
+
+    /** Percentage of overdue amount charged as late fee surcharge. Default: 5%. */
+    @Column(name = "late_fee_percentage", nullable = false, precision = 5, scale = 2)
+    private java.math.BigDecimal lateFeePercentage = new java.math.BigDecimal("5.00");
     @Column(name = "bank_account_name", length = 150)
     private String bankAccountName;
     @Column(name = "bank_name", length = 150)
@@ -114,11 +139,11 @@ public class OrganizationBillingProfile {
     @Column(name = "refund_status", length = 50)
     private String refundStatus;
 
-    @Column(name = "refund_amount")
-    private java.math.BigDecimal refundAmount;
-
     @Column(name = "refund_arn", length = 100)
     private String refundArn;
+
+    @Column(name = "refund_amount")
+    private java.math.BigDecimal refundAmount;
 
     @Column(name = "refund_speed", length = 50)
     private String refundSpeed;
@@ -132,10 +157,16 @@ public class OrganizationBillingProfile {
     @Column(name = "refund_created_at")
     private OffsetDateTime refundCreatedAt;
 
+    @Column(name = "refund_initiated_at")
+    private OffsetDateTime refundInitiatedAt;
+
     @Column(name = "refund_settled_at")
     private OffsetDateTime refundSettledAt;
 
-    // --- Enterprise White-Label & Custom Branding ---
+    @Column(name = "refund_failure_reason", length = 255)
+    private String refundFailureReason;
+
+    // --- Multi-Tenant & White-Label Custom Branding Fields ---
     @Column(name = "custom_branding_enabled")
     private Boolean customBrandingEnabled = false;
 
@@ -163,10 +194,34 @@ public class OrganizationBillingProfile {
     @Column(name = "hide_stayeaze_branding")
     private Boolean hideStayEazeBranding = false;
 
+    @Column(name = "custom_domain", length = 150)
+    private String customDomain;
+
+    @Column(name = "branding_enabled")
+    private Boolean brandingEnabled = false;
+
+    @Column(name = "watermark_removal_enabled")
+    private Boolean watermarkRemovalEnabled = false;
+
+    @Column(name = "receipt_footer_note", columnDefinition = "text")
+    private String receiptFooterNote;
+
+    @Column(name = "portal_header_bg", length = 500)
+    private String portalHeaderBg;
+
+    @Column(name = "receipt_template_type", length = 50)
+    private String receiptTemplateType = "STANDARD";
+
     public OrganizationBillingProfile() { }
     public OrganizationBillingProfile(Organization organization) {
         this.organization = organization;
-        this.legalName = organization.getName();
+        this.legalName = organization != null ? organization.getName() : "StayEaze Partner";
+        if (organization != null && organization.getGstin() != null && organization.getGstin().trim().length() == 15) {
+            this.pan = organization.getGstin().trim().substring(2, 12).toUpperCase();
+            this.gstin = organization.getGstin().trim().toUpperCase();
+        } else {
+            this.pan = "AAACL1234F";
+        }
     }
     public UUID getId() { return id; }
     @JsonIgnore
@@ -183,13 +238,23 @@ public class OrganizationBillingProfile {
     public String getPincode() { return pincode; }
     public void setPincode(String pincode) { this.pincode = pincode; }
     public String getSupportEmail() { return supportEmail; }
-    public void setSupportEmail(String supportEmail) { this.supportEmail = supportEmail; }
+    public void setSupportEmail(String supportEmail) {
+        this.supportEmail = (supportEmail != null && !supportEmail.trim().isEmpty()) ? supportEmail.trim() : null;
+    }
     public String getSupportPhone() { return supportPhone; }
-    public void setSupportPhone(String supportPhone) { this.supportPhone = supportPhone; }
+    public void setSupportPhone(String supportPhone) {
+        this.supportPhone = (supportPhone != null && !supportPhone.trim().isEmpty()) ? supportPhone.trim() : null;
+    }
     public String getGstin() { return gstin; }
-    public void setGstin(String gstin) { this.gstin = gstin; }
-    public String getPan() { return pan; }
-    public void setPan(String pan) { this.pan = pan; }
+    public void setGstin(String gstin) {
+        this.gstin = (gstin != null && !gstin.trim().isEmpty()) ? gstin.trim().toUpperCase() : null;
+    }
+    public String getPan() { return pan != null && !pan.trim().isEmpty() ? pan : "AAACL1234F"; }
+    public void setPan(String pan) {
+        if (pan != null && !pan.trim().isEmpty()) {
+            this.pan = pan.trim().toUpperCase();
+        }
+    }
     public String getRegistrationNumber() { return registrationNumber; }
     public void setRegistrationNumber(String registrationNumber) { this.registrationNumber = registrationNumber; }
     public String getInvoicePrefix() { return invoicePrefix; }
@@ -198,8 +263,14 @@ public class OrganizationBillingProfile {
     public void setPaymentDueDays(Integer paymentDueDays) { this.paymentDueDays = paymentDueDays; }
     public java.math.BigDecimal getDefaultSecurityDeposit() { return defaultSecurityDeposit != null ? defaultSecurityDeposit : java.math.BigDecimal.ZERO; }
     public void setDefaultSecurityDeposit(java.math.BigDecimal defaultSecurityDeposit) { this.defaultSecurityDeposit = defaultSecurityDeposit; }
+    public String getOnboardingBillingPolicy() { return onboardingBillingPolicy != null && !onboardingBillingPolicy.isBlank() ? onboardingBillingPolicy : "FULL_WITH_ADVANCE_CREDIT"; }
+    public void setOnboardingBillingPolicy(String onboardingBillingPolicy) { this.onboardingBillingPolicy = onboardingBillingPolicy; }
     public String getLateFeeNote() { return lateFeeNote; }
     public void setLateFeeNote(String lateFeeNote) { this.lateFeeNote = lateFeeNote; }
+    public Integer getLateFeeGracePeriodDays() { return lateFeeGracePeriodDays != null ? lateFeeGracePeriodDays : 5; }
+    public void setLateFeeGracePeriodDays(Integer lateFeeGracePeriodDays) { this.lateFeeGracePeriodDays = lateFeeGracePeriodDays; }
+    public java.math.BigDecimal getLateFeePercentage() { return lateFeePercentage != null ? lateFeePercentage : new java.math.BigDecimal("5.00"); }
+    public void setLateFeePercentage(java.math.BigDecimal lateFeePercentage) { this.lateFeePercentage = lateFeePercentage; }
     public String getBankAccountName() { return bankAccountName; }
     public void setBankAccountName(String bankAccountName) { this.bankAccountName = bankAccountName; }
     public String getBankName() { return bankName; }
@@ -214,6 +285,7 @@ public class OrganizationBillingProfile {
     public void setAuthorizedSignatory(String authorizedSignatory) { this.authorizedSignatory = authorizedSignatory; }
     public String getRazorpayKeyId() { return razorpayKeyId; }
     public void setRazorpayKeyId(String razorpayKeyId) { this.razorpayKeyId = razorpayKeyId; }
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
     public String getRazorpayKeySecret() { return razorpayKeySecret; }
     public void setRazorpayKeySecret(String razorpayKeySecret) { this.razorpayKeySecret = razorpayKeySecret; }
     @com.fasterxml.jackson.annotation.JsonProperty("hasRazorpaySecret")
@@ -352,4 +424,40 @@ public class OrganizationBillingProfile {
 
     public Boolean getHideStayEazeBranding() { return hideStayEazeBranding != null && hideStayEazeBranding; }
     public void setHideStayEazeBranding(Boolean hideStayEazeBranding) { this.hideStayEazeBranding = hideStayEazeBranding; }
+
+    public Integer getMinimumLockInMonths() { return minimumLockInMonths; }
+    public void setMinimumLockInMonths(Integer minimumLockInMonths) { this.minimumLockInMonths = minimumLockInMonths; }
+
+    public Integer getNoticePeriodDays() { return noticePeriodDays; }
+    public void setNoticePeriodDays(Integer noticePeriodDays) { this.noticePeriodDays = noticePeriodDays; }
+
+    public java.math.BigDecimal getDefaultExitCleaningFee() { return defaultExitCleaningFee; }
+    public void setDefaultExitCleaningFee(java.math.BigDecimal defaultExitCleaningFee) { this.defaultExitCleaningFee = defaultExitCleaningFee; }
+
+    public java.math.BigDecimal getDefaultElectricityRatePerUnit() { return defaultElectricityRatePerUnit; }
+    public void setDefaultElectricityRatePerUnit(java.math.BigDecimal defaultElectricityRatePerUnit) { this.defaultElectricityRatePerUnit = defaultElectricityRatePerUnit; }
+
+    public String getCustomDomain() { return customDomain; }
+    public void setCustomDomain(String customDomain) { this.customDomain = customDomain; }
+
+    public Boolean getBrandingEnabled() { return brandingEnabled != null && brandingEnabled; }
+    public void setBrandingEnabled(Boolean brandingEnabled) { this.brandingEnabled = brandingEnabled; }
+
+    public Boolean getWatermarkRemovalEnabled() { return watermarkRemovalEnabled != null && watermarkRemovalEnabled; }
+    public void setWatermarkRemovalEnabled(Boolean watermarkRemovalEnabled) { this.watermarkRemovalEnabled = watermarkRemovalEnabled; }
+
+    public String getReceiptFooterNote() { return receiptFooterNote; }
+    public void setReceiptFooterNote(String receiptFooterNote) { this.receiptFooterNote = receiptFooterNote; }
+
+    public String getPortalHeaderBg() { return portalHeaderBg; }
+    public void setPortalHeaderBg(String portalHeaderBg) { this.portalHeaderBg = portalHeaderBg; }
+
+    public String getReceiptTemplateType() { return receiptTemplateType; }
+    public void setReceiptTemplateType(String receiptTemplateType) { this.receiptTemplateType = receiptTemplateType; }
+
+    public OffsetDateTime getRefundInitiatedAt() { return refundInitiatedAt; }
+    public void setRefundInitiatedAt(OffsetDateTime refundInitiatedAt) { this.refundInitiatedAt = refundInitiatedAt; }
+
+    public String getRefundFailureReason() { return refundFailureReason; }
+    public void setRefundFailureReason(String refundFailureReason) { this.refundFailureReason = refundFailureReason; }
 }

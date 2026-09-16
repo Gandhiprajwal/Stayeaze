@@ -307,7 +307,7 @@ export function AppLayout() {
       <div className="flex flex-1 flex-col h-full min-w-0 overflow-hidden">
         <SubscriptionStatusBanner />
         {isMaintenanceMode && user?.role === 'SUPER_ADMIN' && (
-          <div className="bg-amber-500 text-slate-950 px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md shrink-0">
+          <div className="bg-amber-500 text-slate-950 px-3 sm:px-4 py-2 text-xs font-bold flex flex-wrap items-center justify-between gap-2 shadow-md shrink-0">
             <div className="flex items-center gap-2">
               <Wrench className="h-4 w-4 animate-spin" />
               <span>PLATFORM MAINTENANCE MODE IS ACTIVE: Non-superadmin access is currently locked out.</span>
@@ -503,7 +503,7 @@ export function AppLayout() {
 
         {/* Content with independent scrollbar */}
         <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full max-w-full main-page-scrollbar">
-          <div className="mx-auto max-w-[1720px] w-full p-3 sm:p-6 lg:p-8 pb-20 md:pb-8">
+          <div className="mx-auto max-w-[1720px] w-full p-3 sm:p-6 lg:p-8 pb-24 md:pb-8 pb-safe">
             <Outlet />
           </div>
         </main>

@@ -16,6 +16,7 @@ import java.util.UUID;
 public interface SupportTicketRepository extends JpaRepository<SupportTicket, UUID> {
 
     Optional<SupportTicket> findByTicketNumber(String ticketNumber);
+    boolean existsByTicketNumber(String ticketNumber);
 
     long countByStatus(String status);
     long countByPriority(String priority);

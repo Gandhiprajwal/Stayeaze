@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Settings as SettingsIcon, Building2, Bell, Palette, Shield, ShieldCheck, User, Sparkles, CheckCircle2, Check, ExternalLink, Wifi } from 'lucide-react';
+import { Settings as SettingsIcon, Building2, Bell, Palette, Shield, ShieldCheck, User, Sparkles, CheckCircle2, Check, ExternalLink, Wifi, ShieldAlert, AlertCircle } from 'lucide-react';
 import { useBranding } from '@/lib/branding-context';
 import WifiSettingsSection from '@/features/settings/WifiSettingsSection';
+import FrontDeskSettingsSection from '@/features/settings/FrontDeskSettingsSection';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -29,6 +30,8 @@ type BillingProfile = {
   legalName: string; billingAddress: string; city: string; state: string; pincode: string;
   supportEmail: string; supportPhone: string; gstin: string; pan: string; registrationNumber: string;
   invoicePrefix: string; paymentDueDays: number; defaultSecurityDeposit?: number; lateFeeNote: string;
+  lateFeeGracePeriodDays: number; lateFeePercentage: number; onboardingBillingPolicy?: string;
+  minimumLockInMonths?: number; noticePeriodDays?: number; defaultExitCleaningFee?: number; defaultElectricityRatePerUnit?: number;
   bankAccountName: string; bankName: string; bankAccountNumber: string; bankIfsc: string; upiVpa: string;
   authorizedSignatory: string; razorpayKeyId: string; razorpayKeySecret: string; hasRazorpaySecret?: boolean; invoiceTerms: string;
 };
@@ -36,7 +39,10 @@ type BillingProfile = {
 const emptyBillingProfile: BillingProfile = {
   legalName: '', billingAddress: '', city: '', state: '', pincode: '', supportEmail: '', supportPhone: '',
   gstin: '', pan: '', registrationNumber: '', invoicePrefix: 'INV', paymentDueDays: 7, defaultSecurityDeposit: 0,
+  onboardingBillingPolicy: 'FULL_WITH_ADVANCE_CREDIT',
+  minimumLockInMonths: 3, noticePeriodDays: 30, defaultExitCleaningFee: 500, defaultElectricityRatePerUnit: 10.0,
   lateFeeNote: 'Late-payment charges, if applicable, will be charged as per the property policy and tenancy agreement.',
+  lateFeeGracePeriodDays: 5, lateFeePercentage: 5,
   bankAccountName: '', bankName: '', bankAccountNumber: '', bankIfsc: '', upiVpa: '', authorizedSignatory: '',
   razorpayKeyId: '', razorpayKeySecret: '', hasRazorpaySecret: false,
   invoiceTerms: 'Rent is payable on or before the due date of each month.\nThis receipt is issued for room accommodation services.\nValid official receipt for tenant records and HRA tax submission.\nComputer-generated verified receipt with security QR verification code.',
@@ -117,6 +123,7 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl ?? '');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -127,20 +134,34 @@ export default function SettingsPage() {
     }
   }, [user]);
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Image size must be less than 2MB');
+    if (file.size > 3 * 1024 * 1024) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      setPhotoError(`Selected photo is too large (${sizeMb} MB). Maximum allowed size is 3MB.`);
+      toast.error(`Photo size exceeds 3MB limit (${sizeMb} MB). Please choose a smaller photo.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setAvatarUrl(dataUrl);
-      toast.success('Photo preview updated! Click Save Changes to confirm.');
-    };
-    reader.readAsDataURL(file);
+    setPhotoError(null);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', 'avatars');
+
+    try {
+      const { data } = await api.post('/files/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (data?.fileUrl) {
+        setAvatarUrl(data.fileUrl);
+        toast.success('Avatar uploaded! Click "Save Changes" to apply.');
+      }
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.detail || err?.response?.data?.message || 'Failed to upload photo';
+      setPhotoError(errMsg);
+      toast.error(errMsg);
+    }
   };
 
   const [billingProfile, setBillingProfile] = useState<BillingProfile>(emptyBillingProfile);
@@ -524,6 +545,11 @@ export default function SettingsPage() {
                   <Wifi className="mr-1.5 h-3.5 w-3.5 text-cyan-500" /> Wi-Fi Hub
                 </TabsTrigger>
               )}
+              {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER') && (
+                <TabsTrigger value="front-desk" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
+                  <ShieldAlert className="mr-1.5 h-3.5 w-3.5 text-rose-500" /> Front Desk & SOS
+                </TabsTrigger>
+              )}
               {(user?.role === 'ADMIN' || user?.role === 'OWNER' || user?.role === 'PROPERTY_MANAGER' || user?.role === 'ACCOUNTANT') && (
                 <TabsTrigger value="organization" className="rounded-lg h-8 px-3 text-xs sm:text-sm font-semibold shrink-0">
                   <Building2 className="mr-1.5 h-3.5 w-3.5" /> Organization
@@ -574,7 +600,13 @@ export default function SettingsPage() {
                 <div>
                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handlePhotoChange} />
                   <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>Change Photo</Button>
-                  <p className="mt-1.5 text-xs text-muted-foreground">JPG, PNG or GIF. Max 2MB.</p>
+                  <p className="mt-1.5 text-xs text-muted-foreground">JPG, PNG or GIF (Max: 3MB)</p>
+                  {photoError && (
+                    <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mt-1.5 flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg border border-rose-200 dark:border-rose-900">
+                      <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                      {photoError}
+                    </p>
+                  )}
                 </div>
               </div>
               <Separator />
@@ -818,9 +850,169 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="space-y-1.5"><Label>Late fee terms / Policy note</Label><Textarea value={billingProfile.lateFeeNote} onChange={(e) => updateBillingField('lateFeeNote', e.target.value)} disabled={!canEditBilling} placeholder="e.g. Late fee of ₹100 per day applicable after due date." /></div>
+
+                {/* Mid-Month Onboarding Billing Policy Configuration */}
+                <div className="rounded-xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/40 dark:bg-indigo-950/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-400">📅 Mid-Month Onboarding Billing Policy</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">Public & Desk Onboarding</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Choose how rent is calculated and collected when a resident moves in on any day other than the 1st of the month.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2 pt-1">
+                    <div
+                      onClick={() => canEditBilling && updateBillingField('onboardingBillingPolicy', 'FULL_WITH_ADVANCE_CREDIT')}
+                      className={`cursor-pointer rounded-lg border p-3 transition space-y-1.5 ${
+                        (billingProfile.onboardingBillingPolicy || 'FULL_WITH_ADVANCE_CREDIT') === 'FULL_WITH_ADVANCE_CREDIT'
+                          ? 'border-indigo-600 dark:border-indigo-500 bg-white dark:bg-slate-900 shadow-sm ring-1 ring-indigo-500'
+                          : 'border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                          <span className={`h-2 w-2 rounded-full ${(billingProfile.onboardingBillingPolicy || 'FULL_WITH_ADVANCE_CREDIT') === 'FULL_WITH_ADVANCE_CREDIT' ? 'bg-indigo-600' : 'bg-slate-300'}`} />
+                          Full Month Upfront with Advance Credit
+                        </span>
+                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Recommended</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                        Collect full 1st month rent upfront. Initial invoice is generated for actual stayed days; the remaining unused balance is credited to the tenant's advance balance to offset next month's bill on the 1st.
+                      </p>
+                    </div>
+
+                    <div
+                      onClick={() => canEditBilling && updateBillingField('onboardingBillingPolicy', 'PRORATA_ONLY')}
+                      className={`cursor-pointer rounded-lg border p-3 transition space-y-1.5 ${
+                        billingProfile.onboardingBillingPolicy === 'PRORATA_ONLY'
+                          ? 'border-indigo-600 dark:border-indigo-500 bg-white dark:bg-slate-900 shadow-sm ring-1 ring-indigo-500'
+                          : 'border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <span className={`h-2 w-2 rounded-full ${billingProfile.onboardingBillingPolicy === 'PRORATA_ONLY' ? 'bg-indigo-600' : 'bg-slate-300'}`} />
+                          Pro-Rata Stay Days Only
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                        Charge only for the remaining stayed days in the current month upfront (+ Deposit). On the 1st of the next month, a standard full-month rent invoice will be issued.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Late Fee Policy — configurable by Owner/Admin */}
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">⏰ Late Fee Engine Policy</span>
+                    <span className="text-[11px] text-muted-foreground">Used by the nightly automated late fee engine</span>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>Grace Period (Days after Due Date)</Label>
+                      <Input
+                        type="number" min={0} max={60}
+                        value={billingProfile.lateFeeGracePeriodDays}
+                        onChange={(e) => updateBillingField('lateFeeGracePeriodDays', Math.max(0, parseInt(e.target.value) || 0))}
+                        disabled={!canEditBilling}
+                        placeholder="e.g. 5"
+                      />
+                      <p className="text-[11px] text-muted-foreground">Days a tenant is allowed past the due date before a late fee is applied. Set 0 to charge from day 1.</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Late Fee Surcharge (%)</Label>
+                      <Input
+                        type="number" min={0} max={50} step={0.5}
+                        value={billingProfile.lateFeePercentage}
+                        onChange={(e) => updateBillingField('lateFeePercentage', Math.max(0, parseFloat(e.target.value) || 0))}
+                        disabled={!canEditBilling}
+                        placeholder="e.g. 5"
+                      />
+                      <p className="text-[11px] text-muted-foreground">Percentage of outstanding rent charged as a surcharge (minimum ₹100). e.g. 5% on ₹12,000 overdue = ₹600.</p>
+                      <div className="flex gap-1.5 pt-0.5">
+                        {[2, 5, 10].map((pct) => (
+                          <button
+                            key={pct}
+                            type="button"
+                            onClick={() => updateBillingField('lateFeePercentage', pct)}
+                            disabled={!canEditBilling}
+                            className="px-2 py-0.5 text-[10px] font-semibold rounded bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-800/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 transition"
+                          >
+                            {pct}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5"><Label>Policy Note (printed on invoices)</Label><Textarea value={billingProfile.lateFeeNote} onChange={(e) => updateBillingField('lateFeeNote', e.target.value)} disabled={!canEditBilling} placeholder="e.g. Late fee of 5% applicable after a 5-day grace period." /></div>
+                </div>
                 <div className="space-y-1.5"><Label>Invoice terms & conditions</Label><Textarea value={billingProfile.invoiceTerms} onChange={(e) => updateBillingField('invoiceTerms', e.target.value)} disabled={!canEditBilling} placeholder="Enter receipt terms and conditions..." /></div>
               </section>
+              <Separator />
+
+              {/* Organization Lease Terms & Settlement Policy Defaults (P3.3) */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                  <div>
+                    <h3 className="text-sm font-semibold">Organization Lease &amp; Settlement Policy Defaults</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Company-wide defaults used for lease agreements and checkout settlements when not overridden on specific properties.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Default Minimum Lock-In (Months)</Label>
+                    <Input
+                      type="number"
+                      value={billingProfile.minimumLockInMonths ?? 3}
+                      onChange={(e) => updateBillingField('minimumLockInMonths', Math.max(0, parseInt(e.target.value) || 0))}
+                      disabled={!canEditBilling}
+                      placeholder="e.g. 3 (0 for monthly rolling)"
+                    />
+                    <p className="text-[11px] text-muted-foreground">0 = monthly rolling lease without penalty</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Default Notice Period (Days)</Label>
+                    <Input
+                      type="number"
+                      value={billingProfile.noticePeriodDays ?? 30}
+                      onChange={(e) => updateBillingField('noticePeriodDays', Math.max(0, parseInt(e.target.value) || 0))}
+                      disabled={!canEditBilling}
+                      placeholder="e.g. 30"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Standard notice required before move-out</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Default Exit Deep Cleaning Fee (₹)</Label>
+                    <Input
+                      type="number"
+                      value={billingProfile.defaultExitCleaningFee ?? 500}
+                      onChange={(e) => updateBillingField('defaultExitCleaningFee', Math.max(0, parseFloat(e.target.value) || 0))}
+                      disabled={!canEditBilling}
+                      placeholder="e.g. 500"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Standard deep cleaning charge on move-out</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Default Electricity Tariff (₹/Unit)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={billingProfile.defaultElectricityRatePerUnit ?? 10.0}
+                      onChange={(e) => updateBillingField('defaultElectricityRatePerUnit', Math.max(0, parseFloat(e.target.value) || 0))}
+                      disabled={!canEditBilling}
+                      placeholder="e.g. 10.0"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Default rate per kWh sub-meter unit</p>
+                  </div>
+                </div>
+              </section>
+
               <Separator />
               <section className="space-y-4">
                 <div>
@@ -1284,6 +1476,11 @@ export default function SettingsPage() {
         {/* Wi-Fi Hub */}
         <TabsContent value="wifi">
           <WifiSettingsSection />
+        </TabsContent>
+
+        {/* Front Desk & SOS Directory */}
+        <TabsContent value="front-desk">
+          <FrontDeskSettingsSection />
         </TabsContent>
       </Tabs>
     </div>

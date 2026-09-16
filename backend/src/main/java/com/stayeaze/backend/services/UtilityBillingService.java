@@ -2,8 +2,17 @@ package com.stayeaze.backend.services;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stayeaze.backend.models.*;
-import com.stayeaze.backend.repository.*;
+import com.stayeaze.backend.models.Booking;
+import com.stayeaze.backend.models.Invoice;
+import com.stayeaze.backend.models.InvoiceItem;
+import com.stayeaze.backend.models.MeterReading;
+import com.stayeaze.backend.models.Room;
+import com.stayeaze.backend.models.Tenant;
+import com.stayeaze.backend.repository.BookingRepository;
+import com.stayeaze.backend.repository.InvoiceRepository;
+import com.stayeaze.backend.repository.MeterReadingRepository;
+import com.stayeaze.backend.repository.RoomRepository;
+import com.stayeaze.backend.repository.TenantRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,9 +38,6 @@ public class UtilityBillingService {
     private RoomRepository roomRepository;
 
     @Autowired
-    private PropertyRepository propertyRepository;
-
-    @Autowired
     private TenantRepository tenantRepository;
 
     @Autowired
@@ -42,9 +48,6 @@ public class UtilityBillingService {
 
     @Autowired
     private BookingRepository bookingRepository;
-
-    @Autowired
-    private CheckinChecklistRepository checklistRepository;
 
     public static int getCapacityFromRoom(Room room) {
         if (room == null || room.getSharingType() == null) return 1;
@@ -150,6 +153,17 @@ public class UtilityBillingService {
         public void setSplitMode(String splitMode) { this.splitMode = splitMode; }
         public List<TenantUtilitySplit> getTenantSplits() { return tenantSplits; }
         public void setTenantSplits(List<TenantUtilitySplit> tenantSplits) { this.tenantSplits = tenantSplits; }
+
+        private Boolean meterReplaced = false;
+        private Double oldMeterFinalReading;
+        private Double newMeterInitialReading;
+
+        public Boolean getMeterReplaced() { return meterReplaced; }
+        public void setMeterReplaced(Boolean meterReplaced) { this.meterReplaced = meterReplaced; }
+        public Double getOldMeterFinalReading() { return oldMeterFinalReading; }
+        public void setOldMeterFinalReading(Double oldMeterFinalReading) { this.oldMeterFinalReading = oldMeterFinalReading; }
+        public Double getNewMeterInitialReading() { return newMeterInitialReading; }
+        public void setNewMeterInitialReading(Double newMeterInitialReading) { this.newMeterInitialReading = newMeterInitialReading; }
     }
 
     public static class RoomMeterSheetItem {
@@ -173,6 +187,9 @@ public class UtilityBillingService {
         public String photoUrl;
         public String status;
         public Boolean hasSavedDraft;
+        public Boolean meterReplaced = false;
+        public Double oldMeterFinalReading;
+        public Double newMeterInitialReading;
         public List<TenantUtilitySplit> tenantSplits = new ArrayList<>();
         public List<Map<String, Object>> occupants = new ArrayList<>();
     }
@@ -199,6 +216,12 @@ public class UtilityBillingService {
         double maxMeterVal = req.containsKey("maxMeterValue") && req.get("maxMeterValue") != null
                 ? Double.parseDouble(req.get("maxMeterValue").toString()) : 10000.0;
 
+        boolean meterReplaced = req.containsKey("meterReplaced") && Boolean.TRUE.equals(req.get("meterReplaced"));
+        Double oldMeterFinal = req.containsKey("oldMeterFinalReading") && req.get("oldMeterFinalReading") != null
+                ? Double.parseDouble(req.get("oldMeterFinalReading").toString()) : null;
+        Double newMeterInitial = req.containsKey("newMeterInitialReading") && req.get("newMeterInitialReading") != null
+                ? Double.parseDouble(req.get("newMeterInitialReading").toString()) : 0.0;
+
         int month = req.containsKey("billingMonth") && req.get("billingMonth") != null
                 ? Integer.parseInt(req.get("billingMonth").toString()) : LocalDate.now().getMonthValue();
         int year = req.containsKey("billingYear") && req.get("billingYear") != null
@@ -207,10 +230,19 @@ public class UtilityBillingService {
         String splitMode = req.containsKey("splitMode") && req.get("splitMode") != null
                 ? req.get("splitMode").toString().toUpperCase().trim() : "FAIR_PROPORTIONAL";
 
-        // 1. Calculate Gross & Net Billable Units
+        // 1. Calculate Gross & Net Billable Units (P0.3)
         double grossUnits;
-        if (isRollover && currReading < prevReading) {
-            grossUnits = (maxMeterVal - prevReading) + currReading;
+        if (meterReplaced && oldMeterFinal != null) {
+            double oldMeterUnits = Math.max(0, oldMeterFinal - prevReading);
+            double newMeterUnits = Math.max(0, currReading - (newMeterInitial != null ? newMeterInitial : 0.0));
+            grossUnits = oldMeterUnits + newMeterUnits;
+        } else if (meterReplaced) {
+            grossUnits = Math.max(0, currReading - (newMeterInitial != null ? newMeterInitial : 0.0));
+        } else if (isRollover && currReading < prevReading) {
+            grossUnits = Math.max(0, (maxMeterVal - prevReading) + currReading);
+        } else if (currReading < prevReading) {
+            // Anomaly safe fallback: Calculate as fresh meter if reading dropped
+            grossUnits = currReading;
         } else {
             grossUnits = Math.max(0, currReading - prevReading);
         }
@@ -231,6 +263,9 @@ public class UtilityBillingService {
         calc.setUnitRate(unitRate);
         calc.setTotalAmount(totalBillAmount);
         calc.setSplitMode(splitMode);
+        calc.setMeterReplaced(meterReplaced);
+        calc.setOldMeterFinalReading(oldMeterFinal);
+        calc.setNewMeterInitialReading(newMeterInitial);
 
         // 2. Fetch Active Room Occupants accurately scoped to this exact Room & Building
         UUID propId = null;
@@ -262,7 +297,7 @@ public class UtilityBillingService {
         if ("SINGLE_OCCUPANT".equalsIgnoreCase(splitMode) || (activeCount == 1 && capacity == 1)) {
             Tenant t = activeTenants.get(0);
             LocalDate checkIn = parseTenantCheckIn(t);
-            splits.add(new TenantUtilitySplit(t.getId(), t.getFirstName() + " " + t.getLastName(),
+            splits.add(new TenantUtilitySplit(t.getId(), t.getName(),
                     room.getRoomNumber(), checkIn, netBillableUnits, totalBillAmount,
                     "Single Occupancy (100% of room bill)"));
             allocatedSum += totalBillAmount;
@@ -275,7 +310,7 @@ public class UtilityBillingService {
             double tenantAmount = Math.round(totalBillAmount * proportion * 100.0) / 100.0;
             double tenantUnits = Math.round(netBillableUnits * proportion * 100.0) / 100.0;
 
-            splits.add(new TenantUtilitySplit(t.getId(), t.getFirstName() + " " + t.getLastName(),
+            splits.add(new TenantUtilitySplit(t.getId(), t.getName(),
                     room.getRoomNumber(), checkIn, tenantUnits, tenantAmount,
                     String.format("Fair Share (1/%d Capacity, %d/%d Days)", capacity, stayDays, totalDaysInMonth)));
             allocatedSum += tenantAmount;
@@ -286,7 +321,7 @@ public class UtilityBillingService {
 
             for (Tenant t : activeTenants) {
                 LocalDate checkIn = parseTenantCheckIn(t);
-                splits.add(new TenantUtilitySplit(t.getId(), t.getFirstName() + " " + t.getLastName(),
+                splits.add(new TenantUtilitySplit(t.getId(), t.getName(),
                         room.getRoomNumber(), checkIn, equalUnits, equalAmount,
                         String.format("Equal Split (%d Roommates)", activeCount)));
                 allocatedSum += equalAmount;
@@ -309,7 +344,7 @@ public class UtilityBillingService {
                 double tenantAmt = Math.round(totalBillAmount * shareRatio * 100.0) / 100.0;
                 double tenantUnits = Math.round(netBillableUnits * shareRatio * 100.0) / 100.0;
 
-                splits.add(new TenantUtilitySplit(t.getId(), t.getFirstName() + " " + t.getLastName(),
+                splits.add(new TenantUtilitySplit(t.getId(), t.getName(),
                         room.getRoomNumber(), checkIn, tenantUnits, tenantAmt,
                         String.format("Fair Proportional (%d/%d Days, 1/%d Cap)", days, totalDaysInMonth, capacity)));
                 allocatedSum += tenantAmt;
@@ -909,6 +944,13 @@ public class UtilityBillingService {
             mr.setBillingMonth(billingMonth);
             mr.setBillingYear(billingYear);
             mr.setStatus(appendToRentInvoices ? "BILLED" : "UNBILLED");
+            mr.setMeterReplaced(calc.getMeterReplaced());
+            if (calc.getOldMeterFinalReading() != null) {
+                mr.setOldMeterFinalReading(BigDecimal.valueOf(calc.getOldMeterFinalReading()));
+            }
+            if (calc.getNewMeterInitialReading() != null) {
+                mr.setNewMeterInitialReading(BigDecimal.valueOf(calc.getNewMeterInitialReading()));
+            }
 
             if (req.containsKey("photoUrl") && req.get("photoUrl") != null) {
                 mr.setPhotoUrl(req.get("photoUrl").toString());
@@ -943,9 +985,21 @@ public class UtilityBillingService {
                             .findFirst().orElse(null);
 
                     if (targetInv != null && !"PAID".equalsIgnoreCase(targetInv.getStatus())) {
-                        InvoiceItem item = new InvoiceItem(targetInv, lineDesc, BigDecimal.valueOf(split.getAmount()));
-                        targetInv.getItems().add(item);
-                        targetInv.setAmountDue(targetInv.getAmountDue().add(BigDecimal.valueOf(split.getAmount())));
+                        // Deduplicate: If an electricity line item for this room already exists on this invoice, update it instead of stacking duplicates
+                        InvoiceItem existingItem = targetInv.getItems().stream()
+                                .filter(it -> it.getDescription() != null && it.getDescription().startsWith("Electricity (") && it.getDescription().contains("Room " + calc.getRoomNumber()))
+                                .findFirst().orElse(null);
+                        if (existingItem != null) {
+                            BigDecimal oldAmount = existingItem.getAmount() != null ? existingItem.getAmount() : BigDecimal.ZERO;
+                            BigDecimal newAmount = BigDecimal.valueOf(split.getAmount());
+                            existingItem.setDescription(lineDesc);
+                            existingItem.setAmount(newAmount);
+                            targetInv.setAmountDue(targetInv.getAmountDue().subtract(oldAmount).add(newAmount));
+                        } else {
+                            InvoiceItem item = new InvoiceItem(targetInv, lineDesc, BigDecimal.valueOf(split.getAmount()));
+                            targetInv.getItems().add(item);
+                            targetInv.setAmountDue(targetInv.getAmountDue().add(BigDecimal.valueOf(split.getAmount())));
+                        }
                         invoiceRepository.save(targetInv);
                     } else if (existingUtilInv != null) {
                         // Update existing dedicated utility invoice

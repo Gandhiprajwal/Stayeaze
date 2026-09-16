@@ -28,6 +28,7 @@ public class BookingRequest {
     private String razorpayOrderId;
     private String razorpayPaymentId;
     private String razorpaySignature;
+    private String notes;
 
     public BookingRequest() {
     }
@@ -182,4 +183,7 @@ public class BookingRequest {
 
     public String getRazorpaySignature() { return razorpaySignature; }
     public void setRazorpaySignature(String razorpaySignature) { this.razorpaySignature = razorpaySignature; }
+
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
 }

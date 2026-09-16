@@ -126,6 +126,32 @@ public class SystemIntegrationSettings {
     @Column(name = "onboarding_message", length = 1000)
     private String onboardingMessage = "Join India's premier multi-property management platform.";
 
+    // SMTP Configuration
+    @Column(name = "smtp_host", length = 150)
+    private String smtpHost = "smtp.gmail.com";
+
+    @Column(name = "smtp_port", length = 20)
+    private String smtpPort = "587";
+
+    @Column(name = "smtp_username", length = 150)
+    private String smtpUsername;
+
+    @Column(name = "smtp_password", length = 200)
+    private String smtpPassword;
+
+    @Column(name = "smtp_from_email", length = 150)
+    private String smtpFromEmail = "support@stayeaze.com";
+
+    // SMS Configuration
+    @Column(name = "sms_provider", length = 50)
+    private String smsProvider = "FAST2SMS";
+
+    @Column(name = "sms_api_key", length = 200)
+    private String smsApiKey;
+
+    @Column(name = "sms_sender_id", length = 50)
+    private String smsSenderId = "STAYEZ";
+
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt = OffsetDateTime.now();
 
@@ -236,6 +262,30 @@ public class SystemIntegrationSettings {
 
     public String getRazorpayMasterKeySecret() { return razorpayMasterKeySecret; }
     public void setRazorpayMasterKeySecret(String razorpayMasterKeySecret) { this.razorpayMasterKeySecret = razorpayMasterKeySecret; }
+
+    public String getSmtpHost() { return smtpHost != null ? smtpHost : "smtp.gmail.com"; }
+    public void setSmtpHost(String smtpHost) { this.smtpHost = smtpHost; }
+
+    public String getSmtpPort() { return smtpPort != null ? smtpPort : "587"; }
+    public void setSmtpPort(String smtpPort) { this.smtpPort = smtpPort; }
+
+    public String getSmtpUsername() { return smtpUsername; }
+    public void setSmtpUsername(String smtpUsername) { this.smtpUsername = smtpUsername; }
+
+    public String getSmtpPassword() { return smtpPassword; }
+    public void setSmtpPassword(String smtpPassword) { this.smtpPassword = smtpPassword; }
+
+    public String getSmtpFromEmail() { return smtpFromEmail != null ? smtpFromEmail : "support@stayeaze.com"; }
+    public void setSmtpFromEmail(String smtpFromEmail) { this.smtpFromEmail = smtpFromEmail; }
+
+    public String getSmsProvider() { return smsProvider != null ? smsProvider : "FAST2SMS"; }
+    public void setSmsProvider(String smsProvider) { this.smsProvider = smsProvider; }
+
+    public String getSmsApiKey() { return smsApiKey; }
+    public void setSmsApiKey(String smsApiKey) { this.smsApiKey = smsApiKey; }
+
+    public String getSmsSenderId() { return smsSenderId != null ? smsSenderId : "STAYEZ"; }
+    public void setSmsSenderId(String smsSenderId) { this.smsSenderId = smsSenderId; }
 
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }

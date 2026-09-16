@@ -79,8 +79,8 @@ public class AdminOwnerPropertyIntegrationTest {
         testOrg.setSubdomain("grand" + System.currentTimeMillis());
         testOrg = organizationRepository.saveAndFlush(testOrg);
 
-        String email = "owner_property_" + System.currentTimeMillis() + "@stayeaze.com";
-        String mobile = "98" + (System.currentTimeMillis() % 100000000L);
+        String email = "owner_" + System.currentTimeMillis() + "@stayeaze.com";
+        String mobile = "98" + String.format("%08d", Math.abs(System.currentTimeMillis() % 100000000L));
         ownerUser = new User(testOrg, email, "password123", mobile);
         ownerUser.setFirstName("Vikram Singh");
         ownerUser.setRoles(new HashSet<>(Collections.singleton(ownerRole)));

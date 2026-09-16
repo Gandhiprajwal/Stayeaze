@@ -1,7 +1,6 @@
 package com.stayeaze.backend.controllers;
 
 import com.stayeaze.backend.models.Organization;
-import com.stayeaze.backend.models.Property;
 import com.stayeaze.backend.models.Tenant;
 import com.stayeaze.backend.models.User;
 import com.stayeaze.backend.models.Visitor;
@@ -21,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
@@ -136,6 +136,7 @@ public class VisitorController {
     // 2. Gate Walk-in: Security Guard / Receptionist / Staff logs visitor with Photo Capture
     @PostMapping("/visitors")
     @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('SECURITY_GUARD')")
+    @Transactional
     public ResponseEntity<?> logVisitor(@RequestBody Map<String, Object> body) {
         Organization organization = getLoggedUserOrg();
 
@@ -212,12 +213,13 @@ public class VisitorController {
             });
         }
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        return ResponseEntity.status(HttpStatus.CREATED).body(com.stayeaze.backend.payload.response.VisitorSummaryDTO.fromEntity(saved));
     }
 
     // 3. Tenant Pre-Registration: Generates Digital QR Gate Pass
     @PostMapping("/visitors/pre-register")
     @PreAuthorize("hasAnyRole('TENANT', 'OWNER', 'ADMIN', 'PROPERTY_MANAGER')")
+    @Transactional
     public ResponseEntity<?> preRegisterVisitorPass(@RequestBody Map<String, Object> body) {
         Tenant tenant = getAuthenticatedTenant();
         Organization organization = tenant != null ? tenant.getOrganization() : getLoggedUserOrg();
@@ -263,7 +265,7 @@ public class VisitorController {
         }
 
         Visitor saved = visitorRepository.save(visitor);
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        return ResponseEntity.status(HttpStatus.CREATED).body(com.stayeaze.backend.payload.response.VisitorSummaryDTO.fromEntity(saved));
     }
 
     // 4. Tenant: Get all my visitor passes
@@ -305,6 +307,20 @@ public class VisitorController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Visitor record not found."));
         }
 
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isTenant = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_TENANT"));
+        if (isTenant) {
+            Tenant currentTenant = getAuthenticatedTenant();
+            if (currentTenant == null || visitor.getTenant() == null || !currentTenant.getId().equals(visitor.getTenant().getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Unauthorized: You can only approve your own visitors."));
+            }
+        } else if (!securityUtils.isSuperAdmin()) {
+            Organization org = getLoggedUserOrg();
+            if (visitor.getOrganization() != null && org != null && !visitor.getOrganization().getId().equals(org.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Unauthorized: Visitor belongs to another organization."));
+            }
+        }
+
         visitor.setStatus("APPROVED");
         Visitor saved = visitorRepository.save(visitor);
 
@@ -331,6 +347,20 @@ public class VisitorController {
         Visitor visitor = visitorRepository.findById(id).orElse(null);
         if (visitor == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Visitor record not found."));
+        }
+
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isTenant = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_TENANT"));
+        if (isTenant) {
+            Tenant currentTenant = getAuthenticatedTenant();
+            if (currentTenant == null || visitor.getTenant() == null || !currentTenant.getId().equals(visitor.getTenant().getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Unauthorized: You can only reject your own visitors."));
+            }
+        } else if (!securityUtils.isSuperAdmin()) {
+            Organization org = getLoggedUserOrg();
+            if (visitor.getOrganization() != null && org != null && !visitor.getOrganization().getId().equals(org.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Unauthorized: Visitor belongs to another organization."));
+            }
         }
 
         visitor.setStatus("REJECTED");

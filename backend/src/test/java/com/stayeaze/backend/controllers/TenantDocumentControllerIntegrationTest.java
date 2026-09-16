@@ -133,16 +133,30 @@ public class TenantDocumentControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("PUT /tenants/{tenantId}/documents/{id}/verify - Verify KYC document")
-    void testVerifyDocument() throws Exception {
-        TenantDocument doc = new TenantDocument(testTenant, "PASSPORT", "Z1234567");
-        doc = tenantDocumentRepository.saveAndFlush(doc);
+    @DisplayName("POST /tenants/{id}/verify-document - Fails without document, succeeds with document")
+    void testTenantKycVerificationRequiresDocument() throws Exception {
+        // 1. Without document, must fail with 400 Bad Request
+        Map<String, String> body = new HashMap<>();
+        body.put("status", "VERIFIED");
 
-        mockMvc.perform(put("/api/v1/tenants/" + testTenant.getId() + "/documents/" + doc.getId() + "/verify")
-                        .param("status", "VERIFIED")
+        mockMvc.perform(post("/api/v1/tenants/" + testTenant.getId() + "/verify-document")
                         .with(authentication(auth))
-                        .contentType(MediaType.APPLICATION_JSON))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("No identity or verification documents have been uploaded")));
+
+        // 2. Upload document
+        TenantDocument doc = new TenantDocument(testTenant, "AADHAAR", "123456789012");
+        doc.setFileUrl("https://cdn.stayeaze.com/docs/aadhaar.pdf");
+        tenantDocumentRepository.saveAndFlush(doc);
+
+        // 3. With document present, must succeed (200 OK)
+        mockMvc.perform(post("/api/v1/tenants/" + testTenant.getId() + "/verify-document")
+                        .with(authentication(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.verificationStatus", is("VERIFIED")));
+                .andExpect(jsonPath("$.kycStatus", is("VERIFIED")));
     }
 }

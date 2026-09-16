@@ -8,6 +8,7 @@ import com.stayeaze.backend.models.Property;
 import com.stayeaze.backend.models.Room;
 import com.stayeaze.backend.payload.request.FloorRequest;
 import com.stayeaze.backend.payload.response.FloorDTO;
+import com.stayeaze.backend.payload.response.MinimalFloorDTO;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.BedRepository;
 import com.stayeaze.backend.repository.BuildingRepository;
@@ -15,7 +16,6 @@ import com.stayeaze.backend.repository.FloorRepository;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.PropertyRepository;
 import com.stayeaze.backend.repository.RoomRepository;
-import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -25,7 +25,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 import com.stayeaze.backend.models.Tenant;
 import com.stayeaze.backend.repository.TenantRepository;
@@ -146,6 +145,40 @@ public class FloorController {
         }
 
         List<FloorDTO> dtos = floorService.getFloorsByBuilding(building);
+        return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/floors/minimal")
+    public ResponseEntity<List<MinimalFloorDTO>> getMinimalFloors(
+            @RequestParam(required = false) UUID propertyId,
+            @RequestParam(required = false) UUID buildingId) {
+        Organization organization = getLoggedUserOrg();
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+
+        List<Floor> floors;
+        if (buildingId != null) {
+            floors = floorRepository.findByBuildingId(buildingId);
+        } else if (organization != null) {
+            floors = floorRepository.findByOrganizationId(organization.getId());
+        } else {
+            floors = floorRepository.findAll();
+        }
+
+        List<MinimalFloorDTO> dtos = floors.stream()
+                .filter(f -> {
+                    UUID propId = (f.getBuilding() != null && f.getBuilding().getProperty() != null)
+                            ? f.getBuilding().getProperty().getId() : null;
+                    if (assignedProps != null && (propId == null || !assignedProps.contains(propId))) {
+                        return false;
+                    }
+                    if (propertyId != null && (propId == null || !propertyId.equals(propId))) {
+                        return false;
+                    }
+                    return true;
+                })
+                .map(MinimalFloorDTO::fromEntity)
+                .collect(java.util.stream.Collectors.toList());
+
         return ResponseEntity.ok(dtos);
     }
 

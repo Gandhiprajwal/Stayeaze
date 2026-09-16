@@ -38,9 +38,6 @@ public class SuperAdminBackupController {
     private BuildingRepository buildingRepository;
 
     @Autowired
-    private FloorRepository floorRepository;
-
-    @Autowired
     private RoomRepository roomRepository;
 
     @Autowired
@@ -53,9 +50,6 @@ public class SuperAdminBackupController {
     private InvoiceRepository invoiceRepository;
 
     @Autowired
-    private BookingRepository bookingRepository;
-
-    @Autowired
     private PaymentRepository paymentRepository;
 
     @Autowired
@@ -63,9 +57,6 @@ public class SuperAdminBackupController {
 
     @Autowired
     private SaaSPlanRepository saasPlanRepository;
-
-    @Autowired
-    private RoleRepository roleRepository;
 
     @Autowired
     private com.stayeaze.backend.services.DatabaseResetService databaseResetService;

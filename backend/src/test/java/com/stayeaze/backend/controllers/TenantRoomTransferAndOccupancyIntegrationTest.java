@@ -97,8 +97,8 @@ public class TenantRoomTransferAndOccupancyIntegrationTest {
         testOrg.setSubdomain("trans" + System.currentTimeMillis());
         testOrg = organizationRepository.saveAndFlush(testOrg);
 
-        String email = "owner_transfer_" + System.currentTimeMillis() + "@stayeaze.com";
-        String mobile = "98" + (System.currentTimeMillis() % 100000000L);
+        String email = "owner_" + System.currentTimeMillis() + "@test.com";
+        String mobile = "98" + String.format("%08d", Math.abs(System.currentTimeMillis() % 100000000L));
         ownerUser = new User(testOrg, email, "password123", mobile);
         ownerUser.setFirstName("Arun Kumar");
         ownerUser.setRoles(new HashSet<>(Collections.singleton(ownerRole)));
@@ -171,7 +171,7 @@ public class TenantRoomTransferAndOccupancyIntegrationTest {
         tenant.setFirstName("Rohan");
         tenant.setLastName("Sharma");
         tenant.setEmail("rohan.sharma." + System.currentTimeMillis() + "@gmail.com");
-        tenant.setMobile("99" + (System.currentTimeMillis() % 100000000L));
+        tenant.setMobile("99" + String.format("%08d", Math.abs(System.currentTimeMillis() % 100000000L)));
         tenant.setRoomNumber("101");
         tenant.setBedNumber("B1");
         tenant.setStatus("ACTIVE");

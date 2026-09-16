@@ -35,21 +35,38 @@ public class SubscriptionLockoutFilter extends OncePerRequestFilter {
         final boolean isLocked;
         final OffsetDateTime gracePeriodEnd;
         final OffsetDateTime endDate;
-        final long cachedAtMs;
+        final long cachedTimestamp;
 
         CacheEntry(boolean isLocked, OffsetDateTime gracePeriodEnd, OffsetDateTime endDate) {
             this.isLocked = isLocked;
             this.gracePeriodEnd = gracePeriodEnd;
             this.endDate = endDate;
-            this.cachedAtMs = System.currentTimeMillis();
+            this.cachedTimestamp = System.currentTimeMillis();
         }
 
         boolean isExpired() {
-            return System.currentTimeMillis() - cachedAtMs > 60_000L; // 60s TTL
+            return (System.currentTimeMillis() - cachedTimestamp) > 60_000L; // 60s TTL
         }
     }
 
-    private final java.util.concurrent.ConcurrentHashMap<UUID, CacheEntry> statusCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentMap<UUID, CacheEntry> statusCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Instantly evicts the cached lockout status for an organization.
+     * Call this when a subscription is renewed, upgraded, or unlocked.
+     */
+    public void evictCache(UUID orgId) {
+        if (orgId != null) {
+            statusCache.remove(orgId);
+        }
+    }
+
+    /**
+     * Clears all cached lockout statuses.
+     */
+    public void clearCache() {
+        statusCache.clear();
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -57,11 +74,18 @@ public class SubscriptionLockoutFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        // 1. Bypass public, auth, subscription payment, super-admin, and static asset routes
-        if (path.startsWith("/api/v1/auth/") ||
-            path.startsWith("/api/v1/subscription/") ||
-            path.startsWith("/api/v1/organization-billing-profile/") ||
-            path.startsWith("/api/v1/super-admin/") ||
+        // 1. Bypass public, auth, saas plans, branding, actuator, websockets, telemetry, subscription payment, super-admin, webhooks, and static asset routes
+        if (path.startsWith("/api/v1/auth") ||
+            path.startsWith("/api/v1/public") ||
+            path.startsWith("/api/v1/saas") ||
+            path.startsWith("/api/v1/branding") ||
+            path.startsWith("/actuator") ||
+            path.startsWith("/ws-stayeaze") ||
+            path.startsWith("/api/v1/telemetry") ||
+            path.startsWith("/api/v1/subscription") ||
+            path.startsWith("/api/v1/organization-billing-profile") ||
+            path.startsWith("/api/v1/super-admin") ||
+            path.startsWith("/api/v1/webhooks") ||
             path.startsWith("/uploads/") ||
             path.startsWith("/error") ||
             "OPTIONS".equalsIgnoreCase(request.getMethod())) {
@@ -90,24 +114,25 @@ public class SubscriptionLockoutFilter extends OncePerRequestFilter {
         }
 
         // 3. Fast L2 in-memory cache lookup (60s TTL)
-        CacheEntry entry = statusCache.get(orgId);
-        if (entry == null || entry.isExpired()) {
-            Optional<OrganizationBillingProfile> profileOpt = profileRepository.findByOrganizationId(orgId);
+        CacheEntry entry = statusCache.compute(orgId, (id, oldVal) -> {
+            if (oldVal != null && !oldVal.isExpired()) {
+                return oldVal;
+            }
+            Optional<OrganizationBillingProfile> profileOpt = profileRepository.findByOrganizationId(id);
             if (profileOpt.isEmpty()) {
-                entry = new CacheEntry(false, null, null);
+                return new CacheEntry(false, null, null);
             } else {
                 OrganizationBillingProfile profile = profileOpt.get();
                 OffsetDateTime endDate = profile.getSubscriptionEndDate();
                 if (endDate != null) {
                     OffsetDateTime gracePeriodEnd = endDate.plusDays(3);
                     boolean isLocked = OffsetDateTime.now().isAfter(gracePeriodEnd);
-                    entry = new CacheEntry(isLocked, gracePeriodEnd, endDate);
+                    return new CacheEntry(isLocked, gracePeriodEnd, endDate);
                 } else {
-                    entry = new CacheEntry(false, null, null);
+                    return new CacheEntry(false, null, null);
                 }
             }
-            statusCache.put(orgId, entry);
-        }
+        });
 
         // 4. Lockout evaluation if locked
         if (entry.isLocked && entry.endDate != null) {

@@ -19,8 +19,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
-import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
-import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.filter.ShallowEtagHeaderFilter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -78,8 +76,7 @@ public class WebSecurityConfig {
 
     @Bean
     public RoleHierarchy roleHierarchy() {
-        RoleHierarchyImpl hierarchy = new RoleHierarchyImpl();
-        hierarchy.setHierarchy(
+        return RoleHierarchyImpl.fromHierarchy(
             "ROLE_SUPER_ADMIN > ROLE_SUPPORT\n" +
             "ROLE_SUPER_ADMIN > ROLE_OWNER\n" +
             "ROLE_OWNER > ROLE_ADMIN\n" +
@@ -87,10 +84,8 @@ public class WebSecurityConfig {
             "ROLE_PROPERTY_MANAGER > ROLE_RECEPTIONIST\n" +
             "ROLE_RECEPTIONIST > ROLE_ACCOUNTANT\n" +
             "ROLE_ACCOUNTANT > ROLE_SECURITY_GUARD\n" +
-            "ROLE_SECURITY_GUARD > ROLE_STAFF\n" +
-            "ROLE_STAFF > ROLE_TENANT"
+            "ROLE_SECURITY_GUARD > ROLE_STAFF"
         );
-        return hierarchy;
     }
 
     @Autowired
@@ -128,13 +123,16 @@ public class WebSecurityConfig {
                         auth.requestMatchers(
                                 "/api/v1/auth/**",
                                 "/api/v1/public/**",
-                                "/api/v1/saas/plans",
+                                "/api/v1/saas/**",
                                 "/api/v1/branding/**",
                                 "/api/v1/webhooks/**",
+                                "/api/v1/super-admin/user-tracking/telemetry",
+                                "/api/v1/telemetry",
                                 "/ws-stayeaze/**",
                                 "/uploads/**",
                                 "/error",
-                                "/actuator/health/**"
+                                "/actuator/health/**",
+                                "/actuator/prometheus"
                         ).permitAll()
                         .requestMatchers("/actuator/**").hasRole("SUPER_ADMIN")
                         .anyRequest().authenticated()

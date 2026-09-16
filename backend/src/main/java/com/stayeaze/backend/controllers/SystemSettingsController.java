@@ -32,13 +32,10 @@ public class SystemSettingsController {
     private AuditLogRepository auditLogRepository;
 
     @Autowired
-    private org.springframework.cache.CacheManager cacheManager;
-
-    @Autowired
     private com.stayeaze.backend.services.DatabaseResetService databaseResetService;
 
     @PostMapping("/clear-cache")
-    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> clearAllCaches() {
         databaseResetService.clearAllCaches();
         return ResponseEntity.ok(new MessageResponse("Successfully flushed Redis/In-Memory application caches."));

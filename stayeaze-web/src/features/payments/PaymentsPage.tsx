@@ -23,38 +23,32 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Payment, Property, User, Tenant, InvoiceIssuerSnapshot } from '@/lib/types';
-import { formatCurrency, formatDate } from '@/lib/format';
-import { useCreate, useDelete, useUpdate, useForm, useBulkDelete } from '@/lib/hooks/use-crud';
+import { formatCurrency, formatDate, getTodayIsoDate } from '@/lib/format';
+import { useCreate, useForm } from '@/lib/hooks/use-crud';
 import { toast } from 'sonner';
 
 import { TenantSelect } from '@/components/common/TenantSelect';
 
 const ENDPOINT = '/payments';
 const methods = [
-  { value: 'razorpay', label: 'Razorpay Online (Cards, UPI, NetBanking)' },
-  { value: 'cash', label: 'Cash Payment' },
-  { value: 'upi', label: 'UPI Direct / VPA' },
-  { value: 'card', label: 'POS Debit / Credit Card' },
-  { value: 'bank_transfer', label: 'Bank Transfer (IMPS / NEFT)' },
-  { value: 'cheque', label: 'Cheque' },
+  { value: 'upi', label: 'UPI' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'card', label: 'Debit / Credit Card' },
+  { value: 'razorpay', label: 'Razorpay PG' },
 ];
-const statuses = [
-  { value: 'success', label: 'Success' },
-  { value: 'pending', label: 'Pending Clearance' },
-  { value: 'failed', label: 'Failed' }
-];
+const statuses = [{ value: 'success', label: 'Success' }, { value: 'pending', label: 'Pending' }, { value: 'failed', label: 'Failed' }];
 
 const emptyForm = {
   tenantId: '', invoiceId: '', tenantName: '', propertyId: '', amount: 8000,
   method: 'razorpay' as Payment['method'], status: 'success' as Payment['status'],
-  date: new Date().toISOString().slice(0, 10), collectedBy: '',
+  date: getTodayIsoDate(), collectedBy: '',
   paymentReference: '',
 };
 
 export default function PaymentsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Payment | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Payment | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<Payment | null>(null);
 
   const currentUser = useAuthStore((s) => s.user);
@@ -68,12 +62,12 @@ export default function PaymentsPage() {
   
   const { data: tenants } = useQuery({
     queryKey: ['payments-tenants'],
-    queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryFn: () => api.get<any[]>('/tenants/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any)?.data || []),
   });
 
   const { data: users } = useQuery({
     queryKey: ['payments-users'],
-    queryFn: () => api.get<{ data: User[] }>('/users', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryFn: () => api.get<any[]>('/users/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any)?.data || []),
   });
 
   const staffUsers = (users ?? []).filter((u: any) => {
@@ -100,9 +94,6 @@ export default function PaymentsPage() {
   const successCount = payments?.filter((p) => p.status === 'success').length ?? 0;
 
   const createMut = useCreate<Payment>(ENDPOINT, 'Payment');
-  const updateMut = useUpdate<Payment>(ENDPOINT, 'Payment');
-  const deleteMut = useDelete(ENDPOINT, 'Payment');
-  const bulkDeleteMut = useBulkDelete(ENDPOINT, 'payments');
   const form = useForm(emptyForm);
 
   function handleSelectTenant(tenantId: string) {
@@ -121,7 +112,7 @@ export default function PaymentsPage() {
       ...emptyForm,
       propertyId: selectedPropertyId && selectedPropertyId !== 'ALL' ? selectedPropertyId : '',
       collectedBy: currentUser?.name || 'Staff Admin',
-      date: new Date().toISOString().slice(0, 10),
+      date: getTodayIsoDate(),
     });
     setDialogOpen(true);
   }
@@ -137,8 +128,6 @@ export default function PaymentsPage() {
     };
     createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
   }
-
-  function confirmDelete() { if (deleteTarget) deleteMut.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) }); }
 
   function handlePrintReceipt() {
     const printContent = document.getElementById('printable-official-payment-receipt');
@@ -281,12 +270,10 @@ export default function PaymentsPage() {
         initialSortBy="date"
         filters={[{ key: 'method', label: 'Payment Method', options: methods }, { key: 'status', label: 'Status', options: statuses }]}
         dateRangeFilter={{ key: 'date', label: 'Payment Date', field: 'date' }}
-        bulkActions={[{ label: 'Delete Selected', icon: Trash2, variant: 'destructive', onAction: (ids) => bulkDeleteMut.mutate(ids) }]}
         rowActions={(row) => (
           <RowActions items={[
             { label: 'View Official Receipt', icon: Eye, onSelect: () => setViewingReceipt(row) },
             { label: 'Print Receipt (PDF)', icon: Printer, onSelect: () => { setViewingReceipt(row); setTimeout(handlePrintReceipt, 300); } },
-            { label: 'Delete Record', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
           ]} />
         )} 
       />
@@ -523,18 +510,6 @@ export default function PaymentsPage() {
           })()}
         </DialogContent>
       </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <ConfirmDialog 
-        open={!!deleteTarget} 
-        onOpenChange={(o) => !o && setDeleteTarget(null)} 
-        title="Delete Payment Record" 
-        variant="destructive"
-        description={`Delete payment receipt "${deleteTarget?.receiptNumber}"?`} 
-        confirmLabel="Delete" 
-        onConfirm={confirmDelete} 
-        loading={deleteMut.isPending} 
-      />
     </div>
   );
 }

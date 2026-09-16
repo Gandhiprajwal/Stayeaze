@@ -25,12 +25,89 @@ public class RazorpayWebhookController {
     private WebSocketNotificationService webSocketNotificationService;
 
     @Autowired
+    private com.stayeaze.backend.repository.SystemIntegrationSettingsRepository settingsRepository;
+
+    @Autowired
+    private com.stayeaze.backend.repository.SystemConfigRepository systemConfigRepository;
+
+    @Autowired
     private com.stayeaze.backend.repository.OrganizationBillingProfileRepository billingProfileRepository;
+
+    @Autowired
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    // 24-Hour Bounded Thread-Safe Idempotency Cache for Webhook Event IDs
+    private static final Map<String, Long> PROCESSED_WEBHOOK_EVENTS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000L; // 24 Hours
 
     // Razorpay Webhook Endpoint
     @PostMapping("/razorpay")
-    public ResponseEntity<?> handleRazorpayWebhook(@RequestBody Map<String, Object> payload) {
-        logger.info("💳 Received Razorpay Webhook Event: {}", payload.get("event"));
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<?> handleRazorpayWebhook(
+            @RequestHeader(value = "X-Razorpay-Signature", required = false) String signatureHeader,
+            @RequestHeader(value = "X-Razorpay-Event-Id", required = false) String eventIdHeader,
+            @RequestBody String rawPayload) {
+        
+        // 0. Clean expired idempotency keys periodically
+        long now = System.currentTimeMillis();
+        PROCESSED_WEBHOOK_EVENTS.entrySet().removeIf(entry -> (now - entry.getValue()) > IDEMPOTENCY_TTL_MS);
+
+        // 1. Idempotency Check
+        String eventKey = eventIdHeader;
+        if (eventKey == null || eventKey.isBlank()) {
+            // Fallback: derive unique signature hash from raw payload + signature
+            eventKey = "HASH_" + java.util.Objects.hash(rawPayload, signatureHeader);
+        }
+
+        if (PROCESSED_WEBHOOK_EVENTS.containsKey(eventKey)) {
+            logger.info("⏭️ Razorpay Webhook Event [{}] already processed. Skipping duplicate execution (Idempotency Guard).", eventKey);
+            return ResponseEntity.ok(Map.of("status", "IGNORED_DUPLICATE", "eventId", eventKey));
+        }
+
+        // Mark as processing/processed
+        PROCESSED_WEBHOOK_EVENTS.put(eventKey, now);
+
+        // 2. Signature Verification
+        String activeSecret = null;
+        try {
+            var settings = settingsRepository.findAll().stream().findFirst().orElse(null);
+            if (settings != null && settings.getRazorpayMasterKeySecret() != null && !settings.getRazorpayMasterKeySecret().isBlank()) {
+                activeSecret = settings.getRazorpayMasterKeySecret().trim();
+            }
+            if (activeSecret == null) {
+                var sysCfg = systemConfigRepository.findAll().stream().findFirst().orElse(null);
+                if (sysCfg != null && sysCfg.getRazorpayKeySecret() != null && !sysCfg.getRazorpayKeySecret().isBlank()) {
+                    activeSecret = sysCfg.getRazorpayKeySecret().trim();
+                }
+            }
+        } catch (Exception ignored) {}
+
+        if (activeSecret != null && !activeSecret.isBlank() && !activeSecret.contains("mockSecret")) {
+            if (signatureHeader == null || signatureHeader.isBlank()) {
+                logger.warn("❌ Rejected Razorpay Webhook: Missing X-Razorpay-Signature header");
+                return ResponseEntity.badRequest().body(Map.of("error", "Missing X-Razorpay-Signature header"));
+            }
+            try {
+                boolean isValid = com.razorpay.Utils.verifyWebhookSignature(rawPayload, signatureHeader, activeSecret);
+                if (!isValid) {
+                    logger.warn("❌ Rejected Razorpay Webhook: Invalid HMAC signature");
+                    return ResponseEntity.badRequest().body(Map.of("error", "Invalid signature"));
+                }
+            } catch (Exception e) {
+                logger.warn("❌ Rejected Razorpay Webhook: Signature verification exception: {}", e.getMessage());
+                return ResponseEntity.badRequest().body(Map.of("error", "Signature verification failed"));
+            }
+        }
+
+        Map<String, Object> payload;
+        try {
+            payload = objectMapper.readValue(rawPayload, Map.class);
+        } catch (Exception e) {
+            logger.warn("Failed to parse Razorpay webhook payload JSON: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", "Malformed JSON"));
+        }
+
+        logger.info("💳 Received Verified Razorpay Webhook Event: {}", payload.get("event"));
 
         try {
             String event = payload.get("event") != null ? payload.get("event").toString() : "";

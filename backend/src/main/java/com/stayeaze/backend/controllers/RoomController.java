@@ -9,6 +9,7 @@ import com.stayeaze.backend.models.Room;
 import com.stayeaze.backend.payload.request.RoomRequest;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.payload.response.RoomDTO;
+import com.stayeaze.backend.payload.response.MinimalRoomDTO;
 import com.stayeaze.backend.models.Tenant;
 import com.stayeaze.backend.repository.TenantRepository;
 import com.stayeaze.backend.repository.BedRepository;
@@ -17,7 +18,6 @@ import com.stayeaze.backend.repository.FloorRepository;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.PropertyRepository;
 import com.stayeaze.backend.repository.RoomRepository;
-import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -57,6 +57,9 @@ public class RoomController {
 
     @Autowired
     private com.stayeaze.backend.services.RoomService roomService;
+
+    @Autowired
+    private com.stayeaze.backend.services.OccupancySyncService occupancySyncService;
 
     @Autowired
     private com.stayeaze.backend.security.SecurityUtils securityUtils;
@@ -134,8 +137,10 @@ public class RoomController {
     private Organization getLoggedUserOrg() {
         Organization org = securityUtils.getCurrentOrganization();
         if (org != null) return org;
-        return organizationRepository.findAll().stream().findFirst()
-                .orElse(null);
+        if (securityUtils.isSuperAdmin()) {
+            return organizationRepository.findAll().stream().findFirst().orElse(null);
+        }
+        return null;
     }
 
     private Floor getAuthorizedFloor(UUID propertyId, UUID buildingId, UUID floorId) {
@@ -191,6 +196,54 @@ public class RoomController {
         return ResponseEntity.ok(dtos);
     }
 
+    @GetMapping("/rooms/minimal")
+    public ResponseEntity<List<MinimalRoomDTO>> getMinimalRooms(
+            @RequestParam(required = false) UUID propertyId,
+            @RequestParam(required = false) UUID floorId,
+            @RequestParam(required = false) UUID buildingId) {
+        Organization organization = getLoggedUserOrg();
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+
+        List<Room> rooms;
+        if (floorId != null) {
+            rooms = roomRepository.findByFloorId(floorId);
+        } else if (propertyId != null) {
+            rooms = roomRepository.findByPropertyIdNative(propertyId);
+        } else if (organization != null) {
+            rooms = roomRepository.findByOrganizationId(organization.getId());
+        } else {
+            rooms = securityUtils.isSuperAdmin() ? roomRepository.findAll() : Collections.emptyList();
+        }
+
+        List<MinimalRoomDTO> dtos = rooms.stream()
+                .filter(r -> {
+                    if ("ARCHIVED".equalsIgnoreCase(r.getStatus())) return false;
+                    UUID propId = null;
+                    try {
+                        if (r.getFloor() != null && r.getFloor().getBuilding() != null && r.getFloor().getBuilding().getProperty() != null) {
+                            propId = r.getFloor().getBuilding().getProperty().getId();
+                        }
+                    } catch (Exception ignored) {}
+                    if (assignedProps != null && propId != null && !assignedProps.contains(propId)) {
+                        return false;
+                    }
+                    if (buildingId != null) {
+                        UUID bId = null;
+                        try {
+                            if (r.getFloor() != null && r.getFloor().getBuilding() != null) {
+                                bId = r.getFloor().getBuilding().getId();
+                            }
+                        } catch (Exception ignored) {}
+                        if (bId == null || !buildingId.equals(bId)) return false;
+                    }
+                    return true;
+                })
+                .map(MinimalRoomDTO::fromEntity)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(dtos);
+    }
+
     @GetMapping("/rooms")
     public ResponseEntity<?> getFlatRooms(
             @RequestParam(defaultValue = "1") int page,
@@ -204,6 +257,15 @@ public class RoomController {
         }
         if (propertyId != null) {
             all = all.stream().filter(r -> propertyId.equals(r.getPropertyId())).collect(Collectors.toList());
+            if (all.isEmpty()) {
+                try {
+                    List<Room> propRooms = roomRepository.findByPropertyIdNative(propertyId);
+                    if (propRooms != null && !propRooms.isEmpty()) {
+                        propRooms.forEach(this::populateRoomStats);
+                        all = propRooms.stream().map(RoomDTO::fromEntity).collect(Collectors.toList());
+                    }
+                } catch (Exception ignored) {}
+            }
         }
         return ResponseEntity.ok(com.stayeaze.backend.payload.response.PageResponse.of(all, page, pageSize));
     }
@@ -247,16 +309,23 @@ public class RoomController {
         room.setRoomNumber(request.getRoomNumber());
         room.setSharingType(request.getSharingType());
         room.setBaseRent(request.getBaseRent());
-        if (request.getStatus() != null) {
-            room.setStatus(request.getStatus());
+        if (request.getStatus() != null && ("MAINTENANCE".equalsIgnoreCase(request.getStatus()) || "ARCHIVED".equalsIgnoreCase(request.getStatus()))) {
+            room.setStatus(request.getStatus().toUpperCase());
         }
         if (request.getAmenities() != null) {
             room.setAmenities(request.getAmenities());
         }
 
         Room updated = roomService.saveRoom(room);
-        updatePropertyAndBuildingStats(room.getFloor());
-        return ResponseEntity.ok(updated);
+        try {
+            if (occupancySyncService != null) {
+                occupancySyncService.syncStatsForRoom(updated);
+                occupancySyncService.syncStatsAndEvictCaches(updated.getFloor());
+            } else {
+                updatePropertyAndBuildingStats(room.getFloor());
+            }
+        } catch (Exception ignored) {}
+        return ResponseEntity.ok(populateRoomStats(updated));
     }
 
     @DeleteMapping("/properties/{propertyId}/buildings/{buildingId}/floors/{floorId}/rooms/{roomId}")
@@ -561,7 +630,7 @@ public class RoomController {
 
                 List<java.util.Map<String, Object>> roommateList = occupants.stream().map(t -> {
                     java.util.Map<String, Object> occ = new java.util.HashMap<>();
-                    occ.put("name", t.getFirstName() + " " + t.getLastName());
+                    occ.put("name", t.getName());
                     occ.put("gender", t.getGender());
                     occ.put("bedNumber", t.getBedNumber());
                     occ.put("checkInDate", t.getLeaseStart());

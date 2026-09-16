@@ -10,7 +10,6 @@ import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.RoleRepository;
 import com.stayeaze.backend.repository.UserJourneyAuditRepository;
 import com.stayeaze.backend.repository.UserRepository;
-import com.stayeaze.backend.services.UserJourneyAuditService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Map;
-import java.util.UUID;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -49,9 +47,6 @@ public class SuperAdminUserJourneyTrackingIntegrationTest {
 
     @Autowired
     private RoleRepository roleRepository;
-
-    @Autowired
-    private UserJourneyAuditService auditService;
 
     @Autowired
     private ObjectMapper objectMapper;

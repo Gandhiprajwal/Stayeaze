@@ -69,6 +69,21 @@ public class CheckIn {
     @Column(name = "razorpay_payment_id", length = 100)
     private String razorpayPaymentId;
 
+    @Column(name = "key_tag_number", length = 100)
+    private String keyTagNumber;
+
+    @Column(name = "initial_meter_reading", precision = 10, scale = 2)
+    private BigDecimal initialMeterReading;
+
+    @Column(name = "vehicle_number", length = 50)
+    private String vehicleNumber;
+
+    @Column(name = "welcome_kit_handed_over")
+    private Boolean welcomeKitHandedOver = true;
+
+    @Column(name = "checked_in_by", length = 150)
+    private String checkedInBy;
+
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
@@ -225,6 +240,46 @@ public class CheckIn {
 
     public void setRazorpayPaymentId(String razorpayPaymentId) {
         this.razorpayPaymentId = razorpayPaymentId;
+    }
+
+    public String getKeyTagNumber() {
+        return keyTagNumber;
+    }
+
+    public void setKeyTagNumber(String keyTagNumber) {
+        this.keyTagNumber = keyTagNumber;
+    }
+
+    public BigDecimal getInitialMeterReading() {
+        return initialMeterReading;
+    }
+
+    public void setInitialMeterReading(BigDecimal initialMeterReading) {
+        this.initialMeterReading = initialMeterReading;
+    }
+
+    public String getVehicleNumber() {
+        return vehicleNumber;
+    }
+
+    public void setVehicleNumber(String vehicleNumber) {
+        this.vehicleNumber = vehicleNumber;
+    }
+
+    public Boolean getWelcomeKitHandedOver() {
+        return welcomeKitHandedOver;
+    }
+
+    public void setWelcomeKitHandedOver(Boolean welcomeKitHandedOver) {
+        this.welcomeKitHandedOver = welcomeKitHandedOver;
+    }
+
+    public String getCheckedInBy() {
+        return checkedInBy;
+    }
+
+    public void setCheckedInBy(String checkedInBy) {
+        this.checkedInBy = checkedInBy;
     }
 
     public OffsetDateTime getCreatedAt() {

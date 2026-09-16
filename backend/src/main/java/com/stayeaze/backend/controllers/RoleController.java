@@ -1,7 +1,6 @@
 package com.stayeaze.backend.controllers;
 
 import com.stayeaze.backend.models.Role;
-import com.stayeaze.backend.models.User;
 import com.stayeaze.backend.repository.RoleRepository;
 import com.stayeaze.backend.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +9,6 @@ import org.springframework.web.bind.annotation.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -118,11 +116,11 @@ public class RoleController {
         }
 
         final String finalDbName = dbName;
-        if (roleRepository.findAll().stream().anyMatch(r -> r.getName().equalsIgnoreCase(finalDbName))) {
+        if (roleRepository.existsByNameIgnoreCase(finalDbName)) {
             return ResponseEntity.badRequest().body(new com.stayeaze.backend.payload.response.MessageResponse("Error: Role already exists!"));
         }
 
-        String description = (String) request.get("description");
+        @SuppressWarnings("unchecked")
         List<String> perms = (List<String>) request.get("permissions");
         String dbPermissionsValue = "[]";
         if (perms != null) {
@@ -144,6 +142,7 @@ public class RoleController {
 
     @PutMapping("/{id}")
     @org.springframework.security.access.prepost.PreAuthorize("hasRole('SUPER_ADMIN')")
+    @SuppressWarnings("unchecked")
     public ResponseEntity<?> updateRole(@PathVariable UUID id, @RequestBody Map<String, Object> request) {
         Role role = roleRepository.findById(id).orElse(null);
         if (role == null) {
@@ -189,58 +188,82 @@ public class RoleController {
     public ResponseEntity<?> getAvailablePermissions() {
         List<Map<String, Object>> catalog = List.of(
             Map.of(
-                "category", "Property Management",
+                "category", "Space & Visual Inventory",
                 "icon", "Building2",
                 "permissions", List.of(
-                    Map.of("key", "property.read", "label", "View Properties", "description", "View properties, campuses, and configurations"),
-                    Map.of("key", "property.write", "label", "Manage Properties", "description", "Create, edit, or configure properties"),
-                    Map.of("key", "building.manage", "label", "Buildings & Floors", "description", "Add, edit, or delete buildings and floor plans"),
-                    Map.of("key", "room.manage", "label", "Rooms & Beds", "description", "Configure room sharing types, pricing, and beds")
+                    Map.of("key", "space.matrix.view", "label", "Visual Floor & Bed Matrix", "description", "Inspect live graphical floor layouts, occupied beds, and vacant slots"),
+                    Map.of("key", "space.matrix.manage", "label", "Configure Rooms & Beds", "description", "Configure sharing types (Single/Double/Triple), bed numbers, and base rents"),
+                    Map.of("key", "space.batch.generate", "label", "Batch Space Generator", "description", "Bulk generate multi-floor rooms and beds across wings"),
+                    Map.of("key", "building.manage", "label", "Buildings & Wings", "description", "Add, edit, or archive buildings and floor wings")
                 )
             ),
             Map.of(
-                "category", "Tenancy & Bookings",
+                "category", "Resident Lifecycle & Digital KYC",
                 "icon", "Users",
                 "permissions", List.of(
-                    Map.of("key", "tenant.read", "label", "View Residents", "description", "View tenant profiles, emergency contacts, and KYC"),
-                    Map.of("key", "tenant.write", "label", "Manage Residents", "description", "Onboard new tenants, upload ID proofs, and edit profiles"),
-                    Map.of("key", "booking.read", "label", "View Bookings", "description", "View room reservations, inquiries, and requests"),
-                    Map.of("key", "booking.write", "label", "Create Bookings", "description", "Reserve beds, process token advances, and allocate rooms"),
-                    Map.of("key", "checkin.manage", "label", "Check-in & Check-out", "description", "Process digital check-ins, move-outs, and room transfers")
+                    Map.of("key", "tenant.read", "label", "View Resident Profiles", "description", "View tenant directory, room allocations, emergency contacts, and active status"),
+                    Map.of("key", "tenant.write", "label", "Onboard & Edit Residents", "description", "Onboard new residents, edit profiles, and record initial rent/deposit"),
+                    Map.of("key", "tenant.kyc.verify", "label", "Verify Digital KYC", "description", "Approve or reject Aadhaar, PAN, and student/employee ID documents"),
+                    Map.of("key", "tenant.transfer.execute", "label", "Room Transfer Wizard", "description", "Execute room/bed transfers with automatic pro-rata rent & deposit recalculation"),
+                    Map.of("key", "booking.manage", "label", "Bookings & Token Advances", "description", "Process prospective bookings, token deposits, and space hold requests")
                 )
             ),
             Map.of(
-                "category", "Finance & Invoicing",
+                "category", "Rental Agreements & Legal Lock-in",
+                "icon", "FileSignature",
+                "permissions", List.of(
+                    Map.of("key", "agreement.read", "label", "View Digital Agreements", "description", "View tenant e-sign contracts, lock-in clauses, and notice periods"),
+                    Map.of("key", "agreement.generate", "label", "Generate & E-Sign Agreements", "description", "Create digital rental agreements with custom rules & download PDF contracts"),
+                    Map.of("key", "agreement.terminate", "label", "Agreement Termination & Move-Out", "description", "Execute move-outs, early lock-in penalties, and settlement approvals")
+                )
+            ),
+            Map.of(
+                "category", "Billing, Utility Meters & Finance",
                 "icon", "CreditCard",
                 "permissions", List.of(
-                    Map.of("key", "billing.read", "label", "View Invoices", "description", "Access monthly rent invoices, utility bills, and tariffs"),
-                    Map.of("key", "billing.write", "label", "Generate Invoices", "description", "Create custom bills, apply discounts, and edit line items"),
-                    Map.of("key", "payment.read", "label", "View Payments", "description", "View receipts, settlement status, and payment histories"),
-                    Map.of("key", "payment.write", "label", "Record Payments", "description", "Log offline payments, approve refunds, and reconcile"),
-                    Map.of("key", "deposit.manage", "label", "Security Deposits", "description", "Process deposit deductions, settlements, and net refunds")
+                    Map.of("key", "billing.read", "label", "View Invoices & Tariffs", "description", "Access monthly rent invoices, utility bills, and payment records"),
+                    Map.of("key", "billing.write", "label", "Create Invoices & Adjustments", "description", "Create custom bills, apply discounts, exit cleaning fees, and penalties"),
+                    Map.of("key", "billing.bulk.run", "label", "Bulk Monthly Rent Run", "description", "Execute 1-click automated monthly rent generation for all occupied rooms"),
+                    Map.of("key", "utility.meter.record", "label", "Sub-Meter Electricity Split", "description", "Record sub-meter electricity readings and auto-split units across roommates"),
+                    Map.of("key", "payment.record", "label", "Log Payments & Bank Accounts", "description", "Record cash/UPI payments, reconcile transactions, and verify refund accounts"),
+                    Map.of("key", "deposit.manage", "label", "Security Deposit Settlements", "description", "Process deposit deductions, damage penalties, and net refund payouts")
                 )
             ),
             Map.of(
-                "category", "Operations & Facilities",
-                "icon", "Wrench",
-                "permissions", List.of(
-                    Map.of("key", "complaint.read", "label", "View Complaints", "description", "View resident grievances, tickets, and photos"),
-                    Map.of("key", "complaint.write", "label", "Resolve Complaints", "description", "Assign tickets to staff, update status, and close complaints"),
-                    Map.of("key", "maintenance.read", "label", "View Maintenance", "description", "View scheduled repairs and asset maintenance logs"),
-                    Map.of("key", "maintenance.write", "label", "Manage Maintenance", "description", "Create maintenance tasks, log costs, and complete jobs"),
-                    Map.of("key", "visitor.read", "label", "View Visitors", "description", "View visitor entry logs, vehicle numbers, and checkout times"),
-                    Map.of("key", "visitor.write", "label", "Log Visitors", "description", "Register guests, issue digital visitor passes, and check out")
-                )
-            ),
-            Map.of(
-                "category", "Administration & Security",
+                "category", "Gate Pass, Visitors & Security",
                 "icon", "ShieldCheck",
                 "permissions", List.of(
-                    Map.of("key", "user.read", "label", "View Staff & Users", "description", "View staff members, managers, and assigned properties"),
-                    Map.of("key", "user.write", "label", "Manage Staff", "description", "Create staff logins, assign roles, and modify access"),
-                    Map.of("key", "reporting.read", "label", "Analytics & Reports", "description", "View financial summaries, occupancy stats, and export CSVs"),
-                    Map.of("key", "audit.read", "label", "Audit Logs", "description", "Inspect security logs, login timestamps, and system actions"),
-                    Map.of("key", "settings.manage", "label", "System Settings", "description", "Configure payment gateways, templates, and notifications")
+                    Map.of("key", "gate.visitor.read", "label", "View Visitor Gate Logs", "description", "Inspect guest entry/exit times, vehicle numbers, and host tenants"),
+                    Map.of("key", "gate.visitor.log", "label", "Issue Visitor Gate Pass", "description", "Register guests, issue gate entry passes, and trigger tenant approval"),
+                    Map.of("key", "gate.parcel.manage", "label", "Parcel & Courier Desk", "description", "Log arriving courier deliveries, send OTP pickup notifications to residents"),
+                    Map.of("key", "security.incident.log", "label", "Safety Incident Escalation", "description", "Record security incidents, curfew violations, and warden escalations")
+                )
+            ),
+            Map.of(
+                "category", "Facilities & Complaints SLA",
+                "icon", "Wrench",
+                "permissions", List.of(
+                    Map.of("key", "complaint.read", "label", "View Complaints & Photos", "description", "View resident grievances, issue photos, and live chat updates"),
+                    Map.of("key", "complaint.resolve", "label", "Assign & Close Complaints", "description", "Assign maintenance staff, track SLA timelines, and resolve issues"),
+                    Map.of("key", "maintenance.manage", "label", "Asset Maintenance & Repairs", "description", "Log recurring maintenance jobs, contractor costs, and equipment assets")
+                )
+            ),
+            Map.of(
+                "category", "WhatsApp & Omnichannel Automations",
+                "icon", "MessageSquare",
+                "permissions", List.of(
+                    Map.of("key", "messaging.whatsapp.send", "label", "1-Click WhatsApp Reminders", "description", "Dispatch instant WhatsApp rent due notices, welcome links, and receipts"),
+                    Map.of("key", "messaging.logs.view", "label", "Notification Delivery Logs", "description", "Audit WhatsApp/SMS message delivery statuses and failure reasons")
+                )
+            ),
+            Map.of(
+                "category", "Compliance, Tax & Governance",
+                "icon", "FileText",
+                "permissions", List.of(
+                    Map.of("key", "reports.gst.export", "label", "GSTR-1 Tax Reports", "description", "Export monthly GST B2B/B2C summaries and tax ledgers"),
+                    Map.of("key", "reports.hra.generate", "label", "HRA Section 10(13A) Receipts", "description", "Generate official tax rent receipts with landlord PAN verification QR"),
+                    Map.of("key", "audit.logs.view", "label", "Audit Logs & Security Sessions", "description", "View multi-branch user audit trails, IP logs, and active login sessions"),
+                    Map.of("key", "settings.manage", "label", "System & Gateway Settings", "description", "Configure Razorpay credentials, bank details, invoice prefixes, and branding")
                 )
             )
         );

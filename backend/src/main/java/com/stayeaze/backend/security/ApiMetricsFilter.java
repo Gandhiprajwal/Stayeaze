@@ -86,7 +86,12 @@ public class ApiMetricsFilter extends OncePerRequestFilter {
             String normalizedUri = uri.replaceAll("/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", "/{id}")
                                       .replaceAll("/[0-9]+", "/{id}");
             String key = request.getMethod() + " " + normalizedUri;
-            EndpointStat stat = endpointStats.computeIfAbsent(key, k -> new EndpointStat(request.getMethod(), normalizedUri));
+            if (endpointStats.size() >= 500 && !endpointStats.containsKey(key)) {
+                key = request.getMethod() + " /api/v1/other";
+                normalizedUri = "/api/v1/other";
+            }
+            final String finalUri = normalizedUri;
+            EndpointStat stat = endpointStats.computeIfAbsent(key, k -> new EndpointStat(request.getMethod(), finalUri));
             stat.count.incrementAndGet();
             stat.totalMs.addAndGet(duration);
             if (status >= 400) {

@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,24 +15,47 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
+import com.stayeaze.backend.services.interfaces.IFileStorageService;
+
 @Service
-public class FileStorageService {
+public class FileStorageService implements IFileStorageService {
 
     private static final Logger logger = LoggerFactory.getLogger(FileStorageService.class);
 
-    @Autowired
+    @Autowired(required = false)
     private SystemIntegrationSettingsRepository settingsRepository;
 
+    private static final java.util.Set<String> ALLOWED_EXTENSIONS = java.util.Set.of(
+            ".jpg", ".jpeg", ".png", ".webp", ".pdf", ".doc", ".docx"
+    );
+
+    @Override
     public String storeFile(MultipartFile file, String subFolder) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Cannot store empty file.");
+        }
+
+        if (file.getSize() > 3 * 1024 * 1024) {
+            throw new IllegalArgumentException("File size exceeds 3MB limit (uploaded: " + String.format("%.2f MB", file.getSize() / (1024.0 * 1024.0)) + "). Please upload a file smaller than 3MB.");
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        String extension = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            extension = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
+        }
+
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            throw new IllegalArgumentException("Unsupported file type. Allowed formats: JPG, PNG, WEBP, PDF, DOC, DOCX.");
         }
 
         String folder = (subFolder != null && !subFolder.isBlank()) ? subFolder.replaceAll("[^a-zA-Z0-9_-]", "") : "kyc";
 
         SystemIntegrationSettings settings = null;
         try {
-            settings = settingsRepository.findAll().stream().findFirst().orElse(null);
+            if (settingsRepository != null) {
+                settings = settingsRepository.findAll().stream().findFirst().orElse(null);
+            }
         } catch (Exception e) {
             logger.warn("Could not load SystemIntegrationSettings: {}", e.getMessage());
         }
@@ -42,7 +64,7 @@ public class FileStorageService {
                 && settings.getAwsAccessKey() != null && !settings.getAwsAccessKey().isBlank()
                 && settings.getAwsSecretKey() != null && !settings.getAwsSecretKey().isBlank();
 
-        if (s3Enabled) {
+        if (s3Enabled && settings != null) {
             try {
                 // If AWS S3 is enabled and credentials configured, attempt S3 upload
                 logger.info("AWS S3 is enabled. Attempting upload to bucket {}...", settings.getAwsBucketName());
@@ -58,18 +80,17 @@ public class FileStorageService {
 
     private String storeLocally(MultipartFile file, String folder) throws IOException {
         String originalFilename = file.getOriginalFilename();
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
-        }
-
         String sanitizedBaseName = (originalFilename != null ? originalFilename.replaceAll("[^a-zA-Z0-9._-]", "_") : "file");
         String uniqueFileName = UUID.randomUUID().toString() + "_" + sanitizedBaseName;
 
         Path uploadPath = Paths.get("uploads", folder).toAbsolutePath().normalize();
         Files.createDirectories(uploadPath);
 
-        Path targetLocation = uploadPath.resolve(uniqueFileName);
+        Path targetLocation = uploadPath.resolve(uniqueFileName).normalize();
+        if (!targetLocation.startsWith(uploadPath)) {
+            throw new SecurityException("Invalid file path / path traversal detected.");
+        }
+
         Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
         String relativeUrl = "/uploads/" + folder + "/" + uniqueFileName;

@@ -1,11 +1,12 @@
 package com.stayeaze.backend.services;
 
+import com.stayeaze.backend.services.interfaces.ICredentialService;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 
 @Service
-public class CredentialService {
+public class CredentialService implements ICredentialService {
 
     private static final String UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
     private static final String LOWER = "abcdefghijkmnpqrstuvwxyz";
@@ -19,6 +20,7 @@ public class CredentialService {
      * Generates a cryptographically secure random password of specified length (minimum 8, default 12).
      * Guarantees at least 1 uppercase, 1 lowercase, 1 digit, and 1 special character.
      */
+    @Override
     public String generateSecurePassword(int length) {
         int targetLength = Math.max(length, 8);
         StringBuilder sb = new StringBuilder(targetLength);
@@ -46,6 +48,7 @@ public class CredentialService {
         return new String(chars);
     }
 
+    @Override
     public String generateSecurePassword() {
         return generateSecurePassword(12);
     }

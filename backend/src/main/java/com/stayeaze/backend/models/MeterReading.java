@@ -55,6 +55,15 @@ public class MeterReading {
     @Column(length = 50)
     private String status = "UNBILLED"; // UNBILLED, BILLED
 
+    @Column(name = "meter_replaced")
+    private Boolean meterReplaced = false;
+
+    @Column(name = "old_meter_final_reading", precision = 10, scale = 2)
+    private BigDecimal oldMeterFinalReading;
+
+    @Column(name = "new_meter_initial_reading", precision = 10, scale = 2)
+    private BigDecimal newMeterInitialReading;
+
     public MeterReading() {
     }
 
@@ -184,5 +193,29 @@ public class MeterReading {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Boolean getMeterReplaced() {
+        return meterReplaced;
+    }
+
+    public void setMeterReplaced(Boolean meterReplaced) {
+        this.meterReplaced = meterReplaced;
+    }
+
+    public BigDecimal getOldMeterFinalReading() {
+        return oldMeterFinalReading;
+    }
+
+    public void setOldMeterFinalReading(BigDecimal oldMeterFinalReading) {
+        this.oldMeterFinalReading = oldMeterFinalReading;
+    }
+
+    public BigDecimal getNewMeterInitialReading() {
+        return newMeterInitialReading;
+    }
+
+    public void setNewMeterInitialReading(BigDecimal newMeterInitialReading) {
+        this.newMeterInitialReading = newMeterInitialReading;
     }
 }

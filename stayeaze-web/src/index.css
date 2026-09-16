@@ -269,3 +269,69 @@
 }
 
 
+/* ==========================================================================
+   Mobile / Responsive Global Utilities
+   ========================================================================== */
+
+/* iOS safe-area-inset support for devices with notches / home indicators */
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Horizontal scroll fade-indicator wrapper
+   Use: <div class="scroll-fade-x"> <div class="scroll-fade-x-inner">...</div> </div> */
+.scroll-fade-x {
+  position: relative;
+  overflow: hidden;
+}
+.scroll-fade-x-inner {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-fade-x-inner::-webkit-scrollbar {
+  display: none;
+}
+.scroll-fade-x::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2.5rem;
+  background: linear-gradient(to left, hsl(var(--background)), transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+.dark .scroll-fade-x::after {
+  background: linear-gradient(to left, hsl(var(--background)), transparent);
+}
+
+/* Touch target compliance — wraps any interactive element to ensure 44px minimum */
+@layer utilities {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Mobile bottom nav safe area — adds padding above fixed bottom nav on iOS */
+.main-content-mobile-pad {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+@media (min-width: 768px) {
+  .main-content-mobile-pad {
+    padding-bottom: 0;
+  }
+}

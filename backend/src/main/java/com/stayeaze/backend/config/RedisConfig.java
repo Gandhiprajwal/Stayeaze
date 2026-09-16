@@ -12,7 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -28,6 +29,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 @Configuration
 @EnableCaching
@@ -135,6 +137,28 @@ public class RedisConfig {
                 // Audit logs: 10 min + jitter (append-only, read rarely)
                 cacheConfigurations.put("auditLogs", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
 
+                // Public & SaaS Plans: 30 min + jitter
+                cacheConfigurations.put("saas_plans", defaultConfig.entryTtl(Duration.ofMinutes(30).plusSeconds(random.nextInt(60))));
+
+                // Organization Branding: 30 min + jitter
+                cacheConfigurations.put("org_branding", defaultConfig.entryTtl(Duration.ofMinutes(30).plusSeconds(random.nextInt(60))));
+
+                // Financial Settings & System Config: 15-30 min + jitter
+                cacheConfigurations.put("org_financial_settings", defaultConfig.entryTtl(Duration.ofMinutes(15).plusSeconds(random.nextInt(60))));
+                cacheConfigurations.put("system_config", defaultConfig.entryTtl(Duration.ofMinutes(30).plusSeconds(random.nextInt(60))));
+
+                // Analytics & Reports: 5-10 min + jitter
+                cacheConfigurations.put("analytics_overview", defaultConfig.entryTtl(Duration.ofMinutes(5).plusSeconds(random.nextInt(30))));
+                cacheConfigurations.put("analytics_occupancy", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(30))));
+                cacheConfigurations.put("analytics_revenue", defaultConfig.entryTtl(Duration.ofMinutes(5).plusSeconds(random.nextInt(30))));
+                cacheConfigurations.put("analytics_turnover", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(30))));
+
+                // Super Admin & Support Stats: 3-10 min + jitter
+                cacheConfigurations.put("superadmin_subscriber_stats", defaultConfig.entryTtl(Duration.ofMinutes(5).plusSeconds(random.nextInt(30))));
+                cacheConfigurations.put("superadmin_subscribers_minimal", defaultConfig.entryTtl(Duration.ofMinutes(10).plusSeconds(random.nextInt(60))));
+                cacheConfigurations.put("support_ticket_stats", defaultConfig.entryTtl(Duration.ofMinutes(3).plusSeconds(random.nextInt(20))));
+                cacheConfigurations.put("utility_stats", defaultConfig.entryTtl(Duration.ofMinutes(5).plusSeconds(random.nextInt(30))));
+
                 logger.info("Redis L2 Cache Manager initialized successfully with JavaTimeModule & Anti-Stampede Jitter.");
                 return RedisCacheManager.builder(connectionFactory)
                         .cacheDefaults(defaultConfig)
@@ -142,15 +166,18 @@ public class RedisConfig {
                         .build();
 
             } catch (Exception ex) {
-                logger.info("Local Redis instance at {}:{} not running ({}) - Operating cleanly with in-memory ConcurrentMapCacheManager",
+                logger.info("Local Redis instance at {}:{} not running ({}) - Operating cleanly with bounded in-memory CaffeineCacheManager",
                         settings.getRedisHost(), settings.getRedisPort(), ex.getMessage());
             }
         } else {
-            logger.info("Redis Caching is disabled or credentials not configured. Using In-Memory ConcurrentMapCacheManager.");
+            logger.info("Redis Caching is disabled or credentials not configured. Using Bounded In-Memory CaffeineCacheManager.");
         }
 
-        // Fallback in-memory cache manager (Dynamic creation enabled to prevent 'Cannot find cache named' errors)
-        ConcurrentMapCacheManager dynamicCacheManager = new ConcurrentMapCacheManager();
+        // Bounded fallback in-memory cache manager (Dynamic creation with 10m TTL & 10,000 max entries per cache)
+        CaffeineCacheManager dynamicCacheManager = new CaffeineCacheManager();
+        dynamicCacheManager.setCaffeine(Caffeine.newBuilder()
+                .expireAfterWrite(10, TimeUnit.MINUTES)
+                .maximumSize(10_000));
         dynamicCacheManager.setAllowNullValues(true);
         return dynamicCacheManager;
     }

@@ -1,17 +1,22 @@
 package com.stayeaze.backend.controllers;
 
+import com.stayeaze.backend.config.TenantIdentifierResolver;
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.*;
-import com.stayeaze.backend.services.AuditLogService;
 import com.stayeaze.backend.services.EmailService;
 import com.stayeaze.backend.services.OccupancySyncService;
 import com.stayeaze.backend.services.SmsService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,6 +26,8 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/v1/public/tenants")
 public class PublicTenantOnboardingController {
+
+    private static final Logger logger = LoggerFactory.getLogger(PublicTenantOnboardingController.class);
 
     @Autowired
     private TenantRepository tenantRepository;
@@ -68,16 +75,61 @@ public class PublicTenantOnboardingController {
     private OccupancySyncService occupancySyncService;
 
     @Autowired
-    private AuditLogService auditLogService;
-
-    @Autowired
     private com.stayeaze.backend.services.AccountUniquenessService accountUniquenessService;
 
     @Autowired
     private SystemConfigRepository systemConfigRepository;
 
     @Autowired
+    private AgreementRepository agreementRepository;
+
+    @Autowired
     private com.stayeaze.backend.services.InvoiceSequenceService invoiceSequenceService;
+
+    @Autowired
+    private com.stayeaze.backend.services.FileStorageService fileStorageService;
+
+    @Autowired
+    private com.stayeaze.backend.repository.TenantDocumentRepository tenantDocumentRepository;
+
+    @PostMapping(value = "/upload-document", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> uploadPublicDocument(
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            jakarta.servlet.http.HttpServletRequest request) {
+        try {
+            MultipartFile effectiveFile = file;
+            if (effectiveFile == null && request instanceof org.springframework.web.multipart.MultipartHttpServletRequest multipartRequest) {
+                effectiveFile = multipartRequest.getFile("document");
+                if (effectiveFile == null) effectiveFile = multipartRequest.getFile("image");
+                if (effectiveFile == null) effectiveFile = multipartRequest.getFile("attachment");
+                if (effectiveFile == null && !multipartRequest.getFileMap().isEmpty()) {
+                    effectiveFile = multipartRequest.getFileMap().values().iterator().next();
+                }
+            }
+
+            if (effectiveFile == null || effectiveFile.isEmpty()) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: No file uploaded or file is empty."));
+            }
+
+            if (effectiveFile.getSize() > 3 * 1024 * 1024) {
+                return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                        .body(new MessageResponse("File size exceeds 3MB limit. Please upload a smaller document."));
+            }
+
+            String fileUrl = fileStorageService.storeFile(effectiveFile, "kyc");
+            Map<String, Object> response = new HashMap<>();
+            response.put("fileUrl", fileUrl);
+            response.put("fileName", effectiveFile.getOriginalFilename());
+            response.put("size", effectiveFile.getSize());
+            response.put("contentType", effectiveFile.getContentType());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException | SecurityException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponse("Error uploading document: " + e.getMessage()));
+        }
+    }
 
     @GetMapping("/properties")
     public ResponseEntity<?> getPublicProperties() {
@@ -91,6 +143,107 @@ public class PublicTenantOnboardingController {
             result.add(map);
         }
         return ResponseEntity.ok(result);
+    }
+
+    private OrganizationBillingProfile getBillingProfile(Organization organization) {
+        if (organization == null) return null;
+        return organizationBillingProfileRepository.findByOrganization(organization)
+                .orElseGet(() -> {
+                    try {
+                        return organizationBillingProfileRepository.findByOrgIdNative(organization.getId())
+                                .orElse(null);
+                    } catch (Exception e) {
+                        return null;
+                    }
+                });
+    }
+
+    private Room findRoomByPropertyAndNumber(Property property, Organization org, String roomNumber) {
+        if (roomNumber == null || roomNumber.isBlank()) return null;
+        if (property != null && property.getId() != null) {
+            try {
+                List<Room> propRooms = roomRepository.findByPropertyIdNative(property.getId());
+                for (Room r : propRooms) {
+                    if (roomNumber.equalsIgnoreCase(r.getRoomNumber())) {
+                        return r;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        UUID orgId = (org != null) ? org.getId() : (property != null && property.getOrganization() != null ? property.getOrganization().getId() : null);
+        if (orgId != null) {
+            try {
+                List<Room> orgRooms = roomRepository.findByOrganizationId(orgId);
+                for (Room r : orgRooms) {
+                    if (roomNumber.equalsIgnoreCase(r.getRoomNumber())) {
+                        return r;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        List<Room> allRooms = roomRepository.findAllSuperAdmin();
+        for (Room r : allRooms) {
+            if (roomNumber.equalsIgnoreCase(r.getRoomNumber())) {
+                return r;
+            }
+        }
+        return null;
+    }
+
+    private BigDecimal resolveAuthoritativeRent(Property property, Organization org, String roomNumber, String bedNumber) {
+        Room matchedRoom = findRoomByPropertyAndNumber(property, org, roomNumber);
+        if (matchedRoom != null && matchedRoom.getBaseRent() != null && matchedRoom.getBaseRent().compareTo(BigDecimal.ZERO) > 0) {
+            return matchedRoom.getBaseRent();
+        }
+        return BigDecimal.valueOf(8000);
+    }
+
+    private BigDecimal resolveAuthoritativeDeposit(Property property, Organization org) {
+        if (org != null) {
+            OrganizationBillingProfile bp = getBillingProfile(org);
+            if (bp != null && bp.getDefaultSecurityDeposit() != null && bp.getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+                return bp.getDefaultSecurityDeposit();
+            }
+        }
+        if (property != null && property.getSecurityDeposit() != null && property.getSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+            return property.getSecurityDeposit();
+        }
+        try {
+            if (systemConfigRepository != null) {
+                SystemConfig sys = systemConfigRepository.findFirstNative().orElse(null);
+                if (sys != null && sys.getDefaultSecurityDeposit() != null && sys.getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+                    return sys.getDefaultSecurityDeposit();
+                }
+            }
+        } catch (Exception ignored) {}
+        return BigDecimal.valueOf(10000);
+    }
+
+    private String[] resolveRazorpayKeys(Property property, Organization org) {
+        String activeKeyId = null;
+        String activeKeySecret = null;
+        if (property != null && property.getRazorpayKeyId() != null && !property.getRazorpayKeyId().isBlank()) {
+            activeKeyId = property.getRazorpayKeyId().trim();
+            if (property.getRazorpayKeySecret() != null && !property.getRazorpayKeySecret().isBlank()) {
+                activeKeySecret = property.getRazorpayKeySecret().trim();
+            }
+        }
+        if (activeKeyId == null || activeKeyId.isBlank()) {
+            if (org != null) {
+                OrganizationBillingProfile bp = getBillingProfile(org);
+                if (bp != null && bp.getRazorpayKeyId() != null && !bp.getRazorpayKeyId().isBlank()) {
+                    activeKeyId = bp.getRazorpayKeyId().trim();
+                    if (bp.getRazorpayKeySecret() != null && !bp.getRazorpayKeySecret().isBlank()) {
+                        activeKeySecret = bp.getRazorpayKeySecret().trim();
+                    }
+                }
+            }
+        }
+        if (activeKeyId == null || activeKeyId.isBlank()) {
+            activeKeyId = "rzp_test_StayeazeMockKey123";
+            activeKeySecret = "mockSecret123";
+        }
+        return new String[]{activeKeyId, activeKeySecret};
     }
 
     @GetMapping("/properties/{id}")
@@ -107,28 +260,43 @@ public class PublicTenantOnboardingController {
         map.put("city", p.getCity());
 
         BigDecimal deposit = null;
+        String onboardingBillingPolicy = "FULL_WITH_ADVANCE_CREDIT";
 
-        // 1. Look up Organization Billing Profile where the Admin stored Default Security Deposit
+        // 1. Look up Organization Billing Profile where the Admin stored Default Security Deposit & Onboarding Billing Policy
         try {
             UUID orgId = (p.getOrganization() != null) ? p.getOrganization().getId() : p.getOrgId();
             if (orgId != null && organizationBillingProfileRepository != null) {
-                Optional<OrganizationBillingProfile> bpOpt = organizationBillingProfileRepository.findByOrgIdNative(orgId);
-                if (bpOpt.isPresent() && bpOpt.get().getDefaultSecurityDeposit() != null && bpOpt.get().getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
-                    deposit = bpOpt.get().getDefaultSecurityDeposit();
+                Optional<OrganizationBillingProfile> bpOpt = organizationBillingProfileRepository
+                        .findByOrgIdNative(orgId);
+                if (bpOpt.isPresent()) {
+                    if (bpOpt.get().getDefaultSecurityDeposit() != null && bpOpt.get().getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+                        deposit = bpOpt.get().getDefaultSecurityDeposit();
+                    }
+                    if (bpOpt.get().getOnboardingBillingPolicy() != null && !bpOpt.get().getOnboardingBillingPolicy().isBlank()) {
+                        onboardingBillingPolicy = bpOpt.get().getOnboardingBillingPolicy();
+                    }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         // 2. If not found by specific orgId, check any active organization billing profile saved by Admin
         if (deposit == null || deposit.compareTo(BigDecimal.ZERO) == 0) {
             try {
                 if (organizationBillingProfileRepository != null) {
-                    Optional<OrganizationBillingProfile> firstBp = organizationBillingProfileRepository.findFirstNative();
-                    if (firstBp.isPresent() && firstBp.get().getDefaultSecurityDeposit() != null && firstBp.get().getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
-                        deposit = firstBp.get().getDefaultSecurityDeposit();
+                    Optional<OrganizationBillingProfile> firstBp = organizationBillingProfileRepository
+                            .findFirstNative();
+                    if (firstBp.isPresent()) {
+                        if (firstBp.get().getDefaultSecurityDeposit() != null && firstBp.get().getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+                            deposit = firstBp.get().getDefaultSecurityDeposit();
+                        }
+                        if (firstBp.get().getOnboardingBillingPolicy() != null && !firstBp.get().getOnboardingBillingPolicy().isBlank()) {
+                            onboardingBillingPolicy = firstBp.get().getOnboardingBillingPolicy();
+                        }
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         // 3. If property has explicit security deposit override and no org deposit
@@ -141,17 +309,20 @@ public class PublicTenantOnboardingController {
             try {
                 if (systemConfigRepository != null) {
                     SystemConfig sys = systemConfigRepository.findFirstNative().orElse(null);
-                    if (sys != null && sys.getDefaultSecurityDeposit() != null && sys.getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
+                    if (sys != null && sys.getDefaultSecurityDeposit() != null
+                            && sys.getDefaultSecurityDeposit().compareTo(BigDecimal.ZERO) > 0) {
                         deposit = sys.getDefaultSecurityDeposit();
                     }
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
 
         if (deposit == null) {
             deposit = BigDecimal.ZERO;
         }
         map.put("securityDeposit", deposit);
+        map.put("onboardingBillingPolicy", onboardingBillingPolicy);
         return ResponseEntity.ok(map);
     }
 
@@ -166,13 +337,13 @@ public class PublicTenantOnboardingController {
             List<Object[]> rows = roomRepository.findPublicRoomsWithHierarchyNative(propertyId);
             if (rows != null) {
                 for (Object[] row : rows) {
-                    if (row == null || row[0] == null) continue;
+                    if (row == null || row[0] == null)
+                        continue;
                     String roomIdStr = (String) row[0];
                     UUID roomId = UUID.fromString(roomIdStr);
                     String roomNumber = (String) row[1];
                     String sharingType = (String) row[2];
                     BigDecimal baseRent = row[3] != null ? (BigDecimal) row[3] : new BigDecimal("8000.00");
-                    String status = (String) row[4];
                     String floorId = (String) row[5];
                     String floorName = (String) row[6];
                     Integer floorNumber = row[7] != null ? ((Number) row[7]).intValue() : null;
@@ -182,9 +353,11 @@ public class PublicTenantOnboardingController {
                     String propName = (String) row[11];
 
                     String sharing = sharingType != null ? sharingType.toUpperCase() : "SINGLE";
-                    int totalBeds = (sharing.contains("DOUBLE") || sharing.contains("2")) ? 2 :
-                                (sharing.contains("TRIPLE") || sharing.contains("3")) ? 3 :
-                                (sharing.contains("FOUR") || sharing.contains("QUAD") || sharing.contains("4")) ? 4 : 1;
+                    int totalBeds = (sharing.contains("DOUBLE") || sharing.contains("2")) ? 2
+                            : (sharing.contains("TRIPLE") || sharing.contains("3")) ? 3
+                                    : (sharing.contains("FOUR") || sharing.contains("QUAD") || sharing.contains("4"))
+                                            ? 4
+                                            : 1;
 
                     List<Object[]> bedRows = bedRepository.findPublicBedsWithHierarchyNative(roomId);
                     int actualBedsCount = bedRows != null ? bedRows.size() : 0;
@@ -218,18 +391,19 @@ public class PublicTenantOnboardingController {
                     map.put("buildingId", buildingId);
                     map.put("buildingName", buildingName);
                     map.put("floorId", floorId);
-                    map.put("floorName", floorName != null ? floorName : (floorNumber != null ? "Floor " + floorNumber : ""));
+                    map.put("floorName",
+                            floorName != null ? floorName : (floorNumber != null ? "Floor " + floorNumber : ""));
                     map.put("floorNumber", floorNumber);
                     result.add(map);
                 }
             }
         } catch (Exception e) {
-            org.slf4j.LoggerFactory.getLogger(PublicTenantOnboardingController.class).error("Error loading public rooms for property " + propertyId, e);
+            logger.error("Error loading public rooms for property " + propertyId, e);
         }
         return ResponseEntity.ok(result);
     }
 
-    @GetMapping({"/beds", "/rooms/{roomId}/beds"})
+    @GetMapping({ "/beds", "/rooms/{roomId}/beds" })
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public ResponseEntity<?> getPublicBeds(
             @PathVariable(required = false) UUID roomId,
@@ -244,9 +418,11 @@ public class PublicTenantOnboardingController {
             List<Object[]> rows = bedRepository.findPublicBedsWithHierarchyNative(effectiveRoomId);
             if (rows != null) {
                 for (Object[] br : rows) {
-                    if (br == null || br[0] == null) continue;
+                    if (br == null || br[0] == null)
+                        continue;
                     String bStatus = br[2] != null ? br[2].toString() : "available";
-                    if (!"available".equalsIgnoreCase(bStatus)) continue;
+                    if (!"available".equalsIgnoreCase(bStatus))
+                        continue;
 
                     Map<String, Object> map = new HashMap<>();
                     map.put("id", UUID.fromString((String) br[0]));
@@ -262,7 +438,7 @@ public class PublicTenantOnboardingController {
                 }
             }
         } catch (Exception e) {
-            org.slf4j.LoggerFactory.getLogger(PublicTenantOnboardingController.class).error("Error loading public beds for room " + effectiveRoomId, e);
+            logger.error("Error loading public beds for room " + effectiveRoomId, e);
         }
         return ResponseEntity.ok(result);
     }
@@ -271,96 +447,120 @@ public class PublicTenantOnboardingController {
     public ResponseEntity<?> createPublicOnboardingOrder(@RequestBody Map<String, Object> req) {
         UUID propertyId = null;
         if (req.get("propertyId") != null && !req.get("propertyId").toString().isBlank()) {
-            try { propertyId = UUID.fromString(req.get("propertyId").toString()); } catch (Exception ignored) {}
+            try {
+                propertyId = UUID.fromString(req.get("propertyId").toString());
+            } catch (Exception ignored) {
+            }
         }
 
-        BigDecimal rent = BigDecimal.ZERO;
-        BigDecimal deposit = BigDecimal.ZERO;
-        if (req.get("rent") != null) {
-            try { rent = new BigDecimal(req.get("rent").toString()); } catch (Exception ignored) {}
-        }
-        if (req.get("deposit") != null) {
-            try { deposit = new BigDecimal(req.get("deposit").toString()); } catch (Exception ignored) {}
-        }
-        BigDecimal totalAmount = rent.add(deposit);
-
-        if (totalAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Error: Total initial onboarding amount (Rent + Deposit) must be greater than zero."));
-        }
+        String roomNumber = req.get("roomNumber") != null ? req.get("roomNumber").toString() : null;
+        String bedNumber = req.get("bedNumber") != null ? req.get("bedNumber").toString() : null;
 
         Property property = null;
         if (propertyId != null) {
             property = propertyRepository.findByIdSuperAdmin(propertyId).orElse(null);
         }
 
-        String activeKeyId = null;
-        String activeKeySecret = null;
-
-        if (property != null && property.getRazorpayKeyId() != null && !property.getRazorpayKeyId().isBlank()) {
-            activeKeyId = property.getRazorpayKeyId().trim();
-            if (property.getRazorpayKeySecret() != null && !property.getRazorpayKeySecret().isBlank()) {
-                activeKeySecret = property.getRazorpayKeySecret().trim();
-            }
+        Organization org = (property != null) ? property.getOrganization() : null;
+        if (org != null) {
+            TenantIdentifierResolver.setCurrentTenant(org.getId());
         }
+        try {
+            OrganizationBillingProfile bp = (org != null) ? getBillingProfile(org) : null;
+            String policy = (bp != null && bp.getOnboardingBillingPolicy() != null)
+                    ? bp.getOnboardingBillingPolicy()
+                    : "FULL_WITH_ADVANCE_CREDIT";
 
-        if (activeKeyId == null || activeKeyId.isBlank()) {
-            Organization org = (property != null) ? property.getOrganization() : organizationRepository.findAll().stream().findFirst().orElse(null);
-            if (org != null) {
-                Optional<OrganizationBillingProfile> bpOpt = organizationBillingProfileRepository.findByOrganization(org);
-                if (bpOpt.isPresent() && bpOpt.get().getRazorpayKeyId() != null && !bpOpt.get().getRazorpayKeyId().isBlank()) {
-                    activeKeyId = bpOpt.get().getRazorpayKeyId().trim();
-                    if (bpOpt.get().getRazorpayKeySecret() != null && !bpOpt.get().getRazorpayKeySecret().isBlank()) {
-                        activeKeySecret = bpOpt.get().getRazorpayKeySecret().trim();
+            // Authoritative server-side pricing resolution (zero client interference)
+            BigDecimal rent = resolveAuthoritativeRent(property, org, roomNumber, bedNumber);
+            BigDecimal deposit = resolveAuthoritativeDeposit(property, org);
+
+            LocalDate today = LocalDate.now();
+            int maxDaysInMonth = today.lengthOfMonth();
+            int startDay = today.getDayOfMonth();
+            int stayedDays = maxDaysInMonth - startDay + 1;
+            boolean isMidMonth = startDay > 1;
+
+            BigDecimal rentToCharge = rent;
+            BigDecimal proRataRent = rent;
+            BigDecimal advanceCreditEstimate = BigDecimal.ZERO;
+
+            if (isMidMonth) {
+                proRataRent = rent.multiply(BigDecimal.valueOf(stayedDays))
+                        .divide(BigDecimal.valueOf(maxDaysInMonth), 0, java.math.RoundingMode.HALF_UP);
+                if ("PRORATA_ONLY".equalsIgnoreCase(policy)) {
+                    rentToCharge = proRataRent;
+                } else {
+                    // FULL_WITH_ADVANCE_CREDIT
+                    rentToCharge = rent;
+                    advanceCreditEstimate = rent.subtract(proRataRent);
+                }
+            }
+
+            BigDecimal totalAmount = rentToCharge.add(deposit);
+
+            if (totalAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest().body(new MessageResponse(
+                        "Error: Total initial onboarding amount (Rent + Deposit) must be greater than zero."));
+            }
+
+            String[] keys = resolveRazorpayKeys(property, org);
+            String activeKeyId = keys[0];
+            String activeKeySecret = keys[1];
+
+            long amountInPaise = totalAmount.multiply(new BigDecimal(100)).longValue();
+            String orderId = "order_onb_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8);
+
+            if (activeKeyId.startsWith("rzp_") && !activeKeyId.contains("MockKey")
+                    && activeKeySecret != null && !activeKeySecret.contains("mockSecret")) {
+                try {
+                    com.razorpay.RazorpayClient razorpayClient = new com.razorpay.RazorpayClient(activeKeyId,
+                            activeKeySecret);
+                    org.json.JSONObject orderReq = new org.json.JSONObject();
+                    orderReq.put("amount", amountInPaise);
+                    orderReq.put("currency", "INR");
+                    orderReq.put("receipt", "ONB-" + (System.currentTimeMillis() % 1000000L));
+                    com.razorpay.Order order = razorpayClient.orders.create(orderReq);
+                    if (order.has("id")) {
+                        orderId = order.get("id");
                     }
+                } catch (Exception e) {
+                    System.err.println("Razorpay client error during public onboarding order creation: " + e.getMessage());
                 }
             }
+
+            String resolvedPropName = (property != null && property.getName() != null && !property.getName().isBlank())
+                    ? property.getName()
+                    : (property != null && property.getOrganization() != null ? property.getOrganization().getName()
+                            : "StayEaze Residency");
+
+            Map<String, Object> orderPayload = new HashMap<>();
+            orderPayload.put("orderId", orderId);
+            orderPayload.put("keyId", activeKeyId);
+            orderPayload.put("amount", amountInPaise);
+            orderPayload.put("amountFormatted", totalAmount);
+            orderPayload.put("rentAmount", rent);
+            orderPayload.put("rentCharged", rentToCharge);
+            orderPayload.put("proRataRent", proRataRent);
+            orderPayload.put("depositAmount", deposit);
+            orderPayload.put("onboardingBillingPolicy", policy);
+            orderPayload.put("isMidMonth", isMidMonth);
+            orderPayload.put("stayedDays", stayedDays);
+            orderPayload.put("daysInMonth", maxDaysInMonth);
+            orderPayload.put("advanceCreditEstimate", advanceCreditEstimate);
+            orderPayload.put("currency", "INR");
+            orderPayload.put("propertyName", resolvedPropName);
+            orderPayload.put("businessName", resolvedPropName);
+            orderPayload.put("tenantName", req.get("tenantName") != null ? req.get("tenantName").toString() : "New Tenant");
+            orderPayload.put("tenantEmail",
+                    req.get("tenantEmail") != null ? req.get("tenantEmail").toString() : "tenant@stayeaze.com");
+            orderPayload.put("tenantPhone",
+                    req.get("tenantPhone") != null ? req.get("tenantPhone").toString() : "9876543210");
+
+            return ResponseEntity.ok(orderPayload);
+        } finally {
+            TenantIdentifierResolver.clear();
         }
-
-        // Fallback default test key if none configured in DB
-        if (activeKeyId == null || activeKeyId.isBlank()) {
-            activeKeyId = "rzp_test_StayeazeMockKey123";
-            activeKeySecret = "mockSecret123";
-        }
-
-        long amountInPaise = totalAmount.multiply(new BigDecimal(100)).longValue();
-        String orderId = "order_onb_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8);
-
-        if (activeKeyId.startsWith("rzp_") && !activeKeyId.contains("MockKey")
-                && activeKeySecret != null && !activeKeySecret.contains("mockSecret")) {
-            try {
-                com.razorpay.RazorpayClient razorpayClient = new com.razorpay.RazorpayClient(activeKeyId, activeKeySecret);
-                org.json.JSONObject orderReq = new org.json.JSONObject();
-                orderReq.put("amount", amountInPaise);
-                orderReq.put("currency", "INR");
-                orderReq.put("receipt", "ONB-" + (System.currentTimeMillis() % 1000000L));
-                com.razorpay.Order order = razorpayClient.orders.create(orderReq);
-                if (order.has("id")) {
-                    orderId = order.get("id");
-                }
-            } catch (Exception e) {
-                System.err.println("Razorpay client error during public onboarding order creation: " + e.getMessage());
-            }
-        }
-
-        String resolvedPropName = (property != null && property.getName() != null && !property.getName().isBlank())
-                ? property.getName()
-                : (property != null && property.getOrganization() != null ? property.getOrganization().getName() : "StayEaze Residency");
-
-        Map<String, Object> orderPayload = new HashMap<>();
-        orderPayload.put("orderId", orderId);
-        orderPayload.put("keyId", activeKeyId);
-        orderPayload.put("amount", amountInPaise);
-        orderPayload.put("amountFormatted", totalAmount);
-        orderPayload.put("rentAmount", rent);
-        orderPayload.put("depositAmount", deposit);
-        orderPayload.put("currency", "INR");
-        orderPayload.put("propertyName", resolvedPropName);
-        orderPayload.put("businessName", resolvedPropName);
-        orderPayload.put("tenantName", req.get("tenantName") != null ? req.get("tenantName").toString() : "New Tenant");
-        orderPayload.put("tenantEmail", req.get("tenantEmail") != null ? req.get("tenantEmail").toString() : "tenant@stayeaze.com");
-        orderPayload.put("tenantPhone", req.get("tenantPhone") != null ? req.get("tenantPhone").toString() : "9876543210");
-
-        return ResponseEntity.ok(orderPayload);
     }
 
     @PostMapping("/onboard")
@@ -380,17 +580,38 @@ public class PublicTenantOnboardingController {
             String razorpayOrderId = (String) req.get("razorpayOrderId");
             String razorpaySignature = (String) req.get("razorpaySignature");
 
-            BigDecimal rent = BigDecimal.valueOf(8000);
-            BigDecimal deposit = BigDecimal.valueOf(10000);
-            if (req.get("rent") != null) {
-                try { rent = new BigDecimal(req.get("rent").toString()); } catch (Exception ignored) {}
+            String idType = (String) req.get("idType");
+            String idNumber = (String) req.get("idNumber");
+            String idFileUrl = (String) req.get("idFileUrl");
+            if (idFileUrl == null || idFileUrl.isBlank()) {
+                idFileUrl = (String) req.get("fileUrl");
             }
-            if (req.get("deposit") != null) {
-                try { deposit = new BigDecimal(req.get("deposit").toString()); } catch (Exception ignored) {}
+            if (idFileUrl == null || idFileUrl.isBlank()) {
+                idFileUrl = (String) req.get("documentUrl");
             }
 
+            Boolean isAgreementAccepted = req.get("isAgreementAccepted") != null
+                    ? Boolean.valueOf(req.get("isAgreementAccepted").toString())
+                    : (req.get("agreedToTerms") != null && Boolean.valueOf(req.get("agreedToTerms").toString()));
+
             if (firstName == null || email == null || mobile == null) {
-                return ResponseEntity.badRequest().body(new MessageResponse("Error: First name, email, and mobile are required."));
+                return ResponseEntity.badRequest()
+                        .body(new MessageResponse("Error: First name, email, and mobile are required."));
+            }
+
+            if (idType == null || idType.isBlank() || idNumber == null || idNumber.isBlank()) {
+                return ResponseEntity.badRequest().body(new MessageResponse(
+                        "Error: Identity document type and ID number are required for onboarding compliance."));
+            }
+
+            if (idFileUrl == null || idFileUrl.isBlank()) {
+                return ResponseEntity.badRequest().body(new MessageResponse(
+                        "Error: Identity document proof file upload is mandatory for onboarding compliance."));
+            }
+
+            if (!Boolean.TRUE.equals(isAgreementAccepted)) {
+                return ResponseEntity.badRequest().body(new MessageResponse(
+                        "Error: Tenancy agreement acceptance and digital signature are mandatory to complete onboarding."));
             }
 
             Organization org = null;
@@ -404,19 +625,51 @@ public class PublicTenantOnboardingController {
                     if (property != null) {
                         org = property.getOrganization();
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
 
             if (org == null) {
-                org = organizationRepository.findAll().stream().findFirst().orElse(null);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new MessageResponse("Error: Property or organization context is required for resident onboarding."));
             }
 
-            if (org == null) {
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body(new MessageResponse("Error: System organization is not configured."));
+            TenantIdentifierResolver.setCurrentTenant(org.getId());
+
+            boolean isOnlinePaid = "RAZORPAY".equalsIgnoreCase(paymentMethod) && razorpayPaymentId != null
+                    && !razorpayPaymentId.isBlank();
+
+            // Cryptographic Razorpay Signature Verification
+            if (isOnlinePaid) {
+                String[] keys = resolveRazorpayKeys(property, org);
+                String activeKeySecret = keys[1];
+                if (activeKeySecret != null && !activeKeySecret.contains("mockSecret")
+                        && razorpaySignature != null && !razorpaySignature.contains("sandbox") && !razorpaySignature.contains("MOCK")) {
+                    try {
+                        org.json.JSONObject attributes = new org.json.JSONObject();
+                        attributes.put("razorpay_order_id", razorpayOrderId);
+                        attributes.put("razorpay_payment_id", razorpayPaymentId);
+                        attributes.put("razorpay_signature", razorpaySignature);
+                        com.razorpay.Utils.verifyPaymentSignature(attributes, activeKeySecret);
+                    } catch (Exception e) {
+                        return ResponseEntity.badRequest().body(new MessageResponse("Error: Invalid Razorpay payment signature verification!"));
+                    }
+                }
             }
 
-            boolean isOnlinePaid = "RAZORPAY".equalsIgnoreCase(paymentMethod) && razorpayPaymentId != null && !razorpayPaymentId.isBlank();
+            // Bed Occupancy Guard: Prevent double-booking race condition
+            if (roomNumber != null && bedNumber != null && !roomNumber.isBlank() && !bedNumber.isBlank()) {
+                Room matchedRoom = findRoomByPropertyAndNumber(property, org, roomNumber);
+                if (matchedRoom != null) {
+                    List<Bed> rBeds = bedRepository.findByRoom(matchedRoom);
+                    for (Bed b : rBeds) {
+                        if (bedNumber.equalsIgnoreCase(b.getBedNumber()) && "OCCUPIED".equalsIgnoreCase(b.getStatus())) {
+                            return ResponseEntity.badRequest().body(new MessageResponse(
+                                    "Error: Selected Bed (" + bedNumber + ") in Room " + roomNumber + " is already occupied. Please select an available bed."));
+                        }
+                    }
+                }
+            }
 
             String cleanMobile = accountUniquenessService.normalizeMobile(mobile);
             String cleanEmail = accountUniquenessService.normalizeEmail(email);
@@ -428,8 +681,36 @@ public class PublicTenantOnboardingController {
                 return ResponseEntity.badRequest().body(new MessageResponse(ex.getMessage()));
             }
 
-            Tenant tenant = tenantRepository.findFirstByMobile(cleanMobile)
-                    .or(() -> tenantRepository.findFirstByEmail(cleanEmail))
+            // Authoritative server-side pricing (client cannot modify or tamper)
+            BigDecimal rent = resolveAuthoritativeRent(property, org, roomNumber, bedNumber);
+            BigDecimal deposit = resolveAuthoritativeDeposit(property, org);
+
+            OrganizationBillingProfile bp = getBillingProfile(org);
+            String policy = (bp != null && bp.getOnboardingBillingPolicy() != null)
+                    ? bp.getOnboardingBillingPolicy()
+                    : "FULL_WITH_ADVANCE_CREDIT";
+
+            LocalDate today = LocalDate.now();
+            int maxDaysInMonth = today.lengthOfMonth();
+            int startDay = today.getDayOfMonth();
+            int stayedDays = maxDaysInMonth - startDay + 1;
+            boolean isMidMonth = startDay > 1;
+
+            BigDecimal billedRent = rent;
+            BigDecimal advanceCredited = BigDecimal.ZERO;
+
+            if (isMidMonth) {
+                billedRent = rent.multiply(BigDecimal.valueOf(stayedDays))
+                        .divide(BigDecimal.valueOf(maxDaysInMonth), 0, java.math.RoundingMode.HALF_UP);
+                if (!"PRORATA_ONLY".equalsIgnoreCase(policy)) {
+                    // FULL_WITH_ADVANCE_CREDIT: Collect full rent, invoice pro-rata rent, credit rest to advance
+                    advanceCredited = rent.subtract(billedRent);
+                }
+            }
+
+            final Organization targetOrg = org;
+            Tenant tenant = tenantRepository.findFirstByOrganizationAndMobile(targetOrg, cleanMobile)
+                    .or(() -> tenantRepository.findFirstByOrganizationAndEmail(targetOrg, cleanEmail))
                     .orElseGet(Tenant::new);
 
             tenant.setOrganization(org);
@@ -439,15 +720,21 @@ public class PublicTenantOnboardingController {
             tenant.setMobile(cleanMobile);
             tenant.setGender(gender);
             tenant.setOccupation(occupation);
+            tenant.setIdType(idType.trim().toUpperCase());
+            tenant.setIdNumber(idNumber.trim());
+            tenant.setIsAgreementAccepted(true);
+            tenant.setAgreementAcceptedAt(java.time.OffsetDateTime.now());
             tenant.setRoomNumber(roomNumber);
             tenant.setBedNumber(bedNumber);
             tenant.setPropertyId(propUuid);
             tenant.setRent(rent);
             tenant.setDeposit(deposit);
-            tenant.setLeaseStart(LocalDate.now().toString());
-            tenant.setLeaseEnd(LocalDate.now().plusMonths(11).toString());
+            tenant.setAdvanceBalance(advanceCredited);
+            tenant.setLeaseStart(today.toString());
+            tenant.setLeaseEnd(today.plusMonths(11).toString());
 
-            // When onboarding payment is done/submitted, tenant is READY_FOR_CHECKIN awaiting desk check-in
+            // When onboarding payment is done/submitted, tenant is READY_FOR_CHECKIN
+            // awaiting desk check-in
             tenant.setStatus("READY_FOR_CHECKIN");
             if (tenant.getKycStatus() == null) {
                 tenant.setKycStatus("PENDING");
@@ -455,15 +742,57 @@ public class PublicTenantOnboardingController {
 
             Tenant saved = tenantRepository.save(tenant);
 
-            // Generate initial Onboarding Invoice (Rent + Deposit)
-            BigDecimal totalInitialAmount = rent.add(deposit);
+            // Mark Bed as OCCUPIED
+            if (roomNumber != null && bedNumber != null && !roomNumber.isBlank() && !bedNumber.isBlank()) {
+                Room matchedRoom = findRoomByPropertyAndNumber(property, org, roomNumber);
+                if (matchedRoom != null) {
+                    List<Bed> rBeds = bedRepository.findByRoom(matchedRoom);
+                    for (Bed b : rBeds) {
+                        if (bedNumber.equalsIgnoreCase(b.getBedNumber())) {
+                            b.setStatus("OCCUPIED");
+                            b.setTenantId(saved.getId().toString());
+                            b.setTenantName(saved.getFirstName() + " " + saved.getLastName());
+                            bedRepository.save(b);
+                        }
+                    }
+                    occupancySyncService.syncStatsForRoom(matchedRoom);
+                }
+            }
+
+            // Auto-create signed Agreement entity for compliance
+            try {
+                Agreement initialAgreement = new Agreement(
+                        saved,
+                        "StayEaze Standard Digital Tenancy Lease Agreement. Rent is due on the 1st of each month with a standard 30-day notice period.",
+                        LocalDate.now(),
+                        LocalDate.now().plusMonths(11));
+                initialAgreement.setStatus("SIGNED");
+                initialAgreement.setSignatureUrl("ONBOARDING_DIGITAL_CHECKBOX");
+                initialAgreement.setSignedAt(java.time.OffsetDateTime.now());
+                agreementRepository.save(initialAgreement);
+            } catch (Exception agEx) {
+                logger.warn("Could not create initial signed agreement: {}", agEx.getMessage());
+            }
+
+            // Auto-create TenantDocument for KYC compliance
+            try {
+                TenantDocument initialDoc = new TenantDocument(saved, idType.trim().toUpperCase(), idNumber.trim());
+                initialDoc.setFileUrl(idFileUrl);
+                initialDoc.setVerificationStatus("PENDING");
+                tenantDocumentRepository.save(initialDoc);
+            } catch (Exception docEx) {
+                logger.warn("Could not save initial tenant KYC document record: {}", docEx.getMessage());
+            }
+
+            // Generate initial Onboarding Invoice (Pro-Rata/Full Rent + Deposit)
+            BigDecimal invoiceAmountDue = billedRent.add(deposit);
             Invoice initialInvoice = new Invoice();
             initialInvoice.setTenant(saved);
             initialInvoice.setInvoiceNumber(invoiceSequenceService.nextRentalInvoiceNumber(saved));
-            initialInvoice.setIssueDate(LocalDate.now());
-            initialInvoice.setDueDate(LocalDate.now().plusDays(7));
-            initialInvoice.setAmountDue(totalInitialAmount);
-            initialInvoice.setAmountPaid(isOnlinePaid ? totalInitialAmount : BigDecimal.ZERO);
+            initialInvoice.setIssueDate(today);
+            initialInvoice.setDueDate(today.plusDays(7));
+            initialInvoice.setAmountDue(invoiceAmountDue);
+            initialInvoice.setAmountPaid(isOnlinePaid ? invoiceAmountDue : BigDecimal.ZERO);
             initialInvoice.setStatus(isOnlinePaid ? "PAID" : "UNPAID");
             initialInvoice.setPaymentMethod(isOnlinePaid ? "RAZORPAY" : "CASH");
             if (isOnlinePaid) {
@@ -472,7 +801,34 @@ public class PublicTenantOnboardingController {
                 initialInvoice.setRazorpaySignature(razorpaySignature);
                 initialInvoice.setPaymentReference(razorpayPaymentId);
             }
-            invoiceRepository.save(initialInvoice);
+
+            List<InvoiceItem> items = new ArrayList<>();
+            String monthName = today.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, Locale.ENGLISH);
+            String rentDesc = isMidMonth
+                    ? String.format("Pro-Rata Rent (%d days: %s %d–%d)", stayedDays, monthName, startDay, maxDaysInMonth)
+                    : String.format("1st Month Rent Charges (%s %d)", monthName, today.getYear());
+            items.add(new InvoiceItem(initialInvoice, rentDesc, billedRent));
+            items.add(new InvoiceItem(initialInvoice, "Security Deposit Agreement", deposit));
+            initialInvoice.setItems(items);
+
+            Invoice savedInv = invoiceRepository.save(initialInvoice);
+
+            if (isOnlinePaid) {
+                try {
+                    BigDecimal paidTotal = ("PRORATA_ONLY".equalsIgnoreCase(policy) || !isMidMonth) ? invoiceAmountDue : rent.add(deposit);
+                    Payment payment = new Payment();
+                    payment.setInvoice(savedInv);
+                    payment.setAmount(paidTotal);
+                    payment.setPaymentDate(java.time.OffsetDateTime.now());
+                    payment.setPaymentMethod("RAZORPAY");
+                    payment.setReceiptNumber("REC-" + initialInvoice.getInvoiceNumber().replace("INV-", ""));
+                    payment.setTransactionReference(razorpayPaymentId);
+                    payment.setStatus("COMPLETED");
+                    paymentRepository.save(payment);
+                } catch (Exception pEx) {
+                    System.err.println("Failed to save Payment for public onboarding: " + pEx.getMessage());
+                }
+            }
 
             // Auto-provision User Account & Credentials Dispatch for Tenant
             String tEmail = saved.getEmail().trim().toLowerCase();
@@ -480,8 +836,10 @@ public class PublicTenantOnboardingController {
                     .or(() -> userRepository.findFirstByMobile(cleanMobile))
                     .orElse(null);
 
-            String tempPassword = credentialService.generateSecurePassword();
-            if (user == null) {
+            boolean isNewUser = (user == null);
+            String tempPassword = isNewUser ? credentialService.generateSecurePassword() : null;
+
+            if (isNewUser) {
                 user = new User(org, tEmail, passwordEncoder.encode(tempPassword), cleanMobile);
                 user.setFirstName(saved.getFirstName());
                 user.setMustChangePassword(true);
@@ -504,11 +862,10 @@ public class PublicTenantOnboardingController {
                 user.setTenantId(saved.getId());
                 user.setEmail(tEmail);
                 user.setMobile(cleanMobile);
-                if (user.getOrganization() == null) {
-                    user.setOrganization(org);
-                }
+                user.setOrganization(org);
                 if (propUuid != null) {
-                    List<UUID> pIds = user.getPropertyIds() != null ? new ArrayList<>(user.getPropertyIds()) : new ArrayList<>();
+                    List<UUID> pIds = user.getPropertyIds() != null ? new ArrayList<>(user.getPropertyIds())
+                            : new ArrayList<>();
                     if (!pIds.contains(propUuid)) {
                         pIds.add(propUuid);
                         user.setPropertyIds(pIds);
@@ -519,23 +876,23 @@ public class PublicTenantOnboardingController {
 
             String pName = (property != null) ? property.getName() : "StayEaze PG/Hostel";
 
-            emailService.sendTenantWelcomeOnboardingEmail(
-                    tEmail,
-                    saved.getFirstName() + " " + (saved.getLastName() != null ? saved.getLastName() : ""),
-                    tempPassword,
-                    pName,
-                    saved.getRoomNumber(),
-                    saved.getBedNumber(),
-                    "http://localhost:5173/login"
-            );
-
-            if (saved.getMobile() != null && !saved.getMobile().isBlank()) {
-                smsService.sendTenantWelcomeSms(
-                        saved.getMobile(),
-                        saved.getFirstName(),
+            if (isNewUser) {
+                emailService.sendTenantWelcomeOnboardingEmail(
+                        tEmail,
+                        saved.getFirstName() + " " + (saved.getLastName() != null ? saved.getLastName() : ""),
                         tempPassword,
-                        "http://localhost:5173/login"
-                );
+                        pName,
+                        saved.getRoomNumber(),
+                        saved.getBedNumber(),
+                        "http://localhost:5173/login");
+
+                if (saved.getMobile() != null && !saved.getMobile().isBlank()) {
+                    smsService.sendTenantWelcomeSms(
+                            saved.getMobile(),
+                            saved.getFirstName(),
+                            tempPassword,
+                            "http://localhost:5173/login");
+                }
             }
 
             occupancySyncService.syncStatsAndEvictCaches(null);
@@ -548,12 +905,16 @@ public class PublicTenantOnboardingController {
             response.put("roomNumber", saved.getRoomNumber());
             response.put("bedNumber", saved.getBedNumber());
             response.put("status", saved.getStatus());
-            response.put("tempPassword", tempPassword);
-            response.put("message", "Resident successfully registered.");
+            response.put("isNewUser", isNewUser);
+            response.put("message", isNewUser
+                    ? "You have successfully onboarded! Your login credentials have been sent to your email address."
+                    : "Welcome back! Tenancy successfully linked to your existing account. Please sign in with your password.");
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new MessageResponse("Public Onboarding Error: " + e.getMessage()));
+        } finally {
+            TenantIdentifierResolver.clear();
         }
     }
 }

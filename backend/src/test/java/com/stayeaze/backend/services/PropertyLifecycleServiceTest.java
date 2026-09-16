@@ -1,7 +1,25 @@
 package com.stayeaze.backend.services;
 
-import com.stayeaze.backend.models.*;
-import com.stayeaze.backend.repository.*;
+import com.stayeaze.backend.models.Bed;
+import com.stayeaze.backend.models.Building;
+import com.stayeaze.backend.models.Floor;
+import com.stayeaze.backend.models.Organization;
+import com.stayeaze.backend.models.Property;
+import com.stayeaze.backend.models.Room;
+import com.stayeaze.backend.models.Tenant;
+import com.stayeaze.backend.models.User;
+import com.stayeaze.backend.repository.BedRepository;
+import com.stayeaze.backend.repository.BookingRepository;
+import com.stayeaze.backend.repository.BuildingRepository;
+import com.stayeaze.backend.repository.ComplaintRepository;
+import com.stayeaze.backend.repository.ExpenseRepository;
+import com.stayeaze.backend.repository.FloorRepository;
+import com.stayeaze.backend.repository.MaintenanceRepository;
+import com.stayeaze.backend.repository.PropertyRepository;
+import com.stayeaze.backend.repository.RoomRepository;
+import com.stayeaze.backend.repository.TenantRepository;
+import com.stayeaze.backend.repository.UserRepository;
+import com.stayeaze.backend.repository.VisitorRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

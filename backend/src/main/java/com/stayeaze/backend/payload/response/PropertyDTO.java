@@ -48,6 +48,16 @@ public class PropertyDTO implements Serializable {
     private String razorpayKeyId;
     private String razorpayKeySecret;
     private Boolean hasRazorpaySecret;
+    private Integer minimumLockInMonths;
+    private Integer noticePeriodDays;
+    private java.math.BigDecimal defaultExitCleaningFee;
+    private java.math.BigDecimal defaultElectricityRatePerUnit;
+    private String emergencyHospitalPhone;
+    private String emergencyPolicePhone;
+    private String emergencyElectricianPhone;
+    private String emergencyPlumberPhone;
+    private String curfewTime;
+    private java.math.BigDecimal lostKeyPenaltyFee;
 
     public PropertyDTO() {
     }
@@ -79,6 +89,12 @@ public class PropertyDTO implements Serializable {
         dto.setWifiSsid(p.getWifiSsid());
         dto.setWifiPassword(p.getWifiPassword());
         dto.setWifiNetworksJson(p.getWifiNetworksJson());
+        dto.setEmergencyHospitalPhone(p.getEmergencyHospitalPhone());
+        dto.setEmergencyPolicePhone(p.getEmergencyPolicePhone());
+        dto.setEmergencyElectricianPhone(p.getEmergencyElectricianPhone());
+        dto.setEmergencyPlumberPhone(p.getEmergencyPlumberPhone());
+        dto.setCurfewTime(p.getCurfewTime());
+        dto.setLostKeyPenaltyFee(p.getLostKeyPenaltyFee());
         dto.setRazorpayKeyId(p.getRazorpayKeyId());
         dto.setHasRazorpaySecret(p.getRazorpayKeySecret() != null && !p.getRazorpayKeySecret().isBlank());
         if (p.getRazorpayKeySecret() != null && !p.getRazorpayKeySecret().isBlank()) {
@@ -100,6 +116,10 @@ public class PropertyDTO implements Serializable {
         dto.setTotalRooms(p.getTotalRooms());
         dto.setTotalBeds(p.getTotalBeds());
         dto.setOccupiedBeds(p.getOccupiedBeds());
+        dto.setMinimumLockInMonths(p.getMinimumLockInMonths());
+        dto.setNoticePeriodDays(p.getNoticePeriodDays());
+        dto.setDefaultExitCleaningFee(p.getDefaultExitCleaningFee());
+        dto.setDefaultElectricityRatePerUnit(p.getDefaultElectricityRatePerUnit());
         if (p.getCreatedAt() != null) {
             dto.setCreatedAt(p.getCreatedAt().toString());
         }
@@ -227,4 +247,34 @@ public class PropertyDTO implements Serializable {
 
     public String getWifiNetworksJson() { return wifiNetworksJson; }
     public void setWifiNetworksJson(String wifiNetworksJson) { this.wifiNetworksJson = wifiNetworksJson; }
+
+    public Integer getMinimumLockInMonths() { return minimumLockInMonths; }
+    public void setMinimumLockInMonths(Integer minimumLockInMonths) { this.minimumLockInMonths = minimumLockInMonths; }
+
+    public Integer getNoticePeriodDays() { return noticePeriodDays; }
+    public void setNoticePeriodDays(Integer noticePeriodDays) { this.noticePeriodDays = noticePeriodDays; }
+
+    public java.math.BigDecimal getDefaultExitCleaningFee() { return defaultExitCleaningFee; }
+    public void setDefaultExitCleaningFee(java.math.BigDecimal defaultExitCleaningFee) { this.defaultExitCleaningFee = defaultExitCleaningFee; }
+
+    public java.math.BigDecimal getDefaultElectricityRatePerUnit() { return defaultElectricityRatePerUnit; }
+    public void setDefaultElectricityRatePerUnit(java.math.BigDecimal defaultElectricityRatePerUnit) { this.defaultElectricityRatePerUnit = defaultElectricityRatePerUnit; }
+
+    public String getEmergencyHospitalPhone() { return emergencyHospitalPhone; }
+    public void setEmergencyHospitalPhone(String emergencyHospitalPhone) { this.emergencyHospitalPhone = emergencyHospitalPhone; }
+
+    public String getEmergencyPolicePhone() { return emergencyPolicePhone; }
+    public void setEmergencyPolicePhone(String emergencyPolicePhone) { this.emergencyPolicePhone = emergencyPolicePhone; }
+
+    public String getEmergencyElectricianPhone() { return emergencyElectricianPhone; }
+    public void setEmergencyElectricianPhone(String emergencyElectricianPhone) { this.emergencyElectricianPhone = emergencyElectricianPhone; }
+
+    public String getEmergencyPlumberPhone() { return emergencyPlumberPhone; }
+    public void setEmergencyPlumberPhone(String emergencyPlumberPhone) { this.emergencyPlumberPhone = emergencyPlumberPhone; }
+
+    public String getCurfewTime() { return curfewTime; }
+    public void setCurfewTime(String curfewTime) { this.curfewTime = curfewTime; }
+
+    public java.math.BigDecimal getLostKeyPenaltyFee() { return lostKeyPenaltyFee; }
+    public void setLostKeyPenaltyFee(java.math.BigDecimal lostKeyPenaltyFee) { this.lostKeyPenaltyFee = lostKeyPenaltyFee; }
 }

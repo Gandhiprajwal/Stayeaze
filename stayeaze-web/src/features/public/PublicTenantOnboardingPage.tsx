@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   Hotel, CheckCircle2, ShieldCheck, CreditCard, Sparkles, Building2,
-  ArrowRight, Smartphone, Sun, Moon, Lock, Wallet, AlertCircle, Clock
+  ArrowRight, Smartphone, Sun, Moon, Lock, Wallet, AlertCircle, Clock, FileText,
+  Upload, FileCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useUIStore } from '@/lib/stores/ui-store';
 import { formatCurrency } from '@/lib/format';
 import { RoomSelect } from '@/components/common/RoomSelect';
@@ -29,8 +31,13 @@ export default function PublicTenantOnboardingPage() {
   const [propertyName, setPropertyName] = useState('');
   const [propertyCity, setPropertyCity] = useState('');
   const [selectedPropId, setSelectedPropId] = useState(propertyIdFromUrl);
+  const [onboardingBillingPolicy, setOnboardingBillingPolicy] = useState('FULL_WITH_ADVANCE_CREDIT');
   const [rooms, setRooms] = useState<any[]>([]);
   const [beds, setBeds] = useState<any[]>([]);
+
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [idFileName, setIdFileName] = useState('');
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -39,6 +46,10 @@ export default function PublicTenantOnboardingPage() {
     mobile: '',
     gender: 'MALE',
     occupation: 'STUDENT',
+    idType: 'AADHAAR',
+    idNumber: '',
+    idFileUrl: '',
+    isAgreementAccepted: false,
     roomNumber: '',
     bedNumber: '',
     rent: 0,
@@ -71,6 +82,9 @@ export default function PublicTenantOnboardingPage() {
         setPropertyName(r.data.name || '');
         setPropertyCity(r.data.city || '');
         setSelectedPropId(r.data.id || propertyIdFromUrl);
+        if (r.data.onboardingBillingPolicy) {
+          setOnboardingBillingPolicy(r.data.onboardingBillingPolicy);
+        }
         if (r.data.securityDeposit !== undefined && r.data.securityDeposit !== null) {
           setFormData((prev) => ({ ...prev, deposit: Number(r.data.securityDeposit) }));
         }
@@ -121,12 +135,75 @@ export default function PublicTenantOnboardingPage() {
     }
   }, [formData.roomNumber, rooms]);
 
-  const totalInitialAmount = Number(formData.rent || 0) + Number(formData.deposit || 0);
+  const now = new Date();
+  const startDay = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const stayedDays = daysInMonth - startDay + 1;
+  const isMidMonth = startDay > 1;
+
+  const baseRent = Number(formData.rent || 0);
+  const baseDeposit = Number(formData.deposit || 0);
+  const proRataRent = isMidMonth ? Math.round((baseRent * stayedDays) / daysInMonth) : baseRent;
+
+  const isProrataOnly = onboardingBillingPolicy === 'PRORATA_ONLY';
+  const effectiveRentCharge = (isProrataOnly && isMidMonth) ? proRataRent : baseRent;
+  const advanceCredit = (!isProrataOnly && isMidMonth) ? (baseRent - proRataRent) : 0;
+  const totalInitialAmount = effectiveRentCharge + baseDeposit;
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 3 * 1024 * 1024) {
+      setFileError('File size exceeds 3MB limit. Please upload a smaller document proof (Max: 3MB).');
+      toast.error('File size exceeds 3MB limit. Please upload a smaller document.');
+      return;
+    }
+    setFileError(null);
+    setUploadingDoc(true);
+
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      uploadFormData.append('folder', 'kyc');
+
+      const res = await axios.post(`${PUBLIC_API_BASE}/upload-document`, uploadFormData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (res.data?.fileUrl) {
+        setFormData((prev) => ({ ...prev, idFileUrl: res.data.fileUrl }));
+        setIdFileName(res.data.fileName || file.name);
+        toast.success('KYC Document uploaded successfully');
+      } else {
+        throw new Error('Upload did not return a valid file URL.');
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to upload document proof.';
+      setFileError(msg);
+      toast.error(msg);
+    } finally {
+      setUploadingDoc(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!formData.firstName || !formData.email || !formData.mobile) {
       toast.error('Please complete all required personal details');
+      return;
+    }
+    if (!formData.idType || !formData.idNumber.trim()) {
+      toast.error('Please select an ID Document Type and enter your valid ID Number.');
+      return;
+    }
+    if (!formData.idFileUrl) {
+      setFileError('Mandatory: Please upload a clear photo or PDF copy of your Govt ID Proof.');
+      toast.error('Identity Document proof file upload is mandatory for onboarding.');
+      return;
+    }
+    if (!formData.isAgreementAccepted) {
+      toast.error('Please review and check the Tenancy Agreement acceptance box to complete onboarding.');
       return;
     }
     if (!selectedPropId) {
@@ -289,25 +366,30 @@ export default function PublicTenantOnboardingPage() {
 
           <div className="rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/40 p-4 text-left space-y-2.5">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-              <Sparkles className="h-4 w-4 shrink-0" />
-              <span>Your Login Credentials</span>
+              <ShieldCheck className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+              <span>Portal Login Credentials</span>
             </div>
-            <div className="text-xs sm:text-sm font-mono space-y-1.5 text-slate-800 dark:text-slate-200">
-              <div>Email: <strong className="text-indigo-600 dark:text-cyan-400 font-bold">{onboardSuccess.email || formData.email}</strong></div>
-              <div>
-                Temp Password:{' '}
-                {onboardSuccess.tempPassword ? (
-                  <strong className="text-indigo-600 dark:text-cyan-400 font-bold bg-indigo-100/60 dark:bg-indigo-900/40 px-2 py-0.5 rounded">{onboardSuccess.tempPassword}</strong>
-                ) : (
-                  <span className="text-xs font-sans text-emerald-600 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
-                    ✓ Dispatched securely via Email & SMS
-                  </span>
-                )}
+            <div className="text-xs sm:text-sm space-y-2 text-slate-800 dark:text-slate-200">
+              <div className="flex items-center gap-1.5 font-mono text-xs">
+                <span className="text-slate-500 dark:text-slate-400">Registered Email:</span>
+                <strong className="text-indigo-600 dark:text-cyan-400 font-bold">{onboardSuccess.email || formData.email}</strong>
+              </div>
+              <div className="p-3 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-indigo-200/70 dark:border-indigo-900/50 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-semibold text-slate-900 dark:text-white">
+                    {onboardSuccess.isNewUser === false
+                      ? 'Welcome back!'
+                      : 'Credentials Dispatched Securely'}
+                  </p>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                    {onboardSuccess.isNewUser === false
+                      ? 'Your tenancy is linked to your existing account. Please sign in using your existing password.'
+                      : `You have successfully onboarded! Your login credentials have been sent to your email address (${onboardSuccess.email || formData.email}) and mobile number.`}
+                  </p>
+                </div>
               </div>
             </div>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400">
-              * A copy of your credentials has been sent via Email & SMS. You will be prompted to set your personal password upon first login.
-            </p>
           </div>
 
           <div className="space-y-3 pt-2">
@@ -417,6 +499,99 @@ export default function PublicTenantOnboardingPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium text-xs">Govt ID Proof Type *</Label>
+                  <Select
+                    value={formData.idType}
+                    onValueChange={(val) => setFormData({ ...formData, idType: val })}
+                  >
+                    <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200">
+                      <SelectValue placeholder="Select ID Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AADHAAR">Aadhaar Card</SelectItem>
+                      <SelectItem value="PAN">PAN Card</SelectItem>
+                      <SelectItem value="PASSPORT">Passport</SelectItem>
+                      <SelectItem value="DRIVING_LICENSE">Driving License</SelectItem>
+                      <SelectItem value="VOTER_ID">Voter ID</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-slate-700 dark:text-slate-300 font-medium text-xs">ID Document Number *</Label>
+                  <Input
+                    required
+                    value={formData.idNumber}
+                    onChange={(e) => setFormData({ ...formData, idNumber: e.target.value })}
+                    className="h-10 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-200"
+                    placeholder="e.g. 1234 5678 9012"
+                  />
+                </div>
+              </div>
+
+              {/* Mandatory ID Proof Document Upload Field */}
+              <div className="space-y-2 p-3.5 sm:p-4 rounded-2xl border border-dashed border-indigo-300 dark:border-indigo-800/80 bg-indigo-50/40 dark:bg-indigo-950/20 transition-all">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    Upload ID Proof (Photo / PDF) <span className="text-rose-500 font-bold">*</span>
+                  </Label>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                    Mandatory
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-1">
+                  <input
+                    type="file"
+                    id="kyc-public-file-input"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={uploadingDoc}
+                    onClick={() => document.getElementById('kyc-public-file-input')?.click()}
+                    className="rounded-xl h-10 px-4 text-xs font-semibold border-indigo-300 dark:border-indigo-700 hover:bg-indigo-100/70 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 gap-2 shrink-0 shadow-xs cursor-pointer"
+                  >
+                    {uploadingDoc ? (
+                      <>
+                        <Sparkles className="h-4 w-4 animate-spin text-indigo-600 dark:text-indigo-400" />
+                        Uploading Proof...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                        {formData.idFileUrl ? 'Change Document File' : 'Choose Document File'}
+                      </>
+                    )}
+                  </Button>
+
+                  {formData.idFileUrl ? (
+                    <div className="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-3 py-2 rounded-xl border border-emerald-500/20 min-w-0 max-w-full">
+                      <FileCheck className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      <span className="truncate font-mono">{idFileName || 'Document Attached'}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 shrink-0">✓ Attached</span>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Upload photo or PDF of your {formData.idType.replace('_', ' ')} (Max 3MB file size).
+                    </p>
+                  )}
+                </div>
+
+                {fileError && (
+                  <p className="text-xs text-destructive font-medium flex items-center gap-1 mt-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    {fileError}
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <Label className="text-slate-700 dark:text-slate-300 font-medium text-xs">Room &amp; Bed Selection</Label>
                 <RoomSelect
@@ -448,17 +623,70 @@ export default function PublicTenantOnboardingPage() {
                   <span className="font-mono text-sm sm:text-base font-black text-indigo-600 dark:text-indigo-300">{formatCurrency(totalInitialAmount)}</span>
                 </div>
                 <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                    <span>1st Month Rent (Advance):</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{formatCurrency(Number(formData.rent || 0))}</span>
-                  </div>
+                  {isMidMonth && isProrataOnly ? (
+                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                      <span className="flex items-center gap-1.5">
+                        <span>Pro-Rata Rent ({stayedDays} days remaining):</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-semibold">Day {startDay}–{daysInMonth}</span>
+                      </span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{formatCurrency(proRataRent)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                      <span>1st Month Rent:</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{formatCurrency(baseRent)}</span>
+                    </div>
+                  )}
+
+                  {isMidMonth && !isProrataOnly && (
+                    <div className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-indigo-200/60 dark:border-indigo-800/40 space-y-1">
+                      <div className="flex justify-between text-[11px] text-slate-600 dark:text-slate-400">
+                        <span>• Current Month Stay ({stayedDays} days):</span>
+                        <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(proRataRent)}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                        <span>• Credited to Advance Balance for Next Month:</span>
+                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">+{formatCurrency(advanceCredit)}</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-between text-slate-600 dark:text-slate-400">
                     <span>Refundable Security Deposit:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{formatCurrency(Number(formData.deposit || 0))}</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">{formatCurrency(baseDeposit)}</span>
                   </div>
                 </div>
                 <div className="text-[10px] text-slate-500 dark:text-slate-400 italic">
-                  * Next recurring monthly rent will be billed automatically from month 2 onwards.
+                  {isMidMonth && !isProrataOnly
+                    ? `* Your advance credit of ${formatCurrency(advanceCredit)} will automatically deduct from the 1st of next month's bill.`
+                    : '* Next recurring monthly rent will be billed automatically on the 1st of the next month.'}
+                </div>
+              </div>
+
+              {/* Mandatory Tenancy Agreement & Terms Card */}
+              <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                  <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  <span>Tenancy Lease Terms &amp; Digital Agreement</span>
+                </div>
+                <div className="p-3 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 max-h-28 overflow-y-auto space-y-1.5 leading-relaxed">
+                  <p className="font-semibold text-slate-800 dark:text-slate-200">1. Rent &amp; Dues:</p>
+                  <p>Rent is due on the 1st of every calendar month. Security deposit is refundable upon move-out clearance.</p>
+                  <p className="font-semibold text-slate-800 dark:text-slate-200">2. Notice Period &amp; Stay Duration:</p>
+                  <p>A minimum notice period of 30 days is mandatory prior to checking out. Property rules &amp; quiet hours apply.</p>
+                  <p className="font-semibold text-slate-800 dark:text-slate-200">3. Identity &amp; Digital Execution:</p>
+                  <p>By proceeding, you consent to digital signature and verification of your uploaded government identity proof.</p>
+                </div>
+                <div className="flex items-start gap-2.5 pt-1">
+                  <Checkbox
+                    id="accept-terms-public"
+                    checked={formData.isAgreementAccepted}
+                    onCheckedChange={(checked) => setFormData({ ...formData, isAgreementAccepted: Boolean(checked) })}
+                    className="mt-0.5"
+                  />
+                  <Label htmlFor="accept-terms-public" className="text-xs text-slate-700 dark:text-slate-300 font-medium leading-snug cursor-pointer select-none">
+                    I have read, understood, and accept the Tenancy Agreement &amp; House Rules for this residency. I authorize digital execution of this lease. *
+                  </Label>
                 </div>
               </div>
 
@@ -503,14 +731,14 @@ export default function PublicTenantOnboardingPage() {
               <div className="pt-2">
                 <Button
                   type="submit"
-                  disabled={loading || propertyLoading}
-                  className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md text-xs sm:text-sm"
+                  disabled={loading || propertyLoading || !formData.isAgreementAccepted || !formData.idNumber.trim()}
+                  className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold shadow-md text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading
                     ? 'Processing...'
                     : formData.paymentMethod === 'RAZORPAY'
-                    ? `Pay ${formatCurrency(totalInitialAmount)} & Activate Stay`
-                    : `Submit Registration (Pay ${formatCurrency(totalInitialAmount)} at Desk)`}
+                    ? `Sign Agreement & Pay ${formatCurrency(totalInitialAmount)}`
+                    : `Sign Agreement & Submit (Pay ${formatCurrency(totalInitialAmount)} at Desk)`}
                 </Button>
               </div>
             </form>

@@ -24,7 +24,7 @@ public class EmailService {
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
 
     @Autowired(required = false)
-    private JavaMailSender springMailSender;
+    private com.stayeaze.backend.repository.SystemIntegrationSettingsRepository systemIntegrationSettingsRepository;
 
     @Autowired(required = false)
     private SystemConfigRepository systemConfigRepository;
@@ -48,7 +48,7 @@ public class EmailService {
     private String formatAmount(BigDecimal amount) {
         if (amount == null) return "₹0.00";
         try {
-            NumberFormat nf = NumberFormat.getCurrencyInstance(new Locale("en", "IN"));
+            NumberFormat nf = NumberFormat.getCurrencyInstance(Locale.of("en", "IN"));
             String formatted = nf.format(amount);
             return formatted.replace("INR", "₹").replace("Rs.", "₹").trim();
         } catch (Exception e) {
@@ -119,7 +119,21 @@ public class EmailService {
         String password = defaultPassword;
 
         try {
-            if (systemConfigRepository != null) {
+            if (systemIntegrationSettingsRepository != null) {
+                var settings = systemIntegrationSettingsRepository.findAll().stream().findFirst().orElse(null);
+                if (settings != null && settings.getSmtpHost() != null && !settings.getSmtpHost().isBlank()) {
+                    host = settings.getSmtpHost().trim();
+                    if (settings.getSmtpPort() != null && !settings.getSmtpPort().isBlank()) {
+                        try { port = Integer.parseInt(settings.getSmtpPort().trim()); } catch (Exception ignored) {}
+                    }
+                    if (settings.getSmtpUsername() != null && !settings.getSmtpUsername().isBlank()) {
+                        username = settings.getSmtpUsername().trim();
+                    }
+                    if (settings.getSmtpPassword() != null && !settings.getSmtpPassword().isBlank()) {
+                        password = settings.getSmtpPassword().trim();
+                    }
+                }
+            } else if (systemConfigRepository != null) {
                 SystemConfig config = systemConfigRepository.findFirstNative()
                         .orElseGet(() -> systemConfigRepository.findAll().stream().findFirst().orElse(null));
                 if (config != null && config.getSmtpHost() != null && !config.getSmtpHost().isBlank()) {
@@ -841,6 +855,36 @@ public class EmailService {
         dispatchEmail(recipientEmail, subject, html, true);
     }
 
+    public void sendPaymentReceiptEmail(String toEmail, String residentName, String receiptNumber, String invoiceNumber, BigDecimal amountPaid, String paymentMethod, String txnRef, BigDecimal advanceBalance, String receiptUrl) {
+        if (toEmail == null || toEmail.isBlank()) return;
+
+        String formattedAmount = formatAmount(amountPaid);
+        String subject = String.format("Payment Receipt: %s received for %s", formattedAmount, receiptNumber);
+
+        String cardHtml = infoCard(String.join("",
+                tableRow("Receipt Number", receiptNumber, true, "#4338ca", false),
+                tableRow("Invoice Reference", invoiceNumber != null ? invoiceNumber : "N/A", true, null, false),
+                tableRow("Amount Paid", formattedAmount, true, "#15803d", false),
+                tableRow("Payment Method", paymentMethod != null ? paymentMethod.toUpperCase() : "CASH", false, null, false),
+                tableRow("Transaction Reference", txnRef != null && !txnRef.isBlank() ? txnRef : "Direct / Cash Counter", true, null, false),
+                tableRow("Advance Wallet Credit", formatAmount(advanceBalance), true, "#047857", true)
+        ));
+
+        String contentHtml = String.format("""
+            <p style="font-size: 15px; color: #334155; line-height: 1.6;">Dear <strong>%s</strong>,</p>
+            <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+                Thank you! We have successfully received and processed your payment of <strong style="color: #15803d;">%s</strong>.
+            </p>
+            %s
+            <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 15px;">
+                This transaction has been permanently recorded in your StayEaze residency ledger.
+            </p>
+        """, residentName != null ? residentName : "Resident", formattedAmount, cardHtml);
+
+        String html = buildPropertyBrandedHtml("StayEaze Residency", "Official Rent & Payment Receipt", "💳 Payment Verified", contentHtml, "Download Rent Receipt (PDF)", receiptUrl != null ? receiptUrl : "#");
+        dispatchEmail(toEmail, subject, html, true);
+    }
+
     /**
      * Core Dispatcher with Guaranteed Non-blocking Background Async Execution
      */
@@ -875,10 +919,27 @@ public class EmailService {
             }
         };
 
-        if (notificationTaskExecutor != null) {
-            notificationTaskExecutor.execute(task);
+        // If an active database transaction is running, ensure email is dispatched ONLY after the transaction commits successfully.
+        // If the database transaction rolls back (e.g. payment failure, validation error), the email will NOT be sent.
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        if (notificationTaskExecutor != null) {
+                            notificationTaskExecutor.execute(task);
+                        } else {
+                            java.util.concurrent.CompletableFuture.runAsync(task);
+                        }
+                    }
+                }
+            );
         } else {
-            java.util.concurrent.CompletableFuture.runAsync(task);
+            if (notificationTaskExecutor != null) {
+                notificationTaskExecutor.execute(task);
+            } else {
+                java.util.concurrent.CompletableFuture.runAsync(task);
+            }
         }
     }
 }

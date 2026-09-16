@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,9 +46,6 @@ public class InvoiceController {
     private OrganizationRepository organizationRepository;
 
     @Autowired
-    private BookingRepository bookingRepository;
-
-    @Autowired
     private PropertyRepository propertyRepository;
 
     @Autowired
@@ -62,7 +58,13 @@ public class InvoiceController {
     private UserRepository userRepository;
 
     @Autowired
+    private PaymentRepository paymentRepository;
+
+    @Autowired
     private com.stayeaze.backend.services.InvoiceSequenceService invoiceSequenceService;
+
+    @Autowired
+    private com.stayeaze.backend.services.AuditLogService auditLogService;
 
     @Autowired
     private com.stayeaze.backend.security.SecurityUtils securityUtils;
@@ -89,8 +91,16 @@ public class InvoiceController {
 
     private Tenant getAuthorizedTenant(UUID tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
-        if (tenant != null && tenant.getPropertyId() != null) {
-            securityUtils.validatePropertyAccess(tenant.getPropertyId());
+        if (tenant != null) {
+            if (!securityUtils.isSuperAdmin()) {
+                Organization organization = getLoggedUserOrg();
+                if (organization != null && tenant.getOrganization() != null && !organization.getId().equals(tenant.getOrganization().getId())) {
+                    return null;
+                }
+            }
+            if (tenant.getPropertyId() != null) {
+                securityUtils.validatePropertyAccess(tenant.getPropertyId());
+            }
         }
         return tenant;
     }
@@ -122,6 +132,9 @@ public class InvoiceController {
 
         for (Invoice inv : invoices) {
             String status = inv.getStatus() != null ? inv.getStatus().toUpperCase() : "PENDING";
+            if ("CANCELLED".equals(status) || "WRITTEN_OFF".equals(status)) {
+                continue;
+            }
             java.math.BigDecimal due = inv.getAmountDue() != null ? inv.getAmountDue() : java.math.BigDecimal.ZERO;
             java.math.BigDecimal paid = inv.getAmountPaid() != null ? inv.getAmountPaid() : java.math.BigDecimal.ZERO;
 
@@ -139,10 +152,10 @@ public class InvoiceController {
                 }
             } else if ("OVERDUE".equals(status)) {
                 overdueCount++;
-                totalOverdue = totalOverdue.add(due);
+                totalOverdue = totalOverdue.add(due.subtract(paid).max(java.math.BigDecimal.ZERO));
             } else {
                 unpaidCount++;
-                totalPending = totalPending.add(due);
+                totalPending = totalPending.add(due.subtract(paid).max(java.math.BigDecimal.ZERO));
             }
         }
 
@@ -467,7 +480,8 @@ public class InvoiceController {
             String searchName = req.get("tenantName").toString().trim().toLowerCase();
             List<Tenant> allTenants = organization != null ? tenantRepository.findByOrganization(organization) : tenantRepository.findAll();
             tenant = allTenants.stream()
-                    .filter(t -> (t.getFirstName() + " " + t.getLastName()).toLowerCase().contains(searchName))
+                    .filter(t -> (t.getName() != null && t.getName().toLowerCase().contains(searchName)) ||
+                                 (t.getFirstName() != null && t.getFirstName().toLowerCase().contains(searchName)))
                     .findFirst()
                     .orElse(null);
         }
@@ -554,10 +568,47 @@ public class InvoiceController {
     @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> deleteFlatInvoice(@PathVariable UUID id) {
         Invoice invoice = invoiceRepository.findById(id).orElse(null);
-        if (invoice != null) {
-            invoiceRepository.delete(invoice);
+        if (invoice == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Invoice not found"));
         }
-        return ResponseEntity.ok(new MessageResponse("Invoice deleted successfully."));
+
+        Tenant tenant = invoice.getTenant();
+        if (tenant != null && tenant.getPropertyId() != null) {
+            securityUtils.validatePropertyAccess(tenant.getPropertyId());
+        }
+
+        if ("PAID".equalsIgnoreCase(invoice.getStatus()) || 
+            (invoice.getAmountPaid() != null && invoice.getAmountPaid().compareTo(BigDecimal.ZERO) > 0)) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Paid or partially-paid invoices cannot be deleted as they form part of the permanent financial ledger. Please cancel or write-off unpaid balance instead."));
+        }
+
+        // Rollback any ADVANCE_OFFSET payments applied to this invoice back to resident's advance wallet (P0.4)
+        BigDecimal advanceRefund = BigDecimal.ZERO;
+        List<Payment> payments = paymentRepository.findByInvoice(invoice);
+        for (Payment p : payments) {
+            if ("ADVANCE_OFFSET".equalsIgnoreCase(p.getPaymentMethod()) && p.getAmount() != null) {
+                advanceRefund = advanceRefund.add(p.getAmount());
+            }
+            paymentRepository.delete(p);
+        }
+
+        if (advanceRefund.compareTo(BigDecimal.ZERO) > 0 && tenant != null) {
+            BigDecimal currAdv = tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO;
+            tenant.setAdvanceBalance(currAdv.add(advanceRefund));
+            tenantRepository.save(tenant);
+        }
+
+        invoiceRepository.delete(invoice);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("success", true);
+        res.put("message", "Invoice deleted successfully." + (advanceRefund.compareTo(BigDecimal.ZERO) > 0 ? " Rolled back ₹" + advanceRefund + " advance to resident's wallet." : ""));
+        res.put("advanceRefunded", advanceRefund);
+        if (tenant != null) {
+            res.put("newAdvanceBalance", tenant.getAdvanceBalance());
+        }
+
+        return ResponseEntity.ok(res);
     }
 
     @PostMapping({"/invoices/{id}/record-payment", "/invoices/{id}/payments"})
@@ -574,23 +625,49 @@ public class InvoiceController {
             paymentAmount = new java.math.BigDecimal(req.get("amount").toString());
         }
 
-        String paymentMethod = req.get("paymentMethod") != null ? req.get("paymentMethod").toString().toUpperCase() : "CASH";
-        String paymentRef = req.get("paymentReference") != null ? req.get("paymentReference").toString() : null;
+        String paymentMethod = (req.get("paymentMethod") != null) ? req.get("paymentMethod").toString() : "CASH";
+        String paymentRef = (req.get("paymentReference") != null) ? req.get("paymentReference").toString() : ((req.get("transactionReference") != null) ? req.get("transactionReference").toString() : "");
 
-        java.math.BigDecimal newPaidAmount = invoice.getAmountPaid().add(paymentAmount);
-        invoice.setAmountPaid(newPaidAmount);
+        java.math.BigDecimal amountPaidBefore = invoice.getAmountPaid() != null ? invoice.getAmountPaid() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal remainingDue = invoice.getAmountDue().subtract(amountPaidBefore);
+        if (remainingDue.compareTo(java.math.BigDecimal.ZERO) < 0) remainingDue = java.math.BigDecimal.ZERO;
+
+        java.math.BigDecimal surplusCredited = java.math.BigDecimal.ZERO;
+        if (paymentAmount.compareTo(remainingDue) > 0) {
+            surplusCredited = paymentAmount.subtract(remainingDue);
+            invoice.setAmountPaid(invoice.getAmountDue());
+            invoice.setStatus("PAID");
+
+            Tenant tenant = invoice.getTenant();
+            if (tenant != null) {
+                java.math.BigDecimal currAdv = tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : java.math.BigDecimal.ZERO;
+                tenant.setAdvanceBalance(currAdv.add(surplusCredited));
+                tenantRepository.save(tenant);
+            }
+        } else {
+            java.math.BigDecimal newPaidAmount = amountPaidBefore.add(paymentAmount);
+            invoice.setAmountPaid(newPaidAmount);
+            if (newPaidAmount.compareTo(invoice.getAmountDue()) >= 0) {
+                invoice.setStatus("PAID");
+            } else if (newPaidAmount.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                invoice.setStatus("PARTIALLY_PAID");
+            }
+        }
+
         invoice.setPaymentMethod(paymentMethod);
         if (paymentRef != null && !paymentRef.trim().isEmpty()) {
             invoice.setPaymentReference(paymentRef);
         }
 
-        if (newPaidAmount.compareTo(invoice.getAmountDue()) >= 0) {
-            invoice.setStatus("PAID");
-        } else if (newPaidAmount.compareTo(java.math.BigDecimal.ZERO) > 0) {
-            invoice.setStatus("PARTIALLY_PAID");
-        }
-
         Invoice saved = invoiceRepository.save(invoice);
+
+        // Record payment transaction
+        try {
+            Payment p = new Payment(saved, paymentAmount, paymentMethod);
+            p.setTransactionReference(paymentRef);
+            p.setStatus("COMPLETED");
+            paymentRepository.save(p);
+        } catch (Exception ignored) {}
 
         java.util.Map<String, Object> map = new java.util.HashMap<>();
         map.put("id", saved.getId());
@@ -599,6 +676,7 @@ public class InvoiceController {
         map.put("tenantName", saved.getTenant().getFirstName() + " " + saved.getTenant().getLastName());
         map.put("amount", saved.getAmountDue());
         map.put("paidAmount", saved.getAmountPaid());
+        map.put("surplusCreditedToAdvance", surplusCredited);
         map.put("status", saved.getStatus() != null ? saved.getStatus().toLowerCase() : "unpaid");
         map.put("paymentMethod", saved.getPaymentMethod());
         map.put("paymentReference", saved.getPaymentReference());
@@ -917,5 +995,146 @@ public class InvoiceController {
         return ResponseEntity.ok(response);
     }
 
+    @PutMapping("/invoices/{id}/cancel")
+    @Transactional
+    @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> cancelInvoice(@PathVariable UUID id) {
+        Invoice invoice = invoiceRepository.findById(id).orElse(null);
+        if (invoice == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Invoice not found"));
+        }
 
+        Tenant tenant = invoice.getTenant();
+        if (tenant != null && tenant.getPropertyId() != null) {
+            securityUtils.validatePropertyAccess(tenant.getPropertyId());
+        }
+
+        if ("CANCELLED".equalsIgnoreCase(invoice.getStatus())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Invoice is already cancelled"));
+        }
+
+        // Rollback any ADVANCE_OFFSET payments applied to this invoice back to resident's advance wallet (P0.4)
+        BigDecimal advanceRefund = BigDecimal.ZERO;
+        List<Payment> payments = paymentRepository.findByInvoice(invoice);
+        for (Payment p : payments) {
+            if ("ADVANCE_OFFSET".equalsIgnoreCase(p.getPaymentMethod()) && p.getAmount() != null) {
+                advanceRefund = advanceRefund.add(p.getAmount());
+                p.setStatus("REVERSED");
+                paymentRepository.save(p);
+            }
+        }
+
+        if (advanceRefund.compareTo(BigDecimal.ZERO) > 0 && tenant != null) {
+            BigDecimal currAdv = tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO;
+            tenant.setAdvanceBalance(currAdv.add(advanceRefund));
+            tenantRepository.save(tenant);
+        }
+
+        invoice.setStatus("CANCELLED");
+        Invoice saved = invoiceRepository.save(invoice);
+
+        Map<String, Object> res = new HashMap<>();
+        res.put("success", true);
+        res.put("message", "Invoice cancelled successfully." + (advanceRefund.compareTo(BigDecimal.ZERO) > 0 ? " Rolled back ₹" + advanceRefund + " advance to resident's wallet." : ""));
+        res.put("invoiceId", saved.getId());
+        res.put("status", saved.getStatus());
+        res.put("advanceRefunded", advanceRefund);
+        if (tenant != null) {
+            res.put("newAdvanceBalance", tenant.getAdvanceBalance());
+        }
+
+        return ResponseEntity.ok(res);
+    }
+
+    /**
+     * P2.3: Invoice Write-off & Waiver Workflow.
+     * Allows owners, admins, and accountants to formally write off uncollectable bad debts or grant partial waivers.
+     */
+    @PostMapping("/invoices/{id}/write-off")
+    @Transactional
+    @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('ACCOUNTANT')")
+    public ResponseEntity<?> writeOffInvoice(
+            @PathVariable UUID id,
+            @RequestBody(required = false) Map<String, Object> request) {
+        Invoice invoice = invoiceRepository.findById(id).orElse(null);
+        if (invoice == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Invoice not found"));
+        }
+
+        Tenant tenant = invoice.getTenant();
+        if (tenant != null && tenant.getPropertyId() != null) {
+            securityUtils.validatePropertyAccess(tenant.getPropertyId());
+        }
+
+        if ("CANCELLED".equalsIgnoreCase(invoice.getStatus()) || "WRITTEN_OFF".equalsIgnoreCase(invoice.getStatus())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Invoice is already " + invoice.getStatus().toLowerCase().replace('_', ' ')));
+        }
+
+        String reason = (request != null && request.containsKey("reason") && request.get("reason") != null)
+                ? request.get("reason").toString().trim()
+                : "Bad Debt / Uncollectible";
+        if (reason.isBlank()) {
+            reason = "Bad Debt / Uncollectible";
+        }
+
+        BigDecimal amountDue = invoice.getAmountDue() != null ? invoice.getAmountDue() : BigDecimal.ZERO;
+        BigDecimal amountPaid = invoice.getAmountPaid() != null ? invoice.getAmountPaid() : BigDecimal.ZERO;
+        BigDecimal remainingDue = amountDue.subtract(amountPaid).max(BigDecimal.ZERO);
+
+        if (remainingDue.compareTo(BigDecimal.ZERO) <= 0) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Invoice has no outstanding balance to write off."));
+        }
+
+        BigDecimal waiveAmount = remainingDue;
+        if (request != null && request.containsKey("waivedAmount") && request.get("waivedAmount") != null) {
+            try {
+                BigDecimal requestedWaive = new BigDecimal(request.get("waivedAmount").toString());
+                if (requestedWaive.compareTo(BigDecimal.ZERO) > 0 && requestedWaive.compareTo(remainingDue) <= 0) {
+                    waiveAmount = requestedWaive;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        boolean isFullWriteOff = waiveAmount.compareTo(remainingDue) >= 0;
+
+        if (invoice.getItems() == null) {
+            invoice.setItems(new ArrayList<>());
+        }
+
+        if (isFullWriteOff) {
+            invoice.setStatus("WRITTEN_OFF");
+            InvoiceItem writeOffItem = new InvoiceItem(invoice, "Write-off / Bad Debt Waiver — " + reason, waiveAmount.negate());
+            invoice.getItems().add(writeOffItem);
+            auditLogService.logCurrent("INVOICE_WRITE_OFF: Wrote off ₹" + waiveAmount + " for invoice " + invoice.getInvoiceNumber() + " (Reason: " + reason + ")", null);
+        } else {
+            invoice.setAmountDue(amountDue.subtract(waiveAmount));
+            InvoiceItem waiverItem = new InvoiceItem(invoice, "Partial Waiver / Concession — " + reason, waiveAmount.negate());
+            invoice.getItems().add(waiverItem);
+
+            BigDecimal newRemaining = invoice.getAmountDue().subtract(amountPaid);
+            if (newRemaining.compareTo(BigDecimal.ZERO) <= 0) {
+                invoice.setStatus("PAID");
+            } else if (amountPaid.compareTo(BigDecimal.ZERO) > 0) {
+                invoice.setStatus("PARTIALLY_PAID");
+            }
+            auditLogService.logCurrent("INVOICE_PARTIAL_WAIVER: Waived ₹" + waiveAmount + " for invoice " + invoice.getInvoiceNumber() + " (Reason: " + reason + ")", null);
+        }
+
+        Invoice saved = invoiceRepository.save(invoice);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", isFullWriteOff
+                ? "Invoice " + saved.getInvoiceNumber() + " successfully written off (₹" + waiveAmount + ")."
+                : "Partial waiver of ₹" + waiveAmount + " applied to invoice " + saved.getInvoiceNumber() + ".");
+        response.put("invoiceId", saved.getId());
+        response.put("invoiceNumber", saved.getInvoiceNumber());
+        response.put("status", saved.getStatus());
+        response.put("waivedAmount", waiveAmount);
+        response.put("newAmountDue", saved.getAmountDue());
+        response.put("amountPaid", saved.getAmountPaid());
+
+        return ResponseEntity.ok(response);
+    }
 }
+

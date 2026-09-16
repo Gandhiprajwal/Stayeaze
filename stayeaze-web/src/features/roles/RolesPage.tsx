@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ShieldCheck, Plus, Pencil, Trash2, Lock, Users, Info
+  ShieldCheck, Plus, Pencil, Trash2, Lock, Users, Info, Search, Sparkles, Wand2
 } from 'lucide-react';
 
 import { PageHeader } from '@/components/common/PageHeader';
@@ -12,6 +12,7 @@ import { FormInput, FormTextarea } from '@/components/common/FormField';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import api from '@/lib/api';
@@ -35,56 +36,124 @@ export interface PermissionCategory {
 
 const DEFAULT_PERMISSION_CATALOG: PermissionCategory[] = [
   {
-    category: 'Property Management',
+    category: 'Space & Visual Inventory',
+    icon: 'Building2',
     permissions: [
-      { key: 'property.read', label: 'View Properties', description: 'View properties, campuses, and configurations' },
-      { key: 'property.write', label: 'Manage Properties', description: 'Create, edit, or configure properties' },
-      { key: 'building.manage', label: 'Buildings & Floors', description: 'Add, edit, or delete buildings and floor plans' },
-      { key: 'room.manage', label: 'Rooms & Beds', description: 'Configure room sharing types, pricing, and beds' },
+      { key: 'space.matrix.view', label: 'Visual Floor & Bed Matrix', description: 'Inspect live graphical floor layouts, occupied beds, and vacant slots' },
+      { key: 'space.matrix.manage', label: 'Configure Rooms & Beds', description: 'Configure sharing types (Single/Double/Triple), bed numbers, and base rents' },
+      { key: 'space.batch.generate', label: 'Batch Space Generator', description: 'Bulk generate multi-floor rooms and beds across wings' },
+      { key: 'building.manage', label: 'Buildings & Wings', description: 'Add, edit, or archive buildings and floor wings' },
     ],
   },
   {
-    category: 'Tenancy & Bookings',
+    category: 'Resident Lifecycle & Digital KYC',
+    icon: 'Users',
     permissions: [
-      { key: 'tenant.read', label: 'View Residents', description: 'View tenant profiles, emergency contacts, and KYC' },
-      { key: 'tenant.write', label: 'Manage Residents', description: 'Onboard new tenants, upload ID proofs, and edit profiles' },
-      { key: 'booking.read', label: 'View Bookings', description: 'View room reservations, inquiries, and requests' },
-      { key: 'booking.write', label: 'Create Bookings', description: 'Reserve beds, process token advances, and allocate rooms' },
-      { key: 'checkin.manage', label: 'Check-in & Check-out', description: 'Process digital check-ins, move-outs, and room transfers' },
+      { key: 'tenant.read', label: 'View Resident Profiles', description: 'View tenant directory, room allocations, emergency contacts, and active status' },
+      { key: 'tenant.write', label: 'Onboard & Edit Residents', description: 'Onboard new residents, edit profiles, and record initial rent/deposit' },
+      { key: 'tenant.kyc.verify', label: 'Verify Digital KYC', description: 'Approve or reject Aadhaar, PAN, and student/employee ID documents' },
+      { key: 'tenant.transfer.execute', label: 'Room Transfer Wizard', description: 'Execute room/bed transfers with automatic pro-rata rent & deposit recalculation' },
+      { key: 'booking.manage', label: 'Bookings & Token Advances', description: 'Process prospective bookings, token deposits, and space hold requests' },
     ],
   },
   {
-    category: 'Finance & Invoicing',
+    category: 'Rental Agreements & Legal Lock-in',
+    icon: 'FileSignature',
     permissions: [
-      { key: 'billing.read', label: 'View Invoices', description: 'Access monthly rent invoices, utility bills, and tariffs' },
-      { key: 'billing.write', label: 'Generate Invoices', description: 'Create custom bills, apply discounts, and edit line items' },
-      { key: 'payment.read', label: 'View Payments', description: 'View receipts, settlement status, and payment histories' },
-      { key: 'payment.write', label: 'Record Payments', description: 'Log offline payments, approve refunds, and reconcile' },
-      { key: 'deposit.manage', label: 'Security Deposits', description: 'Process deposit deductions, settlements, and net refunds' },
+      { key: 'agreement.read', label: 'View Digital Agreements', description: 'View tenant e-sign contracts, lock-in clauses, and notice periods' },
+      { key: 'agreement.generate', label: 'Generate & E-Sign Agreements', description: 'Create digital rental agreements with custom rules & download PDF contracts' },
+      { key: 'agreement.terminate', label: 'Agreement Termination & Move-Out', description: 'Execute move-outs, early lock-in penalties, and settlement approvals' },
     ],
   },
   {
-    category: 'Operations & Facilities',
+    category: 'Billing, Utility Meters & Finance',
+    icon: 'CreditCard',
     permissions: [
-      { key: 'complaint.read', label: 'View Complaints', description: 'View resident grievances, tickets, and photos' },
-      { key: 'complaint.write', label: 'Resolve Complaints', description: 'Assign tickets to staff, update status, and close complaints' },
-      { key: 'maintenance.read', label: 'View Maintenance', description: 'View scheduled repairs and asset maintenance logs' },
-      { key: 'maintenance.write', label: 'Manage Maintenance', description: 'Create maintenance tasks, log costs, and complete jobs' },
-      { key: 'visitor.read', label: 'View Visitors', description: 'View visitor entry logs, vehicle numbers, and checkout times' },
-      { key: 'visitor.write', label: 'Log Visitors', description: 'Register guests, issue digital visitor passes, and check out' },
+      { key: 'billing.read', label: 'View Invoices & Tariffs', description: 'Access monthly rent invoices, utility bills, and payment records' },
+      { key: 'billing.write', label: 'Create Invoices & Adjustments', description: 'Create custom bills, apply discounts, exit cleaning fees, and penalties' },
+      { key: 'billing.bulk.run', label: 'Bulk Monthly Rent Run', description: 'Execute 1-click automated monthly rent generation for all occupied rooms' },
+      { key: 'utility.meter.record', label: 'Sub-Meter Electricity Split', description: 'Record sub-meter electricity readings and auto-split units across roommates' },
+      { key: 'payment.record', label: 'Log Payments & Bank Accounts', description: 'Record cash/UPI payments, reconcile transactions, and verify refund accounts' },
+      { key: 'deposit.manage', label: 'Security Deposit Settlements', description: 'Process deposit deductions, damage penalties, and net refund payouts' },
     ],
   },
   {
-    category: 'Administration & Security',
+    category: 'Gate Pass, Visitors & Security',
+    icon: 'ShieldCheck',
     permissions: [
-      { key: 'user.read', label: 'View Staff & Users', description: 'View staff members, managers, and assigned properties' },
-      { key: 'user.write', label: 'Manage Staff', description: 'Create staff logins, assign roles, and modify access' },
-      { key: 'reporting.read', label: 'Analytics & Reports', description: 'View financial summaries, occupancy stats, and export CSVs' },
-      { key: 'audit.read', label: 'Audit Logs', description: 'Inspect security logs, login timestamps, and system actions' },
-      { key: 'settings.manage', label: 'System Settings', description: 'Configure payment gateways, templates, and notifications' },
+      { key: 'gate.visitor.read', label: 'View Visitor Gate Logs', description: 'Inspect guest entry/exit times, vehicle numbers, and host tenants' },
+      { key: 'gate.visitor.log', label: 'Issue Visitor Gate Pass', description: 'Register guests, issue gate entry passes, and trigger tenant approval' },
+      { key: 'gate.parcel.manage', label: 'Parcel & Courier Desk', description: 'Log arriving courier deliveries, send OTP pickup notifications to residents' },
+      { key: 'security.incident.log', label: 'Safety Incident Escalation', description: 'Record security incidents, curfew violations, and warden escalations' },
+    ],
+  },
+  {
+    category: 'Facilities & Complaints SLA',
+    icon: 'Wrench',
+    permissions: [
+      { key: 'complaint.read', label: 'View Complaints & Photos', description: 'View resident grievances, issue photos, and live chat updates' },
+      { key: 'complaint.resolve', label: 'Assign & Close Complaints', description: 'Assign maintenance staff, track SLA timelines, and resolve issues' },
+      { key: 'maintenance.manage', label: 'Asset Maintenance & Repairs', description: 'Log recurring maintenance jobs, contractor costs, and equipment assets' },
+    ],
+  },
+  {
+    category: 'WhatsApp & Omnichannel Automations',
+    icon: 'MessageSquare',
+    permissions: [
+      { key: 'messaging.whatsapp.send', label: '1-Click WhatsApp Reminders', description: 'Dispatch instant WhatsApp rent due notices, welcome links, and receipts' },
+      { key: 'messaging.logs.view', label: 'Notification Delivery Logs', description: 'Audit WhatsApp/SMS message delivery statuses and failure reasons' },
+    ],
+  },
+  {
+    category: 'Compliance, Tax & Governance',
+    icon: 'FileText',
+    permissions: [
+      { key: 'reports.gst.export', label: 'GSTR-1 Tax Reports', description: 'Export monthly GST B2B/B2C summaries and tax ledgers' },
+      { key: 'reports.hra.generate', label: 'HRA Section 10(13A) Receipts', description: 'Generate official tax rent receipts with landlord PAN verification QR' },
+      { key: 'audit.logs.view', label: 'Audit Logs & Security Sessions', description: 'View multi-branch user audit trails, IP logs, and active login sessions' },
+      { key: 'settings.manage', label: 'System & Gateway Settings', description: 'Configure Razorpay credentials, bank details, invoice prefixes, and branding' },
     ],
   },
 ];
+
+const PRESET_TEMPLATES: Record<string, { label: string; perms: string[] }> = {
+  MANAGER: {
+    label: 'Property Manager',
+    perms: [
+      'space.matrix.view', 'space.matrix.manage', 'space.batch.generate', 'building.manage',
+      'tenant.read', 'tenant.write', 'tenant.kyc.verify', 'tenant.transfer.execute', 'booking.manage',
+      'agreement.read', 'agreement.generate', 'agreement.terminate',
+      'billing.read', 'billing.write', 'billing.bulk.run', 'utility.meter.record', 'payment.record', 'deposit.manage',
+      'gate.visitor.read', 'gate.visitor.log', 'gate.parcel.manage', 'security.incident.log',
+      'complaint.read', 'complaint.resolve', 'maintenance.manage',
+      'messaging.whatsapp.send', 'reports.gst.export', 'reports.hra.generate'
+    ],
+  },
+  ACCOUNTANT: {
+    label: 'Accountant',
+    perms: [
+      'billing.read', 'billing.write', 'billing.bulk.run', 'utility.meter.record',
+      'payment.record', 'deposit.manage', 'reports.gst.export', 'reports.hra.generate',
+      'messaging.whatsapp.send'
+    ],
+  },
+  RECEPTIONIST: {
+    label: 'Receptionist / Front Desk',
+    perms: [
+      'space.matrix.view', 'tenant.read', 'tenant.write', 'tenant.kyc.verify',
+      'booking.manage', 'agreement.read', 'agreement.generate',
+      'gate.visitor.read', 'gate.visitor.log', 'gate.parcel.manage', 'complaint.read'
+    ],
+  },
+  SECURITY: {
+    label: 'Security Guard',
+    perms: ['gate.visitor.read', 'gate.visitor.log', 'gate.parcel.manage', 'security.incident.log'],
+  },
+  STAFF: {
+    label: 'Maintenance / Staff',
+    perms: ['space.matrix.view', 'complaint.read', 'complaint.resolve', 'maintenance.manage'],
+  },
+};
 
 const emptyForm = { name: '', description: '', permissions: [] as string[] };
 
@@ -96,6 +165,7 @@ export default function RolesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { data: roles } = useQuery({
     queryKey: [ENDPOINT],
@@ -114,6 +184,23 @@ export default function RolesPage() {
     return categories.flatMap((c) => c.permissions.map((p) => p.key));
   }, [categories]);
 
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery.trim()) return categories;
+    const q = searchQuery.toLowerCase();
+    return categories
+      .map((cat) => ({
+        ...cat,
+        permissions: cat.permissions.filter(
+          (p) =>
+            p.label.toLowerCase().includes(q) ||
+            p.key.toLowerCase().includes(q) ||
+            p.description.toLowerCase().includes(q) ||
+            cat.category.toLowerCase().includes(q)
+        ),
+      }))
+      .filter((cat) => cat.permissions.length > 0);
+  }, [categories, searchQuery]);
+
   const createMut = useCreate<Role>(ENDPOINT, 'Role');
   const updateMut = useUpdate<Role>(ENDPOINT, 'Role');
   const deleteMut = useDelete(ENDPOINT, 'Role');
@@ -121,6 +208,7 @@ export default function RolesPage() {
 
   function openCreate() {
     setEditing(null);
+    setSearchQuery('');
     form.reset(emptyForm);
     setDialogOpen(true);
   }
@@ -128,12 +216,20 @@ export default function RolesPage() {
   function openEdit(row: Role) {
     if (!isSuperAdmin) return;
     setEditing(row);
+    setSearchQuery('');
     form.reset({
       name: row.name,
       description: row.description || '',
       permissions: row.permissions.includes('*') ? [...allAvailablePermKeys] : row.permissions,
     });
     setDialogOpen(true);
+  }
+
+  function applyPreset(presetKey: keyof typeof PRESET_TEMPLATES) {
+    const preset = PRESET_TEMPLATES[presetKey];
+    if (preset) {
+      form.setValue('permissions', [...preset.perms]);
+    }
   }
 
   function submit() {
@@ -336,32 +432,67 @@ export default function RolesPage() {
             rows={2}
           />
 
+          {/* 1-Click Role Templates */}
+          <div className="p-3 bg-muted/30 rounded-xl border space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+              <Wand2 className="h-3.5 w-3.5 text-primary" />
+              <span>1-Click Preset Permission Templates</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(PRESET_TEMPLATES).map(([k, v]) => (
+                <Button
+                  key={k}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] font-medium rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  onClick={() => applyPreset(k)}
+                >
+                  {v.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <div>
-                <Label className="text-sm font-semibold">Granular Module Permissions</Label>
+                <Label className="text-sm font-semibold">Granular Module Permissions ({form.values.permissions.length}/{allAvailablePermKeys.length})</Label>
                 <p className="text-xs text-muted-foreground">
                   Select the explicit functional privileges granted to users with this role.
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs font-medium"
-                onClick={toggleAllGlobal}
-              >
-                {form.values.permissions.length === allAvailablePermKeys.length
-                  ? 'Deselect All'
-                  : `Select All (${allAvailablePermKeys.length})`}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs font-medium"
+                  onClick={toggleAllGlobal}
+                >
+                  {form.values.permissions.length === allAvailablePermKeys.length
+                    ? 'Deselect All'
+                    : `Select All (${allAvailablePermKeys.length})`}
+                </Button>
+              </div>
             </div>
 
-            <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
-              {categories.map((cat) => {
+            {/* Quick Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search permissions by name, key, or module..."
+                className="pl-8.5 h-8.5 text-xs rounded-xl"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1">
+              {filteredCategories.map((cat) => {
                 const catKeys = cat.permissions.map((p) => p.key);
                 const selectedCount = catKeys.filter((k) => form.values.permissions.includes(k)).length;
-                const isAllSelected = selectedCount === catKeys.length;
+                const isAllSelected = selectedCount === catKeys.length && catKeys.length > 0;
 
                 return (
                   <div key={cat.category} className="rounded-xl border bg-muted/20 p-3.5 space-y-2.5">
@@ -404,7 +535,7 @@ export default function RolesPage() {
                               className="mt-0.5"
                             />
                             <div className="space-y-0.5">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className={`text-xs font-semibold ${isChecked ? 'text-foreground' : ''}`}>
                                   {perm.label}
                                 </span>

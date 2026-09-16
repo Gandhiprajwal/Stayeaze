@@ -4,11 +4,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Users, Phone, Mail, MapPin, Calendar, Briefcase,
   CreditCard, ShieldCheck, Wallet, Home, FileText, Upload, CheckCircle2, XCircle, Trash2, ExternalLink, AlertCircle,
-  KeyRound, LogOut, Archive, RotateCcw, Pencil, Eye, ScrollText, Calculator, FileCheck
+  KeyRound, LogOut, Archive, RotateCcw, Pencil, Eye, ScrollText, Calculator, FileCheck, DoorOpen,
+  Check
 } from 'lucide-react';
 import CheckoutSettlementModal from '@/features/check-out/CheckoutSettlementModal';
 import TenantAdjustmentsLedgerCard from '@/features/tenants/TenantAdjustmentsLedgerCard';
 import DigitalAgreementModal from '@/features/tenants/DigitalAgreementModal';
+import { HraStatementModal } from '@/features/billing/HraStatementModal';
+import RoomTransferWizardModal from '@/features/tenants/RoomTransferWizardModal';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatCard } from '@/components/common/StatCard';
@@ -45,17 +48,24 @@ export default function TenantDetailPage() {
   const [docNumber, setDocNumber] = useState('');
   const [fileUrl, setFileUrl] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<TenantDocument | null>(null);
   const [agreementOpen, setAgreementOpen] = useState(false);
+  const [paymentApprovalTarget, setPaymentApprovalTarget] = useState<{
+    type: 'DESK_ONBOARDING' | 'SINGLE_INVOICE';
+    invoiceId?: string;
+    invoiceNumber?: string;
+    amount?: number;
+  } | null>(null);
   const kycFileInputRef = useRef<HTMLInputElement>(null);
 
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
   const [checkoutSettlementOpen, setCheckoutSettlementOpen] = useState(false);
+  const [hraStatementOpen, setHraStatementOpen] = useState(false);
+  const [transferWizardOpen, setTransferWizardOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
-  const [isDeletingPermanent, setIsDeletingPermanent] = useState(false);
 
   const resolveFileUrl = resolveBackendUrl;
 
@@ -189,18 +199,42 @@ export default function TenantDetailPage() {
     }
   };
 
-  const handleApproveDeskPayment = async () => {
-    try {
-      const res = await api.post(`/tenants/${id}/approve-desk-payment`);
+  const approvePaymentMut = useMutation({
+    mutationFn: async (target: { type: 'DESK_ONBOARDING' | 'SINGLE_INVOICE'; invoiceId?: string }) => {
+      if (target.type === 'SINGLE_INVOICE' && target.invoiceId) {
+        const res = await api.post(`/invoices/${target.invoiceId}/approve-payment`);
+        return res.data;
+      } else {
+        const res = await api.post(`/tenants/${id}/approve-desk-payment`);
+        return res.data;
+      }
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message || 'Payment successfully verified & marked as PAID.');
+      setPaymentApprovalTarget(null);
       queryClient.invalidateQueries({ queryKey: ['tenant', id] });
       queryClient.invalidateQueries({ queryKey: ['tenant-invoices', id] });
-      toast.success(res.data.message || 'Payment marked as received and tenant is now Active.');
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to approve desk payment.');
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ['/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Failed to approve payment.');
+    },
+  });
+
+  const hasKycDocuments = Boolean(
+    (documents && documents.length > 0) ||
+    (tenant as any)?.idDocumentUrl ||
+    (tenant as any)?.idNumber
+  );
 
   const handleVerifyKyc = async () => {
+    if (!hasKycDocuments) {
+      toast.error('Cannot approve KYC: No identity or verification documents have been uploaded for this resident.');
+      return;
+    }
     try {
       await api.post(`/tenants/${id}/verify-document`, { status: 'VERIFIED' });
       queryClient.invalidateQueries({ queryKey: ['tenant', id] });
@@ -232,20 +266,6 @@ export default function TenantDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['tenant', id] });
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to unarchive tenant.');
-    }
-  };
-
-  const handlePermanentDelete = async () => {
-    setIsDeletingPermanent(true);
-    try {
-      await api.delete(`/tenants/${id}/permanent`);
-      toast.success(`Tenant "${tenant?.name}" and all records permanently removed.`);
-      setPermanentDeleteOpen(false);
-      navigate('/tenants');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to permanently delete tenant.');
-    } finally {
-      setIsDeletingPermanent(false);
     }
   };
 
@@ -282,6 +302,14 @@ export default function TenantDetailPage() {
         fileUrl: (tenant as any).idFileUrl || null,
       }] : []);
 
+  const statusClean = String(tenant.status || '').toLowerCase();
+  const unpaidInvoices = (invoices ?? []).filter((i) => String(i.status || '').toLowerCase() !== 'paid');
+  const hasUnpaidInvoice = unpaidInvoices.length > 0;
+  const totalUnpaidAmount = unpaidInvoices.reduce((sum, inv) => sum + (Number(inv.amount || 0) - Number(inv.paidAmount || 0)), 0);
+
+  // Approve Payment shows ONLY when there are pending / unpaid invoices
+  const showApprovePaymentBtn = hasUnpaidInvoice && statusClean !== 'checked_out' && statusClean !== 'archived';
+
   return (
     <div className="space-y-6">
       <Button variant="ghost" size="sm" asChild><Link to="/tenants"><ArrowLeft className="mr-1.5 h-4 w-4" /> Tenants</Link></Button>
@@ -291,8 +319,15 @@ export default function TenantDetailPage() {
         icon={Users}
         actions={
           <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 shrink-0">
-            {tenant.status === 'pending_checkin' && (
-              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold h-9 px-3.5 text-xs gap-1.5" onClick={handleApproveDeskPayment}>
+            {showApprovePaymentBtn && (
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold h-9 px-3.5 text-xs gap-1.5"
+                onClick={() => setPaymentApprovalTarget({
+                  type: 'DESK_ONBOARDING',
+                  amount: totalUnpaidAmount,
+                })}
+              >
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
                 <span className="hidden sm:inline">Approve Payment</span>
                 <span className="sm:hidden">Approve</span>
@@ -312,8 +347,10 @@ export default function TenantDetailPage() {
               <Button
                 size="sm"
                 variant="outline"
-                className="text-indigo-600 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 font-semibold h-9 px-3.5 text-xs gap-1.5"
+                className="text-indigo-600 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 font-semibold h-9 px-3.5 text-xs gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={handleVerifyKyc}
+                disabled={!hasKycDocuments}
+                title={!hasKycDocuments ? 'Upload identity proof documents to enable KYC verification' : 'Verify Tenant KYC'}
               >
                 <ShieldCheck className="h-4 w-4 shrink-0" />
                 <span className="hidden sm:inline">Verify KYC</span>
@@ -330,16 +367,38 @@ export default function TenantDetailPage() {
               <span className="hidden sm:inline">Send Credentials</span>
               <span className="sm:hidden">Credentials</span>
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setHraStatementOpen(true)}
+              className="h-9 px-3.5 text-xs font-semibold gap-1.5 border-indigo-200 text-indigo-900 bg-indigo-50/50 hover:bg-indigo-100 dark:border-indigo-800 dark:text-indigo-200"
+            >
+              <FileCheck className="h-4 w-4 text-indigo-600 shrink-0" />
+              <span className="hidden sm:inline">HRA Statement</span>
+              <span className="sm:hidden">HRA</span>
+            </Button>
             {tenant.status !== 'checked_out' && tenant.status !== 'archived' && (
-              <Button
-                size="sm"
-                className="bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-xs gap-1.5 h-9 px-3.5 text-xs"
-                onClick={() => setCheckoutSettlementOpen(true)}
-              >
-                <Calculator className="h-4 w-4 shrink-0" />
-                <span className="hidden sm:inline">1-Click Settle & Checkout</span>
-                <span className="sm:hidden">Checkout</span>
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setTransferWizardOpen(true)}
+                  className="h-9 px-3.5 text-xs font-semibold gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                >
+                  <DoorOpen className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Transfer Room</span>
+                  <span className="sm:hidden">Transfer</span>
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-semibold shadow-xs gap-1.5 h-9 px-3.5 text-xs"
+                  onClick={() => setCheckoutSettlementOpen(true)}
+                >
+                  <Calculator className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">1-Click Settle & Checkout</span>
+                  <span className="sm:hidden">Checkout</span>
+                </Button>
+              </>
             )}
             <RowActions
               className="w-60"
@@ -356,27 +415,21 @@ export default function TenantDetailPage() {
                   label: 'Archive Resident',
                   icon: Archive,
                   variant: 'default' as const,
-                  sectionHeader: 'Danger Zone',
+                  sectionHeader: 'Record Status',
                   description: 'Frees bed allocation, preserves ledger',
                   onSelect: () => setArchiveOpen(true),
                 }]),
-                {
-                  label: 'Permanent Delete',
-                  icon: Trash2,
-                  variant: 'destructive' as const,
-                  description: 'Permanently erases resident & history',
-                  onSelect: () => setPermanentDeleteOpen(true),
-                },
               ]}
             />
           </div>
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Monthly Rent" value={formatCurrency(Number(tenant.rent || 0))} icon={Wallet} accent="primary" />
         <StatCard label="Deposit Paid" value={formatCurrency(Number(tenant.deposit || 0))} icon={CreditCard} accent="info" />
         <StatCard label="Outstanding" value={formatCurrency(outstanding)} icon={Wallet} accent={outstanding > 0 ? 'destructive' : 'success'} />
+        <StatCard label="Advance Wallet" value={formatCurrency(Number((tenant as any).advanceBalance || 0))} icon={ShieldCheck} accent={Number((tenant as any).advanceBalance || 0) > 0 ? 'success' : 'primary'} hint="Auto-offsets rent" />
         <StatCard label="Lease Ends" value={tenant.leaseEnd ? formatDate(tenant.leaseEnd) : 'Ongoing / None'} icon={Calendar} accent="warning" />
       </div>
 
@@ -583,18 +636,33 @@ export default function TenantDetailPage() {
       <Card>
         <CardHeader>
           <CardTitle>Billing History</CardTitle>
-          <CardDescription>Recent invoices for this tenant</CardDescription>
+          <CardDescription>Recent invoices and payment settlements for this tenant</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {(invoices && invoices.length > 0) ? invoices.map((inv) => (
-            <div key={inv.id} className="flex items-center justify-between rounded-lg border p-3">
-              <div>
-                <p className="text-sm font-medium">{inv.invoiceNumber}</p>
-                <p className="text-xs text-muted-foreground">{inv.period} · Due {formatDate(inv.dueDate)}</p>
+            <div key={inv.id} className="flex items-center justify-between rounded-xl border p-3.5 bg-card/60 gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground font-mono">{inv.invoiceNumber}</p>
+                <p className="text-xs text-muted-foreground">{inv.period || 'Onboarding / Rent'} · Due {formatDate(inv.dueDate)}</p>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium tabular-nums">{formatCurrency(inv.amount)}</span>
+              <div className="flex items-center gap-2.5 shrink-0 flex-wrap justify-end">
+                <span className="text-sm font-bold tabular-nums font-mono">{formatCurrency(inv.amount)}</span>
                 <StatusBadge status={inv.status} tone={statusTone(inv.status)} />
+                {String(inv.status || '').toLowerCase() !== 'paid' && (
+                  <Button
+                    size="sm"
+                    className="h-7 px-2.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 shadow-xs"
+                    disabled={approvePaymentMut.isPending}
+                    onClick={() => setPaymentApprovalTarget({
+                      type: 'SINGLE_INVOICE',
+                      invoiceId: inv.id,
+                      invoiceNumber: inv.invoiceNumber,
+                      amount: Number(inv.amount || 0),
+                    })}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Approve
+                  </Button>
+                )}
               </div>
             </div>
           )) : <p className="text-sm text-muted-foreground">No recent invoices found for this tenant.</p>}
@@ -649,14 +717,31 @@ export default function TenantDetailPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="font-semibold text-xs">Select Document File <span className="text-destructive">*</span></Label>
-                <span className="text-[10px] text-emerald-600 font-medium">Auto-saved to Cloud Storage</span>
+                <span className="text-[10px] text-muted-foreground font-medium">Max: 3MB</span>
               </div>
               <input
                 ref={kycFileInputRef}
                 type="file"
                 accept="image/*,application/pdf"
                 className="hidden"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) {
+                    setSelectedFile(null);
+                    setFileError(null);
+                    return;
+                  }
+                  if (file.size > 3 * 1024 * 1024) {
+                    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+                    setFileError(`Selected file is too large (${sizeMb} MB). Maximum allowed size is 3MB.`);
+                    toast.error(`File size exceeds 3MB limit (${sizeMb} MB). Please choose a smaller file.`);
+                    setSelectedFile(null);
+                    if (kycFileInputRef.current) kycFileInputRef.current.value = '';
+                    return;
+                  }
+                  setFileError(null);
+                  setSelectedFile(file);
+                }}
               />
               {selectedFile ? (
                 <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between gap-3">
@@ -673,7 +758,11 @@ export default function TenantDetailPage() {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSelectedFile(null)}
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setFileError(null);
+                      if (kycFileInputRef.current) kycFileInputRef.current.value = '';
+                    }}
                     className="h-8 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg shrink-0"
                   >
                     Remove
@@ -688,8 +777,14 @@ export default function TenantDetailPage() {
                     <Upload className="h-4.5 w-4.5" />
                   </div>
                   <p className="text-xs font-semibold text-foreground">Click to browse or drop file</p>
-                  <p className="text-[11px] text-muted-foreground">PNG, JPG, PDF up to 10MB</p>
+                  <p className="text-[11px] text-muted-foreground">PNG, JPG, PDF (Max: 3MB)</p>
                 </div>
+              )}
+              {fileError && (
+                <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mt-1.5 flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg border border-rose-200 dark:border-rose-900">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  {fileError}
+                </p>
               )}
             </div>
             <div className="relative flex items-center py-1">
@@ -783,18 +878,6 @@ export default function TenantDetailPage() {
         onConfirm={handleArchive}
         loading={isArchiving}
       />
-
-      {/* Permanent Delete Confirm Dialog */}
-      <ConfirmDialog
-        open={permanentDeleteOpen}
-        onOpenChange={setPermanentDeleteOpen}
-        title="Permanent Delete Resident"
-        variant="destructive"
-        description={`Are you sure you want to PERMANENTLY delete "${tenant.name}"? This action cannot be undone. All invoices, payments, receipts, and tenant accounts will be permanently erased.`}
-        confirmLabel="Permanently Delete"
-        onConfirm={handlePermanentDelete}
-        loading={isDeletingPermanent}
-      />
       {/* Checkout Settlement Modal */}
       {tenant && (
         <CheckoutSettlementModal
@@ -808,6 +891,111 @@ export default function TenantDetailPage() {
           }}
         />
       )}
+
+      {/* HRA Annual Statement Modal */}
+      {tenant && (
+        <HraStatementModal
+          open={hraStatementOpen}
+          onOpenChange={setHraStatementOpen}
+          tenantId={id!}
+          tenantName={tenant.name}
+        />
+      )}
+
+      {/* P2.2: Room Transfer Reconciliation Wizard Modal */}
+      {tenant && (
+        <RoomTransferWizardModal
+          open={transferWizardOpen}
+          onClose={() => setTransferWizardOpen(false)}
+          tenant={tenant}
+        />
+      )}
+
+      {/* Double Verification Payment Approval Modal */}
+      <Dialog open={!!paymentApprovalTarget} onOpenChange={(open) => !open && setPaymentApprovalTarget(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:w-full sm:max-w-md rounded-2xl border-border/80 bg-card/95 backdrop-blur-xl shadow-2xl p-0 overflow-hidden">
+          <DialogHeader className="p-4 sm:p-5 border-b bg-emerald-500/5 dark:bg-emerald-950/20">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-base sm:text-lg font-bold text-foreground">
+                  Confirm Payment Approval
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Sensitive financial action: Please double verify transaction details.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {paymentApprovalTarget && (
+            <div className="p-4 sm:p-5 space-y-4 text-xs sm:text-sm">
+              <div className="p-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold">Financial Ledger & Settlement Warning</p>
+                  <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+                    Confirming will mark the invoice(s) as <strong>PAID</strong>, issue an official payment receipt, and update resident status to <strong>Active</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 rounded-xl p-3.5 bg-muted/40 border">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground">Resident</span>
+                  <span className="font-bold text-foreground">{tenant.name}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-muted-foreground">Room / Bed</span>
+                  <span className="font-medium text-foreground">Room {tenant.roomNumber || '—'} / Bed {tenant.bedNumber || '—'}</span>
+                </div>
+                {paymentApprovalTarget.invoiceNumber ? (
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground">Invoice Reference</span>
+                    <span className="font-mono font-bold text-primary">{paymentApprovalTarget.invoiceNumber}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-muted-foreground">Scope</span>
+                    <span className="font-medium text-primary">All Outstanding Onboarding Invoices</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center text-xs pt-2 border-t font-semibold">
+                  <span className="text-muted-foreground">Settlement Amount</span>
+                  <span className="font-mono text-base font-black text-emerald-600 dark:text-emerald-400">
+                    {formatCurrency(paymentApprovalTarget.amount || 0)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={approvePaymentMut.isPending}
+                  onClick={() => setPaymentApprovalTarget(null)}
+                  className="rounded-xl h-9 text-xs font-semibold px-4"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={approvePaymentMut.isPending}
+                  onClick={() => paymentApprovalTarget && approvePaymentMut.mutate(paymentApprovalTarget)}
+                  className="rounded-xl h-9 text-xs font-bold px-5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md gap-1.5"
+                >
+                  {approvePaymentMut.isPending ? 'Confirming...' : 'Confirm & Mark Paid'}
+                  <Check className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

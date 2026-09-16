@@ -60,8 +60,11 @@ public class Booking {
     @Version
     private Long version = 0L;
 
-    @Transient
+    @Column(name = "booking_code", length = 50)
     private String bookingCode;
+
+    @Column(name = "notes", length = 500)
+    private String notes;
 
     @Transient
     private String tenantName;
@@ -262,4 +265,7 @@ public class Booking {
 
     public Long getVersion() { return version; }
     public void setVersion(Long version) { this.version = version; }
+
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
 }

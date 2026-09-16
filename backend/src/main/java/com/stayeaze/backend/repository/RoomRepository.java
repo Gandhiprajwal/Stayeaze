@@ -20,6 +20,9 @@ public interface RoomRepository extends JpaRepository<Room, UUID> {
 
     @Query("SELECT r FROM Room r LEFT JOIN FETCH r.floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p WHERE r.floor.id = :floorId")
     List<Room> findByFloorId(@Param("floorId") UUID floorId);
+
+    @Query("SELECT r FROM Room r LEFT JOIN FETCH r.floor f LEFT JOIN FETCH f.building b LEFT JOIN FETCH b.property p WHERE p.id = :propertyId")
+    List<Room> findByPropertyId(@Param("propertyId") UUID propertyId);
     Optional<Room> findByIdAndFloor(UUID id, Floor floor);
     Boolean existsByFloorAndRoomNumber(Floor floor, String roomNumber);
 

@@ -1,29 +1,75 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Home, BedDouble, Wifi, Copy, Check, Clock, Phone, AlertCircle,
   Receipt, MessageSquareWarning, UserCheck, ShieldCheck, CreditCard,
-  Sparkles, ShieldAlert, ArrowRight, FileText, CheckCircle2, User, Wallet
+  Sparkles, ShieldAlert, ArrowRight, FileText, CheckCircle2, User, Wallet, Lock,
+  Package, KeyRound, Users, MapPin, Truck, Snowflake, Share2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import api from '@/lib/api';
 import { RefundAccountCard } from './RefundAccountCard';
+import { TenantComplianceGateModal } from './TenantComplianceGateModal';
 
 export default function TenantDashboardPage() {
+  const qc = useQueryClient();
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [copiedWifi, setCopiedWifi] = useState(false);
+  const [copiedOtpId, setCopiedOtpId] = useState<string | null>(null);
+  const [complianceModalOpen, setComplianceModalOpen] = useState(false);
+  const [delegateModalParcel, setDelegateModalParcel] = useState<any | null>(null);
+  const [delegateName, setDelegateName] = useState('');
+  const [delegatePhone, setDelegatePhone] = useState('');
 
   const { data: overview, isLoading, refetch } = useQuery({
     queryKey: ['tenant-overview'],
     queryFn: () => api.get('/tenant-portal/overview').then((r) => r.data),
   });
+
+  const { data: parcels } = useQuery<any[]>({
+    queryKey: ['tenant-parcels'],
+    queryFn: () => api.get('/tenant-portal/parcels').then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : Array.isArray(d?.content) ? d.content : Array.isArray(d?.data) ? d.data : [];
+    }),
+    refetchInterval: 15000,
+  });
+
+  const delegateMutation = useMutation({
+    mutationFn: ({ id, delegateName, delegatePhone }: { id: string; delegateName: string; delegatePhone: string }) =>
+      api.put(`/parcels/${id}/delegate`, { delegateName, delegatePhone }),
+    onSuccess: () => {
+      toast.success('Roommate pickup authorization saved!');
+      qc.invalidateQueries({ queryKey: ['tenant-parcels'] });
+      setDelegateModalParcel(null);
+      setDelegateName('');
+      setDelegatePhone('');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Failed to authorize roommate.');
+    },
+  });
+
+  const copyOtp = (otp: string, parcelId: string) => {
+    navigator.clipboard.writeText(otp);
+    setCopiedOtpId(parcelId);
+    toast.success('Pickup OTP copied to clipboard!');
+    setTimeout(() => setCopiedOtpId(null), 2000);
+  };
+
+  const hasKyc = Boolean(overview?.hasUploadedKyc || overview?.idNumber);
+  const hasAgreement = Boolean(overview?.hasSignedAgreement || overview?.isAgreementAccepted);
+  const isComplianceCompleted = Boolean(overview?.isComplianceCompleted ?? (hasKyc && hasAgreement));
 
   const { data: invoices } = useQuery({
     queryKey: ['tenant-invoices-recent'],
@@ -41,7 +87,21 @@ export default function TenantDashboardPage() {
     }),
   });
 
+  function handleProtectedAction(route: string, featureName: string) {
+    if (!isComplianceCompleted) {
+      toast.info(`Please upload your ID proof and sign your tenancy agreement first to unlock ${featureName}.`);
+      setComplianceModalOpen(true);
+      return;
+    }
+    navigate(route);
+  }
+
   function copyWifiPassword(password: string) {
+    if (!isComplianceCompleted) {
+      toast.info('Please complete your onboarding ID proof & agreement to access Wi-Fi.');
+      setComplianceModalOpen(true);
+      return;
+    }
     navigator.clipboard.writeText(password);
     setCopiedWifi(true);
     setTimeout(() => setCopiedWifi(false), 2000);
@@ -90,7 +150,7 @@ export default function TenantDashboardPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => navigate('/complaints')}
+              onClick={() => handleProtectedAction('/complaints', 'Complaints & Maintenance')}
               className="border-white/30 bg-white/10 hover:bg-white/20 text-white font-semibold backdrop-blur-md rounded-xl h-10 text-xs sm:text-sm flex-1 md:flex-none"
             >
               <MessageSquareWarning className="mr-1.5 h-4 w-4" /> Raise Complaint
@@ -101,6 +161,39 @@ export default function TenantDashboardPage() {
         {/* Decorative background glow */}
         <div className="absolute -right-12 -bottom-12 h-56 w-56 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none"></div>
       </div>
+
+      {/* Mandatory Onboarding & Move-In Compliance Gate Banner */}
+      {!isComplianceCompleted && (
+        <Card className="rounded-2xl border-amber-300 dark:border-amber-800/80 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent p-4 sm:p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  Action Required: Onboarding ID Proof &amp; Lease Activation
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-xl leading-relaxed">
+                  {!hasKyc && !hasAgreement
+                    ? 'Please upload your government identity proof and digitally sign your residency lease agreement to unlock full resident operations.'
+                    : !hasKyc
+                    ? 'Please upload your government identity proof for mandatory residency compliance.'
+                    : 'Please review and digitally sign your tenancy lease agreement.'}
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => setComplianceModalOpen(true)}
+              className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs h-9 px-4 rounded-xl shadow-sm shrink-0 gap-1.5"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Complete Setup Now</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Onboarding & Check-In Activation Stepper Card if onboarding is incomplete */}
       {!overview?.onboardingComplete && (
@@ -308,9 +401,19 @@ export default function TenantDashboardPage() {
             <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <div className="space-y-0.5 font-mono text-xs">
                 <div className="text-[10px] text-muted-foreground uppercase">Password</div>
-                <div className="font-bold text-indigo-600 dark:text-cyan-400">{overview?.wifiPassword || 'Ask Reception'}</div>
+                {isComplianceCompleted ? (
+                  <div className="font-bold text-indigo-600 dark:text-cyan-400">{overview?.wifiPassword || 'Ask Reception'}</div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setComplianceModalOpen(true)}
+                    className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1 hover:underline cursor-pointer"
+                  >
+                    <Lock className="h-3.5 w-3.5" /> Complete ID &amp; Agreement to View
+                  </button>
+                )}
               </div>
-              {overview?.wifiPassword ? (
+              {overview?.wifiPassword && isComplianceCompleted ? (
                 <Button
                   type="button"
                   variant="ghost"
@@ -364,6 +467,118 @@ export default function TenantDashboardPage() {
         </Card>
       )}
 
+      {/* 📦 My Deliveries & Parcels Section */}
+      {parcels && parcels.length > 0 && (
+        <Card className="rounded-2xl shadow-xs border-blue-200 dark:border-blue-900/50 bg-gradient-to-br from-blue-50/30 via-white to-indigo-50/20 dark:from-blue-950/20 dark:via-slate-900 dark:to-indigo-950/20 overflow-hidden">
+          <CardHeader className="p-4 sm:p-5 pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <div>
+                  <CardTitle className="text-base sm:text-lg font-bold">My Deliveries &amp; Packages</CardTitle>
+                  <CardDescription className="text-xs">Incoming couriers logged at the reception desk</CardDescription>
+                </div>
+              </div>
+              <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 font-bold text-xs">
+                {parcels.filter((p: any) => p.status === 'RECEIVED').length} Awaiting Pickup
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {parcels.map((pkg: any) => {
+                const isPending = pkg.status === 'RECEIVED';
+                return (
+                  <div
+                    key={pkg.id}
+                    className={`p-4 rounded-xl border transition-all ${
+                      isPending
+                        ? 'bg-white dark:bg-slate-900/80 border-blue-200 dark:border-blue-800/80 shadow-xs ring-1 ring-blue-500/20'
+                        : 'bg-slate-50/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                            <Truck className="h-4 w-4 text-blue-600" />
+                            {pkg.courierCompany}
+                          </span>
+                          {pkg.isPerishable && (
+                            <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] gap-1 px-1.5 py-0">
+                              <Snowflake className="h-2.5 w-2.5" /> Food
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-indigo-500" />
+                          <span>{pkg.lockerLocation || 'Reception Desk'}</span>
+                          <span>•</span>
+                          <span>{formatDate(pkg.receivedDate)}</span>
+                        </div>
+                      </div>
+
+                      {isPending ? (
+                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-300 text-xs font-semibold">
+                          Ready
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                          Collected
+                        </Badge>
+                      )}
+                    </div>
+
+                    {isPending && (
+                      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="text-[10px] uppercase font-bold text-slate-500">Pickup OTP Code</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-lg font-black tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                              {pkg.pickupOtp || '4892'}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => copyOtp(pkg.pickupOtp || '4892', pkg.id)}
+                              className="h-7 px-2 text-xs"
+                              title="Copy OTP"
+                            >
+                              {copiedOtpId === pkg.id ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {pkg.delegateName ? (
+                            <span className="text-[11px] text-purple-700 font-semibold bg-purple-50 px-2 py-1 rounded-md border border-purple-200">
+                              Proxy: {pkg.delegateName}
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setDelegateModalParcel(pkg);
+                                setDelegateName('');
+                                setDelegatePhone('');
+                              }}
+                              className="text-xs h-8 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                            >
+                              <Users className="mr-1.5 h-3.5 w-3.5" /> Delegate Pickup
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Bottom 2 Columns: Invoices & Recent Complaints */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
         {/* Recent Invoices */}
@@ -406,7 +621,7 @@ export default function TenantDashboardPage() {
               <CardTitle className="text-base sm:text-lg font-bold">Maintenance Requests</CardTitle>
               <CardDescription className="text-xs">Track your open repair tickets</CardDescription>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/complaints')} className="text-xs rounded-xl h-8">
+            <Button variant="ghost" size="sm" onClick={() => handleProtectedAction('/complaints', 'Complaints & Maintenance')} className="text-xs rounded-xl h-8">
               View All <ArrowRight className="ml-1 h-3 w-3" />
             </Button>
           </CardHeader>
@@ -429,6 +644,78 @@ export default function TenantDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mandatory Compliance Modal for Staff-Added Residents */}
+      <TenantComplianceGateModal
+        open={complianceModalOpen}
+        onOpenChange={setComplianceModalOpen}
+        overview={overview}
+      />
+
+      {/* Delegate Pickup to Roommate Modal */}
+      <Dialog open={Boolean(delegateModalParcel)} onOpenChange={(o) => !o && setDelegateModalParcel(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Users className="h-5 w-5 text-purple-600" />
+              Authorize Roommate / Friend Pickup
+            </DialogTitle>
+            <DialogDescription>
+              Authorizing someone else to collect your{' '}
+              <strong>{delegateModalParcel?.courierCompany}</strong> parcel from reception.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="bg-purple-50/60 border border-purple-200 rounded-lg p-3 text-xs text-purple-900">
+              💡 Reception will ask your roommate for their name and your 4-digit Pickup OTP:{' '}
+              <strong className="font-mono text-sm font-bold text-indigo-700">
+                {delegateModalParcel?.pickupOtp || '4892'}
+              </strong>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Roommate / Delegate Full Name <span className="text-rose-500">*</span></Label>
+              <Input
+                placeholder="e.g. Rohan Sharma"
+                value={delegateName}
+                onChange={(e) => setDelegateName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Roommate Mobile Number (Optional)</Label>
+              <Input
+                placeholder="e.g. 9876543210"
+                value={delegatePhone}
+                onChange={(e) => setDelegatePhone(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDelegateModalParcel(null)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                if (!delegateName.trim()) {
+                  toast.error('Please enter roommate name.');
+                  return;
+                }
+                delegateMutation.mutate({
+                  id: delegateModalParcel.id,
+                  delegateName: delegateName.trim(),
+                  delegatePhone: delegatePhone.trim(),
+                });
+              }}
+              disabled={delegateMutation.isPending || !delegateName.trim()}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-medium gap-1.5"
+            >
+              <Check className="h-4 w-4" />
+              Save Authorization
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

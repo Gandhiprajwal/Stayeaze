@@ -45,6 +45,12 @@ public class BookingController {
     private CheckInRepository checkInRepository;
 
     @Autowired
+    private InvoiceRepository invoiceRepository;
+
+    @Autowired
+    private PaymentRepository paymentRepository;
+
+    @Autowired
     private OrganizationBillingProfileRepository organizationBillingProfileRepository;
 
     @Autowired
@@ -55,6 +61,9 @@ public class BookingController {
 
     @Autowired
     private com.stayeaze.backend.services.AccountUniquenessService accountUniquenessService;
+
+    @Autowired
+    private com.stayeaze.backend.services.InvoiceSequenceService invoiceSequenceService;
 
     @Autowired
     private com.stayeaze.backend.security.SecurityUtils securityUtils;
@@ -69,7 +78,7 @@ public class BookingController {
     private Map<String, Object> formatBooking(Booking b) {
         Map<String, Object> map = new HashMap<>();
         map.put("id", b.getId());
-        map.put("bookingCode", b.getBookingCode() != null ? b.getBookingCode() : ("BK-" + b.getId().toString().substring(0, 4).toUpperCase()));
+        map.put("bookingCode", b.getBookingCode() != null ? b.getBookingCode() : ("BKG/PROP/2026-27/" + b.getId().toString().substring(0, 4).toUpperCase()));
         
         String tName = b.getTenantName();
         String tEmail = b.getTenantEmail();
@@ -132,6 +141,7 @@ public class BookingController {
 
         String src = b.getSource();
         map.put("source", src != null ? src.toLowerCase() : "direct");
+        map.put("notes", b.getNotes() != null ? b.getNotes() : "");
         map.put("createdAt", b.getCreatedAt());
 
         return map;
@@ -316,8 +326,19 @@ public class BookingController {
                 bed = bedRepository.findById(request.getBedId()).orElse(null);
             }
 
+            Property prop = null;
+            if (request.getPropertyId() != null) {
+                prop = propertyRepository.findById(request.getPropertyId()).orElse(null);
+            } else if (tenant != null && tenant.getPropertyId() != null) {
+                prop = propertyRepository.findById(tenant.getPropertyId()).orElse(null);
+            }
+
             Booking booking = new Booking(tenant, bed, checkin, rent, deposit);
-            if (request.getBookingCode() != null) booking.setBookingCode(request.getBookingCode());
+            String bCode = request.getBookingCode();
+            if (bCode == null || bCode.isBlank()) {
+                bCode = invoiceSequenceService.nextBookingCode(prop, organization);
+            }
+            booking.setBookingCode(bCode);
             if (request.getTenantName() != null) booking.setTenantName(request.getTenantName());
             if (request.getTenantEmail() != null) booking.setTenantEmail(request.getTenantEmail());
             if (request.getTenantPhone() != null) booking.setTenantPhone(request.getTenantPhone());
@@ -327,6 +348,7 @@ public class BookingController {
             booking.setDurationMonths(duration);
             if (request.getStatus() != null) booking.setStatus(request.getStatus().toUpperCase());
             if (request.getSource() != null) booking.setSource(request.getSource());
+            if (request.getNotes() != null) booking.setNotes(request.getNotes());
 
             if (request.getAdvanceAmount() != null) booking.setAdvanceAmount(request.getAdvanceAmount());
             if (request.getPaymentMethod() != null) booking.setPaymentMethod(request.getPaymentMethod());
@@ -370,11 +392,45 @@ public class BookingController {
                     checkIn.setCheckInDate(saved.getCheckinDate() != null ? saved.getCheckinDate() : java.time.LocalDate.now());
                     checkIn.setStatus("pending");
                     checkIn.setBookingId(saved.getId());
-                    checkIn.setCode("CI-" + (System.currentTimeMillis() % 100000000L));
+                    checkIn.setCode(invoiceSequenceService.nextCheckInCode(prop, organization));
                     checkInRepository.save(checkIn);
                 }
             } catch(Exception ex) {
                 ex.printStackTrace();
+            }
+
+            // Auto-create Advance Invoice & Payment Record if paid
+            try {
+                if ("PAID".equalsIgnoreCase(saved.getAdvancePaymentStatus()) && saved.getAdvanceAmount() != null && saved.getAdvanceAmount().compareTo(java.math.BigDecimal.ZERO) > 0 && tenant != null) {
+                    Invoice advInv = new Invoice();
+                    advInv.setTenant(tenant);
+                    advInv.setInvoiceNumber("ADV-" + (saved.getBookingCode() != null ? saved.getBookingCode().replace("BK-", "") : (System.currentTimeMillis() % 1000000L)));
+                    advInv.setAmountDue(saved.getAdvanceAmount());
+                    advInv.setAmountPaid(saved.getAdvanceAmount());
+                    advInv.setStatus("PAID");
+                    advInv.setIssueDate(java.time.LocalDate.now());
+                    advInv.setDueDate(java.time.LocalDate.now());
+                    advInv.setPaymentMethod(saved.getPaymentMethod() != null ? saved.getPaymentMethod().toUpperCase() : "CASH");
+                    advInv.setRazorpayPaymentId(saved.getRazorpayPaymentId());
+                    advInv.setRazorpayOrderId(saved.getRazorpayOrderId());
+                    advInv.setPaymentReference(saved.getRazorpayPaymentId() != null ? saved.getRazorpayPaymentId() : ("ADV-REC-" + System.currentTimeMillis()));
+
+                    InvoiceItem advItem = new InvoiceItem(advInv, "Advance Room Reservation Deposit (" + saved.getBookingCode() + ")", saved.getAdvanceAmount());
+                    advInv.getItems().add(advItem);
+                    Invoice savedAdvInv = invoiceRepository.save(advInv);
+
+                    Payment advPayment = new Payment();
+                    advPayment.setInvoice(savedAdvInv);
+                    advPayment.setAmount(saved.getAdvanceAmount());
+                    advPayment.setPaymentDate(java.time.OffsetDateTime.now());
+                    advPayment.setPaymentMethod(saved.getPaymentMethod() != null ? saved.getPaymentMethod().toUpperCase() : "CASH");
+                    advPayment.setReceiptNumber("REC-" + saved.getBookingCode());
+                    advPayment.setTransactionReference(saved.getRazorpayPaymentId() != null ? saved.getRazorpayPaymentId() : ("BK-OFFLINE-" + System.currentTimeMillis()));
+                    advPayment.setStatus("COMPLETED");
+                    paymentRepository.save(advPayment);
+                }
+            } catch (Exception advEx) {
+                System.err.println("Failed to auto-create Advance Booking Invoice/Payment: " + advEx.getMessage());
             }
 
             // Dispatch Advance Deposit Receipt Email if paid
@@ -415,12 +471,32 @@ public class BookingController {
     }
 
     @GetMapping("/bookings/{id}/advance-receipt")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('TENANT')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('TENANT') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> getAdvanceReceipt(@PathVariable UUID id) {
         Organization organization = getLoggedUserOrg();
         Booking booking = bookingRepository.findById(id).orElse(null);
         if (booking == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Booking record not found."));
+        }
+
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isSuperAdmin = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_SUPER_ADMIN"));
+        boolean isTenant = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_TENANT"));
+
+        if (!isSuperAdmin) {
+            if (isTenant && auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
+                boolean matchesTenant = (booking.getTenant() != null && booking.getTenant().getEmail() != null && userDetails.getEmail() != null && booking.getTenant().getEmail().equalsIgnoreCase(userDetails.getEmail()))
+                        || (booking.getTenantEmail() != null && userDetails.getEmail() != null && booking.getTenantEmail().equalsIgnoreCase(userDetails.getEmail()));
+                if (!matchesTenant) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Unauthorized access to advance receipt."));
+                }
+            } else {
+                UUID bookingOrgId = (booking.getTenant() != null && booking.getTenant().getOrganization() != null)
+                        ? booking.getTenant().getOrganization().getId() : null;
+                if (organization != null && bookingOrgId != null && !organization.getId().equals(bookingOrgId)) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new MessageResponse("Unauthorized access to advance receipt."));
+                }
+            }
         }
 
         String propName = "StayEaze Property";
@@ -470,6 +546,7 @@ public class BookingController {
         if (request.getBedNumber() != null) booking.setBedNumber(request.getBedNumber());
         if (request.getDurationMonths() != null) booking.setDurationMonths(request.getDurationMonths());
         if (request.getSource() != null) booking.setSource(request.getSource());
+        if (request.getNotes() != null) booking.setNotes(request.getNotes());
 
         // Update linked tenant entity
         Tenant tenant = booking.getTenant();

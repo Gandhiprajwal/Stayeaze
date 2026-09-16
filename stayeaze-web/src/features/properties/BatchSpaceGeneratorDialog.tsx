@@ -58,7 +58,7 @@ export function BatchSpaceGeneratorDialog({
   const planName = subDetails?.planName || 'Active SaaS Plan';
   const usage = (subDetails as any)?.usage;
   const currentBeds = subDetails?.totalBeds ?? usage?.currentBeds ?? usage?.totalBeds ?? 0;
-  const maxBeds = subDetails?.maxBeds ?? usage?.maxBeds ?? 30;
+  const maxBeds = subDetails?.maxBeds ?? usage?.maxBeds ?? 35;
   const isUnlimitedBeds = maxBeds >= 99999;
   const availableQuota = isUnlimitedBeds ? 99999 : Math.max(0, maxBeds - currentBeds);
 

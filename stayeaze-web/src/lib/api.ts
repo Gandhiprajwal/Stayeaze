@@ -198,9 +198,13 @@ api.interceptors.response.use(
 
     const message =
       error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      (typeof error?.response?.data === 'string' ? error.response.data : null) ||
       error?.message ||
       'Something went wrong. Please try again.';
-    return Promise.reject(new Error(message));
+    const customError = new Error(message);
+    (customError as any).response = error?.response;
+    return Promise.reject(customError);
   }
 );
 

@@ -36,13 +36,13 @@ public class SubscriptionController {
     private SaaSPlanRepository saasPlanRepository;
 
     @Autowired
-    private SaaSInvoiceRepository invoiceRepository;
-
-    @Autowired
     private com.stayeaze.backend.services.SaaSInvoiceService saasInvoiceService;
 
     @Autowired
     private SystemIntegrationSettingsRepository integrationSettingsRepository;
+
+    @Autowired(required = false)
+    private com.stayeaze.backend.security.SubscriptionLockoutFilter subscriptionLockoutFilter;
 
     private Organization getLoggedUserOrg() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -351,7 +351,6 @@ public class SubscriptionController {
     @PostMapping("/deactivate-properties")
     @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> deactivateProperties(@RequestBody Map<String, Object> request) {
-        Organization org = getLoggedUserOrg();
         Object rawIds = request.get("propertyIds");
         if (rawIds == null) {
             return ResponseEntity.badRequest().body(new MessageResponse("No property IDs provided."));
@@ -655,6 +654,9 @@ public class SubscriptionController {
         profile.setUpdatedAt(OffsetDateTime.now());
 
         OrganizationBillingProfile saved = profileRepository.save(profile);
+        if (subscriptionLockoutFilter != null && org != null && org.getId() != null) {
+            subscriptionLockoutFilter.evictCache(org.getId());
+        }
 
         // Auto-generate GST tax invoice for plan switch / upgrade if payment occurred
         if (!p.isDowngrade && p.netPayable > 0) {

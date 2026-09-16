@@ -71,9 +71,6 @@ public class AdminOwnerTenantAndBookingIntegrationTest {
     @Autowired
     private BookingRepository bookingRepository;
 
-    @Autowired
-    private CheckInRepository checkInRepository;
-
     private Organization testOrg;
     private User ownerUser;
     private UsernamePasswordAuthenticationToken auth;
@@ -91,7 +88,7 @@ public class AdminOwnerTenantAndBookingIntegrationTest {
         testOrg = organizationRepository.saveAndFlush(testOrg);
 
         String email = "owner_tb_" + System.currentTimeMillis() + "@stayeaze.com";
-        String mobile = "98" + (System.currentTimeMillis() % 100000000L);
+        String mobile = "98" + String.format("%08d", Math.abs(System.currentTimeMillis() % 100000000L));
         ownerUser = new User(testOrg, email, "password123", mobile);
         ownerUser.setFirstName("Anil Kapoor");
         ownerUser.setRoles(new HashSet<>(Collections.singleton(ownerRole)));
@@ -148,7 +145,7 @@ public class AdminOwnerTenantAndBookingIntegrationTest {
         req.setFirstName("Rohan");
         req.setLastName("Verma");
         req.setEmail("rohan.v" + System.currentTimeMillis() + "@test.com");
-        req.setMobile("91" + (System.currentTimeMillis() % 100000000L));
+        req.setMobile("91" + String.format("%08d", Math.abs(System.currentTimeMillis() % 100000000L)));
         req.setPropertyId(testProperty.getId());
         req.setRoomNumber("201");
         req.setBedNumber("B-201");

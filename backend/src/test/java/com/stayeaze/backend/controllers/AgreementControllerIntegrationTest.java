@@ -74,7 +74,7 @@ public class AgreementControllerIntegrationTest {
         testOrg = organizationRepository.saveAndFlush(testOrg);
 
         String email = "agree_owner_" + System.currentTimeMillis() + "@stayeaze.com";
-        ownerUser = new User(testOrg, email, "password123", "80" + (System.currentTimeMillis() % 100000000L));
+        ownerUser = new User(testOrg, email, "password123", "80" + String.format("%08d", Math.abs(System.currentTimeMillis() % 100000000L)));
         ownerUser.setFirstName("Legal Compliance");
         ownerUser.setRoles(new HashSet<>(Collections.singleton(ownerRole)));
         ownerUser = userRepository.saveAndFlush(ownerUser);
@@ -136,15 +136,34 @@ public class AgreementControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("PUT /tenants/{tenantId}/agreements/{id}/sign - Sign digital agreement")
+    @DisplayName("PUT /tenants/{tenantId}/agreements/{id}/sign - Staff forbidden & tenant allowed to sign agreement")
     void testSignAgreement() throws Exception {
         Agreement agreement = new Agreement(testTenant, "Terms", LocalDate.now(), LocalDate.now().plusMonths(11));
         agreement.setStatus("DRAFT");
         agreement = agreementRepository.saveAndFlush(agreement);
 
+        // 1. Staff (Owner) attempt must be Forbidden (403)
+        mockMvc.perform(put("/api/v1/tenants/" + testTenant.getId() + "/agreements/" + agreement.getId() + "/sign")
+                        .param("signatureUrl", "https://cdn.stayeaze.com/signatures/owner_forged.png")
+                        .with(authentication(auth))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+
+        // 2. Tenant profile with ROLE_TENANT
+        Role tenantRole = roleRepository.findByName("TENANT")
+                .orElseGet(() -> roleRepository.save(new Role("TENANT", "{}")));
+        User tenantUser = new User(testOrg, testTenant.getEmail(), "password123", testTenant.getMobile());
+        tenantUser.setRoles(Collections.singleton(tenantRole));
+        tenantUser = userRepository.saveAndFlush(tenantUser);
+
+        UserDetailsImpl tenantDetails = UserDetailsImpl.build(tenantUser);
+        UsernamePasswordAuthenticationToken tenantAuth = new UsernamePasswordAuthenticationToken(
+                tenantDetails, null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_TENANT")));
+
+        // 3. Resident e-sign must succeed (200 OK)
         mockMvc.perform(put("/api/v1/tenants/" + testTenant.getId() + "/agreements/" + agreement.getId() + "/sign")
                         .param("signatureUrl", "https://cdn.stayeaze.com/signatures/hardik.png")
-                        .with(authentication(auth))
+                        .with(authentication(tenantAuth))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status", is("SIGNED")))

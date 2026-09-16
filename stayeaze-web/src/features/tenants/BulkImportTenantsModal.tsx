@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import api from '@/lib/api';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, getTodayIsoDate } from '@/lib/format';
 
 interface BulkImportTenantsModalProps {
   open: boolean;
@@ -113,7 +113,7 @@ Amit Kumar,amit.kumar@example.com,9876543230,201,B1,7500,15000,2023-11-10,Design
       const bedNumber = rowObj['bednumber'] || rowObj['bed'] || 'B1';
       const rent = parseFloat(rowObj['rent'] || rowObj['monthlyrent'] || '0') || 0;
       const deposit = parseFloat(rowObj['deposit'] || rowObj['securitydeposit'] || '0') || 0;
-      const leaseStart = rowObj['checkindate'] || rowObj['leasestart'] || rowObj['startdate'] || new Date().toISOString().slice(0, 10);
+      const leaseStart = rowObj['checkindate'] || rowObj['leasestart'] || rowObj['startdate'] || getTodayIsoDate();
       const occupation = rowObj['occupation'] || rowObj['profession'] || '';
       const idType = (rowObj['idtype'] || 'aadhaar').toLowerCase();
       const idNumber = rowObj['idnumber'] || rowObj['id'] || '';

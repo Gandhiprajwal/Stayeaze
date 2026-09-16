@@ -20,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
@@ -56,7 +57,19 @@ public class ComplaintController {
     private com.stayeaze.backend.services.WebSocketNotificationService webSocketNotificationService;
 
     @Autowired
+    private com.stayeaze.backend.repository.InvoiceRepository invoiceRepository;
+
+    @Autowired
+    private com.stayeaze.backend.services.InvoiceSequenceService invoiceSequenceService;
+
+    @Autowired
+    private com.stayeaze.backend.repository.BookingRepository bookingRepository;
+
+    @Autowired
     private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
+    @Autowired
+    private com.stayeaze.backend.services.ComplaintSlaService complaintSlaService;
 
     private Organization getLoggedUserOrg() {
         Organization org = securityUtils.getCurrentOrganization();
@@ -97,6 +110,16 @@ public class ComplaintController {
             complaint.setRoom(room);
         }
 
+        Property prop = null;
+        if (tenant.getPropertyId() != null) {
+            prop = propertyRepository.findById(tenant.getPropertyId()).orElse(null);
+        }
+        String ticketNum = invoiceSequenceService.nextComplaintTicketNumber(prop, tenant.getOrganization());
+        complaint.setTicketNumber(ticketNum);
+
+        // Auto-calculate SLA Due date
+        complaint.setSlaDueAt(complaintSlaService.calculateSlaDeadline(request.getCategory(), complaint.getPriority(), OffsetDateTime.now()));
+
         Complaint saved = complaintRepository.save(complaint);
         broadcastComplaintCreated(saved);
 
@@ -110,7 +133,7 @@ public class ComplaintController {
                 emailService.sendComplaintFiledEmail(
                         tenant.getEmail(),
                         tenant.getName(),
-                        "TKT-" + (saved.getId().toString().substring(0, 6)).toUpperCase(),
+                        saved.getTicketNumber(),
                         saved.getCategory(),
                         saved.getDescription(),
                         pName
@@ -301,7 +324,7 @@ public class ComplaintController {
                     emailService.sendComplaintResolvedEmail(
                             tenant.getEmail(),
                             tenant.getName(),
-                            "TKT-" + (complaint.getId().toString().substring(0, 6)).toUpperCase(),
+                            complaint.getTicketNumber(),
                             complaint.getCategory(),
                             pName
                     );
@@ -358,7 +381,8 @@ public class ComplaintController {
         List<Tenant> tenants = tenantRepository.findByOrganization(organization);
         if (tenantName != null && !tenantName.isBlank()) {
             tenant = tenants.stream()
-                    .filter(t -> (t.getFirstName() + " " + t.getLastName()).equalsIgnoreCase(tenantName.trim()))
+                    .filter(t -> (t.getName() != null && t.getName().equalsIgnoreCase(tenantName.trim())) ||
+                                 (t.getFirstName() != null && t.getFirstName().equalsIgnoreCase(tenantName.trim())))
                     .findFirst().orElse(null);
         }
         if (tenant == null && !tenants.isEmpty()) {
@@ -373,6 +397,14 @@ public class ComplaintController {
         complaint.setStatus(status);
         complaint.setPriority(priority);
         if (assignedStaff != null) complaint.setAssignedStaff(assignedStaff);
+
+        Property prop = null;
+        if (tenant.getPropertyId() != null) {
+            prop = propertyRepository.findById(tenant.getPropertyId()).orElse(null);
+        }
+        String ticketNum = invoiceSequenceService.nextComplaintTicketNumber(prop, organization);
+        complaint.setTicketNumber(ticketNum);
+
         Complaint saved = complaintRepository.save(complaint);
         broadcastComplaintCreated(saved);
         return new ResponseEntity<>(ComplaintDTO.fromEntity(saved), HttpStatus.CREATED);
@@ -463,5 +495,137 @@ public class ComplaintController {
                 });
             }
         } catch (Exception ignored) {}
+    }
+
+    @PostMapping("/complaints/{id}/chargeback")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> chargebackComplaint(@PathVariable UUID id, @RequestBody java.util.Map<String, Object> body) {
+        Complaint complaint = complaintRepository.findById(id).orElse(null);
+        if (complaint == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Complaint ticket not found."));
+        }
+
+        if (body == null || !body.containsKey("amount") || body.get("amount") == null) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Chargeback amount is required."));
+        }
+
+        double totalAmount = Double.parseDouble(body.get("amount").toString());
+        if (totalAmount <= 0) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Chargeback amount must be greater than 0."));
+        }
+
+        String chargeMode = body.containsKey("chargeMode") && body.get("chargeMode") != null
+                ? body.get("chargeMode").toString().toUpperCase().trim() : "INDIVIDUAL";
+        String remarks = body.containsKey("remarks") && body.get("remarks") != null
+                ? body.get("remarks").toString().trim() : "Room maintenance & damage chargeback";
+
+        List<Tenant> targetTenants = new java.util.ArrayList<>();
+        if ("SPLIT_ROOMMATES".equalsIgnoreCase(chargeMode) && complaint.getRoom() != null) {
+            Room room = complaint.getRoom();
+            UUID propId = complaint.getTenant() != null ? complaint.getTenant().getPropertyId() : null;
+            if (propId == null && room.getFloor() != null && room.getFloor().getBuilding() != null && room.getFloor().getBuilding().getProperty() != null) {
+                propId = room.getFloor().getBuilding().getProperty().getId();
+            }
+            try {
+                List<Tenant> occupants = bookingRepository.findActiveTenantsByRoomId(room.getId());
+                if (occupants != null) {
+                    targetTenants.addAll(occupants.stream().filter(t -> "ACTIVE".equalsIgnoreCase(t.getStatus())).collect(Collectors.toList()));
+                }
+            } catch (Exception ignored) {}
+
+            if (targetTenants.isEmpty() && propId != null && room.getRoomNumber() != null) {
+                try {
+                    targetTenants = tenantRepository.findByPropertyIdAndRoomNumberNative(propId, room.getRoomNumber().trim()).stream()
+                            .filter(t -> "ACTIVE".equalsIgnoreCase(t.getStatus()))
+                            .collect(Collectors.toList());
+                } catch (Exception ignored) {}
+            }
+        }
+
+        if (targetTenants.isEmpty()) {
+            if (complaint.getTenant() != null) {
+                targetTenants.add(complaint.getTenant());
+            } else {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: No target resident found to apply chargeback."));
+            }
+        }
+
+        double perTenantAmount = Math.round((totalAmount / targetTenants.size()) * 100.0) / 100.0;
+        List<Invoice> generatedInvoices = new java.util.ArrayList<>();
+
+        for (Tenant target : targetTenants) {
+            String invNum = invoiceSequenceService.nextRentalInvoiceNumber(target);
+            if (invNum == null || invNum.isBlank()) {
+                invNum = "DMG-" + LocalDate.now().getYear() + String.format("%02d", LocalDate.now().getMonthValue()) + "-" + target.getId().toString().substring(0, 6).toUpperCase();
+            }
+
+            Invoice inv = new Invoice();
+            inv.setTenant(target);
+            inv.setInvoiceNumber(invNum);
+            inv.setIssueDate(LocalDate.now());
+            inv.setDueDate(LocalDate.now().plusDays(3));
+            inv.setAmountDue(java.math.BigDecimal.valueOf(perTenantAmount));
+            inv.setAmountPaid(java.math.BigDecimal.ZERO);
+            inv.setStatus("UNPAID");
+            inv.setPaymentMethod("CASH");
+
+            String lineDesc = String.format("Maintenance Chargeback (%s): %s [Ref: %s]",
+                    chargeMode.replace("_", " "), remarks, complaint.getTicketNumber() != null ? complaint.getTicketNumber() : "TKT-" + complaint.getId().toString().substring(0, 6).toUpperCase());
+            InvoiceItem item = new InvoiceItem(inv, lineDesc, java.math.BigDecimal.valueOf(perTenantAmount));
+            inv.getItems().add(item);
+            generatedInvoices.add(inv);
+        }
+
+        invoiceRepository.saveAll(generatedInvoices);
+
+        complaint.setStatus("RESOLVED");
+        complaint.setResolvedAt(OffsetDateTime.now());
+        complaint.setResolutionNotes(String.format("Resolved with ₹%.2f chargeback billed to %d resident(s) (%s). Remarks: %s",
+                totalAmount, targetTenants.size(), chargeMode, remarks));
+        Complaint updated = complaintRepository.save(complaint);
+        broadcastComplaintUpdated(updated);
+
+        java.util.Map<String, Object> resp = new java.util.HashMap<>();
+        resp.put("success", true);
+        resp.put("message", String.format("Complaint resolved! Invoiced ₹%.2f across %d resident(s).", totalAmount, targetTenants.size()));
+        resp.put("invoicesGenerated", generatedInvoices.size());
+        resp.put("complaint", ComplaintDTO.fromEntity(updated));
+        return ResponseEntity.ok(resp);
+    }
+
+    @PostMapping({"/complaints/{id}/escalate", "/tenants/{tenantId}/complaints/{id}/escalate"})
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> escalateComplaint(
+            @PathVariable UUID id,
+            @PathVariable(required = false) UUID tenantId,
+            @RequestBody(required = false) java.util.Map<String, String> body) {
+        String reason = (body != null && body.containsKey("reason")) ? body.get("reason") : "Direct Escalation by User/Staff";
+        String actor = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        try {
+            Complaint escalated = complaintSlaService.escalateComplaint(id, reason, actor);
+            return ResponseEntity.ok(ComplaintDTO.fromEntity(escalated));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponse("Error escalating ticket: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/complaints/sla-metrics")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<?> getSlaMetrics() {
+        Organization org = null;
+        try {
+            org = getLoggedUserOrg();
+        } catch (Exception ignored) {}
+        return ResponseEntity.ok(complaintSlaService.getSlaMetrics(org));
+    }
+
+    @PostMapping("/complaints/check-sla-breaches")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    public ResponseEntity<?> triggerSlaBreachCheck() {
+        int breached = complaintSlaService.checkAndEscalateBreachedComplaints();
+        return ResponseEntity.ok(java.util.Map.of("message", "SLA breach sweep completed successfully.", "newlyBreachedCount", breached));
     }
 }

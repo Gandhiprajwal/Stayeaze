@@ -10,8 +10,8 @@ public class GstinValidator implements ConstraintValidator<ValidGstin, String> {
 
     @Override
     public boolean isValid(String value, ConstraintValidatorContext context) {
-        if (value == null || value.isBlank()) {
-            return true; // Use @NotBlank separately if mandatory
+        if (value == null || value.trim().isEmpty() || "NONE".equalsIgnoreCase(value.trim()) || "NA".equalsIgnoreCase(value.trim()) || "NOT_APPLICABLE".equalsIgnoreCase(value.trim())) {
+            return true; // Optional field: accept null or empty/NA values
         }
 
         String cleanGstin = value.trim().toUpperCase();

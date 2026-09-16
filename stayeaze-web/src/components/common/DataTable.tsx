@@ -183,7 +183,7 @@ function getSortableValue(item: Record<string, unknown>, key: string): string | 
   }
   if (key === 'floorId' || key === 'floor') {
     const flr = item.floor as Record<string, unknown> | undefined;
-    return (flr?.name as string) ?? (flr?.number ? `Level ${flr.number}` : '') ?? (item.floorId as string) ?? '';
+    return (flr?.name as string) ?? (flr?.number ? `Level ${flr.number}` : undefined) ?? (item.floorId as string) ?? '';
   }
   if (key === 'roomId' || key === 'room') {
     const rm = item.room as Record<string, unknown> | undefined;
@@ -565,7 +565,7 @@ export function DataTable<T extends { id: string }>({
               placeholder={searchPlaceholder}
               value={params.search ?? ''}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 pr-8 h-9 rounded-lg bg-card/90 border-border/80 text-xs sm:text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="pl-10 pr-8 h-9 rounded-lg bg-card/90 border-border/80 text-xs sm:text-sm shadow-2xs focus-visible:ring-2 focus-visible:ring-primary/40 w-full"
             />
             {params.search && (
               <button
@@ -607,7 +607,7 @@ export function DataTable<T extends { id: string }>({
                       <CalendarRange className="h-4 w-4" /> {dateRangeActive ? 'Date: Filtered' : dateRangeFilter.label}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-76 rounded-2xl border-border/80 bg-popover/95 backdrop-blur-xl p-4 shadow-2xl" align="start">
+                  <PopoverContent className="w-[min(calc(100vw-2rem),19rem)] rounded-2xl border-border/80 bg-popover/95 backdrop-blur-xl p-4 shadow-2xl" align="start">
                     <div className="space-y-3.5">
                       <p className="text-sm font-semibold text-foreground">{dateRangeFilter.label}</p>
                       <div className="grid grid-cols-2 gap-2">
@@ -634,13 +634,15 @@ export function DataTable<T extends { id: string }>({
 
         {/* Action Tools (Export & Columns) */}
         <div className="flex items-center gap-2 justify-end shrink-0">
-          <Button variant="outline" onClick={exportData} disabled={!filteredItems.length} className="h-9 rounded-lg text-xs sm:text-sm font-medium gap-2 px-3 shadow-2xs">
-            <Download className="h-4 w-4" /> Export
+          <Button variant="outline" onClick={exportData} disabled={!filteredItems.length} className="h-9 rounded-lg text-xs sm:text-sm font-medium gap-1.5 px-2.5 sm:px-3 shadow-2xs">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-9 rounded-lg text-xs sm:text-sm font-medium gap-2 px-3 shadow-2xs">
-                <Settings2 className="h-4 w-4" /> Columns
+              <Button variant="outline" className="h-9 rounded-lg text-xs sm:text-sm font-medium gap-1.5 px-2.5 sm:px-3 shadow-2xs">
+                <Settings2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Columns</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52 rounded-2xl border-border/80 bg-popover/95 backdrop-blur-xl shadow-2xl text-sm p-2">

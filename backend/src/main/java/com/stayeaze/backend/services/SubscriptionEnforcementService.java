@@ -9,8 +9,10 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import com.stayeaze.backend.services.interfaces.ISubscriptionEnforcementService;
+
 @Service
-public class SubscriptionEnforcementService {
+public class SubscriptionEnforcementService implements ISubscriptionEnforcementService {
 
     public static final int GRACE_PERIOD_DAYS = 3;
 
@@ -193,7 +195,37 @@ public class SubscriptionEnforcementService {
 
         SaaSPlan plan = getActiveSaaSPlan(organization);
         if (plan != null && Boolean.FALSE.equals(plan.getAllowWhatsApp())) {
-            throw new IllegalArgumentException("Feature Restricted: Automated WhatsApp notifications are only available on the Professional & Enterprise subscription plans. Please upgrade to enable automated WhatsApp alerts.");
+            throw new IllegalArgumentException("Feature Restricted: Automated WhatsApp notifications are only available on the Growth & Enterprise subscription plans. Please upgrade to enable automated WhatsApp alerts.");
+        }
+    }
+
+    public void validateBulkRentRunAccess(Organization organization) {
+        if (organization == null) return;
+        validateOperationalAccess(organization);
+
+        SaaSPlan plan = getActiveSaaSPlan(organization);
+        if (plan != null && "STARTER".equalsIgnoreCase(plan.getPlanKey())) {
+            throw new IllegalArgumentException("Feature Restricted: 1-Click Bulk Monthly Rent Runs are available exclusively on Growth & Enterprise plans. Please upgrade your plan or generate invoices individually.");
+        }
+    }
+
+    public void validateCustomBrandingAccess(Organization organization) {
+        if (organization == null) return;
+        validateOperationalAccess(organization);
+
+        SaaSPlan plan = getActiveSaaSPlan(organization);
+        if (plan != null && !Boolean.TRUE.equals(plan.getAllowCustomBranding())) {
+            throw new IllegalArgumentException("Feature Restricted: White-label custom branding (custom logo, favicon, portal domain) is an Enterprise exclusive feature. Please upgrade to Enterprise Living Chain to enable custom branding.");
+        }
+    }
+
+    public void validateTaxReportsAccess(Organization organization) {
+        if (organization == null) return;
+        validateOperationalAccess(organization);
+
+        SaaSPlan plan = getActiveSaaSPlan(organization);
+        if (plan != null && "STARTER".equalsIgnoreCase(plan.getPlanKey())) {
+            throw new IllegalArgumentException("Feature Restricted: Automated GST-1 Tax exports and HRA Rent Statements are available on Growth & Enterprise tiers. Please upgrade your subscription plan to access tax exports.");
         }
     }
 }

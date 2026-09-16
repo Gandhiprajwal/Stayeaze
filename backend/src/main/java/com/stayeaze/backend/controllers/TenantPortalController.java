@@ -14,9 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -33,6 +31,9 @@ public class TenantPortalController {
     private PropertyRepository propertyRepository;
 
     @Autowired
+    private AgreementRepository agreementRepository;
+
+    @Autowired
     private RoomRepository roomRepository;
 
     @Autowired
@@ -40,9 +41,6 @@ public class TenantPortalController {
 
     @Autowired
     private InvoiceRepository invoiceRepository;
-
-    @Autowired
-    private PaymentRepository paymentRepository;
 
     @Autowired
     private ComplaintRepository complaintRepository;
@@ -58,6 +56,9 @@ public class TenantPortalController {
 
     @Autowired
     private MeterReadingRepository meterReadingRepository;
+
+    @Autowired
+    private ParcelRepository parcelRepository;
 
     @Autowired
     private OrganizationBillingProfileRepository organizationBillingProfileRepository;
@@ -116,6 +117,7 @@ public class TenantPortalController {
     @GetMapping("/overview")
     @PreAuthorize("hasAnyRole('TENANT', 'ADMIN', 'PROPERTY_MANAGER')")
     @Transactional(readOnly = true)
+    @SuppressWarnings("unchecked")
     public ResponseEntity<?> getTenantOverview() {
         Tenant tenant = getAuthenticatedTenant();
         if (tenant == null) {
@@ -491,12 +493,30 @@ public class TenantPortalController {
         response.put("hasRazorpay", hasRazorpay);
         response.put("bankDetails", bankDetails);
 
+        List<TenantDocument> tenantDocs = tenantDocumentRepository.findByTenant(tenant);
+        boolean hasUploadedKyc = (tenantDocs != null && !tenantDocs.isEmpty())
+                || (tenant.getIdNumber() != null && !tenant.getIdNumber().isBlank());
+        List<Agreement> agreements = agreementRepository.findByTenant(tenant);
+        boolean hasSignedAgreement = Boolean.TRUE.equals(tenant.getIsAgreementAccepted())
+                || (agreements != null && agreements.stream().anyMatch(a -> "SIGNED".equalsIgnoreCase(a.getStatus())));
+        boolean isComplianceCompleted = hasUploadedKyc && hasSignedAgreement;
+
         response.put("isInitialPaid", isInitialPaid);
         response.put("isDeskPending", isDeskPending);
         response.put("isKycVerified", isKycVerified);
-        response.put("isAgreementAccepted", isAgreementAccepted);
-        response.put("isLeaseSigned", isAgreementAccepted);
-        response.put("onboardingComplete", onboardingComplete);
+        response.put("hasUploadedKyc", hasUploadedKyc);
+        response.put("hasSignedAgreement", hasSignedAgreement);
+        response.put("isComplianceCompleted", isComplianceCompleted);
+        response.put("isAgreementAccepted", hasSignedAgreement);
+        response.put("isLeaseSigned", hasSignedAgreement);
+        response.put("onboardingComplete", onboardingComplete && isComplianceCompleted);
+
+        long pendingParcelsCount = 0;
+        try {
+            pendingParcelsCount = parcelRepository.findByTenant(tenant).stream()
+                    .filter(p -> "RECEIVED".equalsIgnoreCase(p.getStatus()))
+                    .count();
+        } catch (Exception ignored) {}
 
         response.put("roommates", roommates);
         response.put("totalPendingAmount", totalPendingAmount);
@@ -504,6 +524,7 @@ public class TenantPortalController {
                 tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
         response.put("unpaidInvoicesCount", unpaidInvoicesCount);
         response.put("openComplaintsCount", openComplaintsCount);
+        response.put("pendingParcelsCount", pendingParcelsCount);
 
         return ResponseEntity.ok(response);
     }
@@ -701,6 +722,13 @@ public class TenantPortalController {
             } catch (Exception ignored) {
             }
         }
+
+        Property prop = null;
+        if (tenant.getPropertyId() != null) {
+            prop = propertyRepository.findById(tenant.getPropertyId()).orElse(null);
+        }
+        String ticketNum = invoiceSequenceService.nextComplaintTicketNumber(prop, tenant.getOrganization());
+        complaint.setTicketNumber(ticketNum);
 
         Complaint saved = complaintRepository.save(complaint);
 
@@ -903,6 +931,30 @@ public class TenantPortalController {
         tenant.setAgreementAcceptedAt(java.time.OffsetDateTime.now());
         tenantRepository.save(tenant);
 
+        // Also update or create signed Agreement records
+        List<Agreement> agreements = agreementRepository.findByTenant(tenant);
+        if (agreements != null && !agreements.isEmpty()) {
+            for (Agreement ag : agreements) {
+                if (!"SIGNED".equalsIgnoreCase(ag.getStatus())) {
+                    ag.setStatus("SIGNED");
+                    ag.setSignedAt(java.time.OffsetDateTime.now());
+                    ag.setSignatureUrl("TENANT_PORTAL_DIGITAL_SIGNATURE");
+                    agreementRepository.save(ag);
+                }
+            }
+        } else {
+            Agreement ag = new Agreement(
+                    tenant,
+                    "StayEaze Digital Tenancy Agreement. Standard 30-day notice period and rent due on the 1st.",
+                    LocalDate.now(),
+                    LocalDate.now().plusMonths(11)
+            );
+            ag.setStatus("SIGNED");
+            ag.setSignedAt(java.time.OffsetDateTime.now());
+            ag.setSignatureUrl("TENANT_PORTAL_DIGITAL_SIGNATURE");
+            agreementRepository.save(ag);
+        }
+
         return ResponseEntity.ok(new MessageResponse("Digital Tenancy Agreement signed successfully."));
     }
 
@@ -1055,5 +1107,21 @@ public class TenantPortalController {
         }
 
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/parcels")
+    @PreAuthorize("hasAnyRole('TENANT', 'ADMIN', 'PROPERTY_MANAGER', 'OWNER')")
+    public ResponseEntity<?> getTenantPortalParcels() {
+        Tenant tenant = getAuthenticatedTenant();
+        if (tenant == null) {
+            return ResponseEntity.ok(new ArrayList<>());
+        }
+
+        List<com.stayeaze.backend.payload.response.ParcelDTO> parcels = parcelRepository.findByTenant(tenant)
+                .stream()
+                .map(com.stayeaze.backend.payload.response.ParcelDTO::fromEntity)
+                .toList();
+
+        return ResponseEntity.ok(parcels);
     }
 }

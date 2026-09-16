@@ -4,6 +4,7 @@ import com.stayeaze.backend.models.SaaSPlan;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.SaaSPlanRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,9 +29,12 @@ public class SuperAdminSaaSPlanController {
     public ResponseEntity<?> getAllPlans() {
         List<SaaSPlan> plans = saasPlanRepository.findAll();
         if (plans.isEmpty()) {
-            SaaSPlan starter = new SaaSPlan("Starter Plan", "STARTER", new BigDecimal("1499"), new BigDecimal("14990"), 1, 25, 2, false, false, "Ideal for single building PGs with up to 25 beds.");
-            SaaSPlan pro = new SaaSPlan("Professional Plan", "PROFESSIONAL", new BigDecimal("2999"), new BigDecimal("29990"), 3, 150, 10, true, false, "Perfect for growing hostel businesses with up to 150 beds & WhatsApp alerts.");
-            SaaSPlan enterprise = new SaaSPlan("Enterprise Plan", "ENTERPRISE", new BigDecimal("5999"), new BigDecimal("59990"), 10, 1000, 50, true, true, "Full power multi-property enterprise suite with unlimited automation.");
+            SaaSPlan starter = new SaaSPlan("Starter PG Plan", "STARTER", new BigDecimal("1499.00"), new BigDecimal("14390.00"), 1, 35, 2, false, false, "Ideal for Single-Building Standalone PGs (Up to 15 Rooms / 35 Beds in 2 & 3 sharing, 2 Staff logins).");
+            starter.setAllowRazorpayOnline(true);
+            SaaSPlan pro = new SaaSPlan("Growth Hostel & PG", "PROFESSIONAL", new BigDecimal("3499.00"), new BigDecimal("33590.00"), 2, 120, 6, true, false, "For Multi-Wing Hostels & 2-Branch PGs (Up to 4 Buildings, 50 Rooms / 120 Beds with Meter Engine & Digital Agreements).");
+            pro.setAllowRazorpayOnline(true);
+            SaaSPlan enterprise = new SaaSPlan("Enterprise Living Chain", "ENTERPRISE", new BigDecimal("7999.00"), new BigDecimal("76790.00"), 10, 500, 25, true, true, "For Multi-City Co-Living Chains (Unlimited Buildings, 500+ Beds, Bulk Rent Runs, Custom Subdomain & Priority SLA).");
+            enterprise.setAllowRazorpayOnline(true);
             
             saasPlanRepository.save(starter);
             saasPlanRepository.save(pro);
@@ -43,6 +47,7 @@ public class SuperAdminSaaSPlanController {
 
     @PostMapping
     @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @CacheEvict(value = "saas_plans", allEntries = true)
     public ResponseEntity<?> createPlan(@RequestBody SaaSPlan plan) {
         if (plan == null) {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: Plan payload cannot be empty."));
@@ -97,6 +102,7 @@ public class SuperAdminSaaSPlanController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @CacheEvict(value = "saas_plans", allEntries = true)
     public ResponseEntity<?> updatePlan(@PathVariable UUID id, @RequestBody SaaSPlan request) {
         SaaSPlan plan = saasPlanRepository.findById(id).orElse(null);
         if (plan == null) {
@@ -137,6 +143,7 @@ public class SuperAdminSaaSPlanController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @CacheEvict(value = "saas_plans", allEntries = true)
     public ResponseEntity<?> deletePlan(@PathVariable UUID id) {
         SaaSPlan plan = saasPlanRepository.findById(id).orElse(null);
         if (plan != null) {

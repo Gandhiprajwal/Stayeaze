@@ -4,7 +4,6 @@ import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.models.SystemConfig;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.SystemConfigRepository;
-import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,8 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.sql.DataSource;
-import java.lang.management.ManagementFactory;
-import java.lang.management.OperatingSystemMXBean;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +33,9 @@ public class SystemMetricsController {
 
     @Autowired(required = false)
     private com.stayeaze.backend.repository.SystemIntegrationSettingsRepository settingsRepository;
+
+    private volatile Map<String, Object> cachedServices = null;
+    private volatile long lastHealthCheckTime = 0;
 
     @GetMapping("/metrics")
     public ResponseEntity<?> getMetrics() {
@@ -89,7 +89,13 @@ public class SystemMetricsController {
         // 3. API Performance Metrics
         metrics.put("apiStats", com.stayeaze.backend.security.ApiMetricsFilter.getMetricsSnapshot());
 
-        // 4. Real-time Service Connections Status (Redis, PostgreSQL, AWS S3/File Storage, Razorpay, Twilio, SMTP)
+        // 4. Cached Service Health Check Probing (10s TTL to eliminate socket and thread churn)
+        long now = System.currentTimeMillis();
+        if (cachedServices != null && (now - lastHealthCheckTime) < 10000) {
+            metrics.put("services", cachedServices);
+            return ResponseEntity.ok(metrics);
+        }
+
         com.stayeaze.backend.models.SystemIntegrationSettings settings = null;
         try {
             if (settingsRepository != null) {
@@ -98,7 +104,6 @@ public class SystemMetricsController {
         } catch (Exception ignored) {}
 
         final boolean isRedisEnabled = settings == null || Boolean.TRUE.equals(settings.getRedisEnabled());
-        final boolean isAwsS3Enabled = settings == null || Boolean.TRUE.equals(settings.getAwsS3Enabled());
         final boolean isTwilioEnabled = true;
         final boolean isSmtpEnabled = true;
         final boolean isRazorpayEnabled = settings != null && settings.getRazorpayMasterKeyId() != null && !settings.getRazorpayMasterKeyId().isBlank();
@@ -232,6 +237,9 @@ public class SystemMetricsController {
         serviceStatus.put("twilio", twilio);
         serviceStatus.put("smtp", smtp);
         serviceStatus.put("razorpay", razorpay);
+
+        this.cachedServices = serviceStatus;
+        this.lastHealthCheckTime = now;
 
         metrics.put("services", serviceStatus);
 

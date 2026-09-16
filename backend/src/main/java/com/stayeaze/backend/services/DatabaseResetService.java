@@ -1,23 +1,11 @@
 package com.stayeaze.backend.services;
 
-import com.stayeaze.backend.models.ERole;
-import com.stayeaze.backend.models.Organization;
-import com.stayeaze.backend.models.Role;
-import com.stayeaze.backend.models.User;
-import com.stayeaze.backend.repository.OrganizationRepository;
-import com.stayeaze.backend.repository.RoleRepository;
-import com.stayeaze.backend.repository.UserRepository;
+import com.stayeaze.backend.config.DatabaseSeeder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
 
 @Service
 public class DatabaseResetService {
@@ -29,72 +17,97 @@ public class DatabaseResetService {
     private CacheManager cacheManager;
 
     @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private RoleRepository roleRepository;
-
-    @Autowired
-    private OrganizationRepository organizationRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    private DatabaseSeeder databaseSeeder;
 
     @Autowired(required = false)
     private com.stayeaze.backend.security.services.TokenBlacklistService tokenBlacklistService;
 
+    @Autowired(required = false)
+    private org.springframework.data.redis.connection.RedisConnectionFactory redisConnectionFactory;
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+
+    @Autowired(required = false)
+    private jakarta.persistence.EntityManagerFactory entityManagerFactory;
+
+    // All 48+ operational tables and jointables in reverse dependency order
     private static final String[] ALL_OPERATIONAL_TABLES = new String[]{
-        "user_properties",
-        "user_roles",
-        "lead_notes",
+        "lost_and_found_items",
+        "key_loans",
+        "front_desk_shift_handovers",
+        "user_journey_audits",
+        "support_ticket_messages",
+        "support_tickets",
+        "subscription_extension_requests",
         "onboarding_leads",
-        "complaint_chat_messages",
-        "complaint_chats",
-        "complaint_messages",
-        "complaints",
-        "expenses",
-        "property_amenities",
-        "room_amenities",
+        "lead_notes",
+        "safety_incidents",
+        "parcels",
+        "visitors",
+        "notification_logs",
         "tenant_documents",
         "checkout_audits",
         "checkin_checklists",
         "check_outs",
         "check_ins",
         "agreements",
-        "meter_readings",
-        "safety_incidents",
-        "parcels",
-        "visitors",
-        "notification_logs",
-        "inquiries",
-        "saas_invoices",
-        "saas_plans",
-        "billing_plans",
+        "complaint_chat_messages",
+        "complaint_chats",
+        "complaint_messages",
+        "complaints",
         "penalties_discounts",
-        "system_configs",
-        "system_integration_settings",
-        "organization_billing_profiles",
-        "subscription_billing",
-        "subscriptions",
-        "subscription_plans",
-        "invoice_items",
         "payments",
+        "invoice_items",
         "invoices",
+        "meter_readings",
+        "expenses",
+        "inquiries",
         "maintenance",
         "bookings",
-        "tenants",
+        "property_amenities",
+        "room_amenities",
         "beds",
         "rooms",
         "floors",
         "buildings",
-        "properties",
+        "user_properties",
+        "user_roles",
         "refresh_tokens",
         "refreshtoken",
-        "audit_logs"
+        "tenants",
+        "properties",
+        "organization_billing_profiles",
+        "subscription_billing",
+        "subscriptions",
+        "subscription_plans",
+        "saas_invoices",
+        "saas_plans",
+        "billing_plans",
+        "system_configs",
+        "system_integration_settings",
+        "audit_logs",
+        "users",
+        "organizations"
     };
 
     public void resetAllTables() {
-        // 1. Attempt TRUNCATE / DELETE table-by-table so missing tables don't break execution
+        System.out.println("🔄 [DatabaseResetService] Starting full clean database reset across all 48+ tables...");
+
+        // Disable constraint checks where possible for seamless truncate/delete
+        try {
+            jdbcTemplate.execute("SET session_replication_role = 'replica';"); // PostgreSQL
+        } catch (Exception ignored) {}
+
+        try {
+            jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0;"); // MySQL
+        } catch (Exception ignored) {}
+
+        try {
+            jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY FALSE;"); // H2
+        } catch (Exception ignored) {}
+
+        // 1. Truncate / Delete all operational and entity tables
         for (String table : ALL_OPERATIONAL_TABLES) {
             try {
                 jdbcTemplate.execute("TRUNCATE TABLE " + table + " RESTART IDENTITY CASCADE");
@@ -105,83 +118,51 @@ public class DatabaseResetService {
             }
         }
 
-        // 2. Wipe non-system users and non-system organizations
+        // Re-enable constraint checks
         try {
-            jdbcTemplate.execute("DELETE FROM users WHERE email <> 'superadmin@stayeaze.com'");
+            jdbcTemplate.execute("SET session_replication_role = 'origin';"); // PostgreSQL
         } catch (Exception ignored) {}
 
         try {
-            jdbcTemplate.execute("DELETE FROM organizations WHERE subdomain <> 'system'");
+            jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 1;"); // MySQL
         } catch (Exception ignored) {}
 
-        // 3. Ensure System Organization exists
-        Organization systemOrg = organizationRepository.findBySubdomain("system")
-                .orElseGet(() -> {
-                    Organization org = new Organization("StayEaze SaaS System", "system");
-                    return organizationRepository.save(org);
-                });
-
-        // 4. Re-seed Core System Roles
-        seedRoleIfNotFound(ERole.SUPER_ADMIN, "[\"ALL\"]");
-        seedRoleIfNotFound(ERole.SUPPORT, "[\"SUPPORT_READ\", \"SUPPORT_WRITE\", \"TICKET_MANAGE\"]");
-        seedRoleIfNotFound(ERole.OWNER, "[\"ALL\"]");
-        seedRoleIfNotFound(ERole.PROPERTY_MANAGER, "[\"PROPERTY_WRITE\", \"PROPERTY_READ\"]");
-        seedRoleIfNotFound(ERole.RECEPTIONIST, "[\"TENANT_WRITE\", \"TENANT_READ\", \"VISITOR_WRITE\"]");
-        seedRoleIfNotFound(ERole.ACCOUNTANT, "[\"BILLING_WRITE\", \"BILLING_READ\"]");
-        seedRoleIfNotFound(ERole.SECURITY_GUARD, "[\"SECURITY_WRITE\", \"SECURITY_READ\"]");
-        seedRoleIfNotFound(ERole.STAFF, "[\"MAINTENANCE_WRITE\", \"CLEANING_WRITE\"]");
-        seedRoleIfNotFound(ERole.TENANT, "[\"COMPLAINT_WRITE\"]");
-
-        // 5. Ensure Super Admin user is fully provisioned
         try {
-            Optional<Role> superAdminRoleOpt = roleRepository.findByName(ERole.SUPER_ADMIN);
-            if (superAdminRoleOpt.isPresent()) {
-                Role superAdminRole = superAdminRoleOpt.get();
-                User superAdmin = userRepository.findByEmail("superadmin@stayeaze.com")
-                        .orElseGet(() -> new User(
-                                systemOrg,
-                                "superadmin@stayeaze.com",
-                                passwordEncoder.encode("Friend@2010"),
-                                "0000000000"
-                        ));
-
-                superAdmin.setOrganization(systemOrg);
-                superAdmin.setEmail("superadmin@stayeaze.com");
-                superAdmin.setFirstName("Super Admin");
-                superAdmin.setPassword(passwordEncoder.encode("Friend@2010"));
-
-                if (superAdmin.getRoles() == null) {
-                    superAdmin.setRoles(new HashSet<>());
-                } else {
-                    superAdmin.getRoles().clear();
-                }
-                superAdmin.getRoles().add(superAdminRole);
-                userRepository.save(superAdmin);
-            }
+            jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY TRUE;"); // H2
         } catch (Exception ignored) {}
 
-        // 6. Clear in-memory revoked tokens
+        // Flush all application & Hibernate/Redis caches before re-seeding
+        clearAllCaches();
+        if (entityManager != null) {
+            try {
+                entityManager.clear();
+            } catch (Exception ignored) {}
+        }
+
+        System.out.println("🌱 [DatabaseResetService] Tables wiped clean. Re-seeding full connected relational dataset...");
+
+        // 2. Re-seed full fresh environment with all interconnected relational records
+        databaseSeeder.seedAllFresh();
+
+        // 3. Clear in-memory revoked tokens
         if (tokenBlacklistService != null) {
             try {
                 tokenBlacklistService.cleanupExpired();
             } catch (Exception ignored) {}
         }
 
-        // 7. Flush all application & Redis caches
+        // 4. Flush all application & Redis caches
         clearAllCaches();
-    }
 
-    private void seedRoleIfNotFound(ERole roleName, String permissions) {
-        if (!roleRepository.findByName(roleName).isPresent()) {
-            Role role = new Role(roleName, permissions);
-            roleRepository.save(role);
-        }
+        System.out.println("✅ [DatabaseResetService] Full clean reset and relational seeding completed successfully!");
     }
-
-    @Autowired(required = false)
-    private org.springframework.data.redis.connection.RedisConnectionFactory redisConnectionFactory;
 
     public void clearAllCaches() {
+        if (entityManagerFactory != null && entityManagerFactory.getCache() != null) {
+            try {
+                entityManagerFactory.getCache().evictAll();
+            } catch (Exception ignored) {}
+        }
         if (cacheManager != null) {
             for (String cacheName : cacheManager.getCacheNames()) {
                 Cache cache = cacheManager.getCache(cacheName);
@@ -197,3 +178,4 @@ public class DatabaseResetService {
         }
     }
 }
+

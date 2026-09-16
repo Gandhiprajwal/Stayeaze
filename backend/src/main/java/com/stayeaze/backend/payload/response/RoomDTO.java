@@ -121,4 +121,10 @@ public class RoomDTO implements Serializable {
 
     public java.util.List<String> getAmenities() { return amenities; }
     public void setAmenities(java.util.List<String> amenities) { this.amenities = amenities; }
+
+    public String getWifiSsid() { return wifiSsid; }
+    public void setWifiSsid(String wifiSsid) { this.wifiSsid = wifiSsid; }
+
+    public String getWifiPassword() { return wifiPassword; }
+    public void setWifiPassword(String wifiPassword) { this.wifiPassword = wifiPassword; }
 }

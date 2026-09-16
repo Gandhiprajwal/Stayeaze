@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: stayeaze-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - stayeaze-monitoring
+
+  loki:
+    image: grafana/loki:latest
+    container_name: stayeaze-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-storage:/loki
+    networks:
+      - stayeaze-monitoring
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: stayeaze-promtail
+    restart: unless-stopped
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - ../backend/logs:/var/log/stayeaze:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - stayeaze-monitoring
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: stayeaze-tempo
+    restart: unless-stopped
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-storage:/var/tempo
+    ports:
+      - "3200:3200" # Tempo HTTP API
+      - "9411:9411" # Zipkin receiver (Spring Boot default)
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    networks:
+      - stayeaze-monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: stayeaze-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana-storage:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - stayeaze-monitoring
+
+networks:
+  stayeaze-monitoring:
+    driver: bridge
+
+volumes:
+  grafana-storage:
+  loki-storage:
+  tempo-storage:

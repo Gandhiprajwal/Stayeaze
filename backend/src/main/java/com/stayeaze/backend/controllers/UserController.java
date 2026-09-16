@@ -2,6 +2,7 @@ package com.stayeaze.backend.controllers;
 
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.payload.response.MessageResponse;
+import com.stayeaze.backend.payload.response.MinimalUserDTO;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.RoleRepository;
 import com.stayeaze.backend.repository.UserRepository;
@@ -13,8 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -22,7 +21,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -69,6 +67,42 @@ public class UserController {
         }
         return organizationRepository.findById(userDetails.getOrgId())
                 .orElseGet(() -> organizationRepository.findBySubdomain("system").orElse(null));
+    }
+
+    @GetMapping("/minimal")
+    public ResponseEntity<List<MinimalUserDTO>> getMinimalUsers(@RequestParam(required = false) String role) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isSuperAdmin = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN") || a.getAuthority().equals("ROLE_SUPPORT"));
+
+        List<User> users;
+        if (isSuperAdmin) {
+            users = userRepository.findAll();
+        } else {
+            UUID effectiveOrgId = null;
+            if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl) {
+                effectiveOrgId = ((UserDetailsImpl) auth.getPrincipal()).getOrgId();
+            } else {
+                Organization organization = getLoggedUserOrg();
+                effectiveOrgId = organization != null ? organization.getId() : null;
+            }
+            if (effectiveOrgId != null) {
+                users = userRepository.findByOrganizationId(effectiveOrgId);
+            } else {
+                users = Collections.emptyList();
+            }
+        }
+
+        List<MinimalUserDTO> dtos = users.stream()
+                .filter(u -> {
+                    if (role == null || role.isBlank() || "all".equalsIgnoreCase(role)) return true;
+                    String normalizedRole = role.toUpperCase().startsWith("ROLE_") ? role.toUpperCase() : "ROLE_" + role.toUpperCase();
+                    return u.getRoles() != null && u.getRoles().stream().anyMatch(r -> r.getName() != null && (r.getName().equalsIgnoreCase(role) || r.getName().equalsIgnoreCase(normalizedRole)));
+                })
+                .map(MinimalUserDTO::fromEntity)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(dtos);
     }
 
     @GetMapping
@@ -226,6 +260,8 @@ public class UserController {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         boolean isSuperAdmin = auth != null && auth.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        boolean isOwner = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_OWNER") || a.getAuthority().equals("OWNER") || a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ADMIN"));
 
         Organization organization = null;
         if (!isSuperAdmin) {
@@ -300,7 +336,6 @@ public class UserController {
         user.setPropertyIds(propertyIds);
 
         // Map role
-        Set<Role> roles = new HashSet<>();
         ERole roleEnum = ERole.PROPERTY_MANAGER;
         if (roleStr != null && !roleStr.isBlank()) {
             String upperRole = roleStr.toUpperCase().trim();
@@ -317,6 +352,10 @@ public class UserController {
                 }
                 roleEnum = ERole.SUPPORT;
             } else if (upperRole.contains("OWNER") || upperRole.contains("ADMIN")) {
+                if (!isSuperAdmin && !isOwner) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(new MessageResponse("Error: Property Managers cannot create or assign Admin / Owner roles!"));
+                }
                 roleEnum = ERole.OWNER;
             } else {
                 try {
@@ -357,8 +396,7 @@ public class UserController {
         map.put("lastActive", saved.getCreatedAt());
         map.put("role", roleStr != null ? roleStr : "PROPERTY_MANAGER");
         map.put("mustChangePassword", true);
-        map.put("tempPassword", tempPassword);
-        map.put("propertyIds", saved.getPropertyIds().stream().map(UUID::toString).collect(Collectors.toList()));
+        map.put("propertyIds", saved.getPropertyIds() != null ? saved.getPropertyIds().stream().map(UUID::toString).collect(Collectors.toList()) : Collections.emptyList());
 
         return new ResponseEntity<>(map, HttpStatus.CREATED);
     }
@@ -366,9 +404,11 @@ public class UserController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> updateUser(@PathVariable UUID id, @RequestBody Map<String, Object> request) {
-        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isSuperAdmin = auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        boolean isOwner = auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_OWNER") || a.getAuthority().equals("ROLE_ADMIN"));
 
         User user = userRepository.findById(id).orElse(null);
         if (user == null) {
@@ -380,6 +420,14 @@ public class UserController {
             if (user.getOrganization() == null || !user.getOrganization().getId().equals(organization.getId())) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: User not found."));
             }
+        }
+
+        // Prevent Property Managers from modifying Owner/Admin accounts
+        boolean targetIsOwner = user.getRoles() != null && user.getRoles().stream()
+                .anyMatch(r -> r.getName() != null && (r.getName().equalsIgnoreCase("ROLE_OWNER") || r.getName().equalsIgnoreCase("OWNER") || r.getName().toUpperCase().contains("ADMIN")));
+        if (!isSuperAdmin && !isOwner && targetIsOwner) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new MessageResponse("Error: Property managers cannot modify Owner/Admin accounts."));
         }
 
         String email = (String) request.get("email");
@@ -427,7 +475,6 @@ public class UserController {
         }
 
         if (roleStr != null && !roleStr.isBlank()) {
-            Set<Role> roles = new HashSet<>();
             ERole roleEnum = ERole.PROPERTY_MANAGER;
             String upper = roleStr.toUpperCase().trim();
             if ("SUPER_ADMIN".equals(upper) || "ROLE_SUPER_ADMIN".equals(upper)) {
@@ -443,6 +490,10 @@ public class UserController {
                 }
                 roleEnum = ERole.SUPPORT;
             } else if (upper.contains("OWNER") || upper.contains("ADMIN")) {
+                if (!isSuperAdmin && !isOwner) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(new MessageResponse("Error: Only Owners can assign OWNER or ADMIN roles!"));
+                }
                 roleEnum = ERole.OWNER;
             } else {
                 try {
@@ -472,12 +523,12 @@ public class UserController {
         if (updated.getRoles() != null && !updated.getRoles().isEmpty()) {
             boolean isSuper = updated.getRoles().stream().anyMatch(r -> r != null && r.getName() != null && 
                 ("ROLE_SUPER_ADMIN".equalsIgnoreCase(r.getName()) || "SUPER_ADMIN".equalsIgnoreCase(r.getName())));
-            boolean isOwner = updated.getRoles().stream().anyMatch(r -> r != null && r.getName() != null && 
+            boolean hasOwnerRole = updated.getRoles().stream().anyMatch(r -> r != null && r.getName() != null && 
                 ("ROLE_OWNER".equalsIgnoreCase(r.getName()) || "OWNER".equalsIgnoreCase(r.getName()) || "ADMIN".equalsIgnoreCase(r.getName())));
             
             if (isSuper) {
                 updatedRoleStr = "SUPER_ADMIN";
-            } else if (isOwner) {
+            } else if (hasOwnerRole) {
                 updatedRoleStr = "OWNER";
             } else {
                 Role firstRole = updated.getRoles().iterator().next();
@@ -615,7 +666,9 @@ public class UserController {
         Map<String, Object> notifPrefs = new HashMap<>();
         if (saved.getNotificationPreferences() != null && !saved.getNotificationPreferences().isBlank()) {
             try {
-                notifPrefs = new com.fasterxml.jackson.databind.ObjectMapper().readValue(saved.getNotificationPreferences(), Map.class);
+                notifPrefs = new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                        saved.getNotificationPreferences(),
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
             } catch (Exception ignored) {}
         }
         res.put("notificationPreferences", notifPrefs);
@@ -681,7 +734,9 @@ public class UserController {
         Map<String, Object> notifPrefs = new HashMap<>();
         if (user.getNotificationPreferences() != null && !user.getNotificationPreferences().isBlank()) {
             try {
-                notifPrefs = new com.fasterxml.jackson.databind.ObjectMapper().readValue(user.getNotificationPreferences(), Map.class);
+                notifPrefs = new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                        user.getNotificationPreferences(),
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
             } catch (Exception ignored) {}
         }
         res.put("notificationPreferences", notifPrefs);

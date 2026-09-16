@@ -10,14 +10,17 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import com.stayeaze.backend.services.interfaces.IWebSocketNotificationService;
+
 @Service
-public class WebSocketNotificationService {
+public class WebSocketNotificationService implements IWebSocketNotificationService {
 
     private static final Logger logger = LoggerFactory.getLogger(WebSocketNotificationService.class);
 
     @Autowired(required = false)
     private SimpMessagingTemplate messagingTemplate;
 
+    @Override
     public void sendUserNotification(UUID userId, String title, String message, String type) {
         if (messagingTemplate == null || userId == null) {
             return;
@@ -38,6 +41,7 @@ public class WebSocketNotificationService {
         }
     }
 
+    @Override
     public void broadcastTopic(String topic, Object payload) {
         if (messagingTemplate == null) {
             return;

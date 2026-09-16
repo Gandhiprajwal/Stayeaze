@@ -1,6 +1,5 @@
 package com.stayeaze.backend.controllers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.repository.*;
 import com.stayeaze.backend.security.services.UserDetailsImpl;
@@ -35,9 +34,6 @@ public class SystemSettingsControllerIntegrationTest {
     private MockMvc mockMvc;
 
     @Autowired
-    private ObjectMapper objectMapper;
-
-    @Autowired
     private OrganizationRepository organizationRepository;
 
     @Autowired
@@ -45,9 +41,6 @@ public class SystemSettingsControllerIntegrationTest {
 
     @Autowired
     private RoleRepository roleRepository;
-
-    @Autowired
-    private SystemIntegrationSettingsRepository settingsRepository;
 
     private User superAdminUser;
     private UsernamePasswordAuthenticationToken auth;

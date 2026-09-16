@@ -113,17 +113,17 @@ public class BrandingController {
         branding.put("enabled", active);
         branding.put("isEnterprise", isEnterprise || allowedByPlan);
         branding.put("allowCustomBranding", isEnterprise || allowedByPlan);
-        branding.put("brandName", active && profile.getBrandName() != null && !profile.getBrandName().isBlank()
+        branding.put("brandName", (active && profile != null && profile.getBrandName() != null && !profile.getBrandName().isBlank())
                 ? profile.getBrandName() : targetOrg.getName());
-        branding.put("brandLogoUrl", active ? profile.getBrandLogoUrl() : null);
-        branding.put("brandFaviconUrl", active ? profile.getBrandFaviconUrl() : null);
-        branding.put("brandPrimaryColor", active && profile.getBrandPrimaryColor() != null
+        branding.put("brandLogoUrl", (active && profile != null) ? profile.getBrandLogoUrl() : null);
+        branding.put("brandFaviconUrl", (active && profile != null) ? profile.getBrandFaviconUrl() : null);
+        branding.put("brandPrimaryColor", (active && profile != null && profile.getBrandPrimaryColor() != null)
                 ? profile.getBrandPrimaryColor() : "#4f46e5");
-        branding.put("brandAccentColor", active && profile.getBrandAccentColor() != null
+        branding.put("brandAccentColor", (active && profile != null && profile.getBrandAccentColor() != null)
                 ? profile.getBrandAccentColor() : "#06b6d4");
-        branding.put("brandTagline", active ? profile.getBrandTagline() : null);
-        branding.put("customFooterText", active ? profile.getCustomFooterText() : null);
-        branding.put("hideStayEazeBranding", active && Boolean.TRUE.equals(profile.getHideStayEazeBranding()));
+        branding.put("brandTagline", (active && profile != null) ? profile.getBrandTagline() : null);
+        branding.put("customFooterText", (active && profile != null) ? profile.getCustomFooterText() : null);
+        branding.put("hideStayEazeBranding", (active && profile != null && Boolean.TRUE.equals(profile.getHideStayEazeBranding())));
         branding.put("supportEmail", profile != null ? profile.getSupportEmail() : null);
         branding.put("supportPhone", profile != null ? profile.getSupportPhone() : null);
 
@@ -132,6 +132,7 @@ public class BrandingController {
 
     @PutMapping("/organization")
     @PreAuthorize("hasRole('OWNER')")
+    @org.springframework.cache.annotation.CacheEvict(value = "org_branding", allEntries = true)
     public ResponseEntity<?> updateOrganizationBranding(@RequestBody Map<String, Object> body) {
         UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         User user = userRepository.findById(userDetails.getId()).orElse(null);

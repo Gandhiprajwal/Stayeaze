@@ -40,25 +40,39 @@ public class PenaltyDiscountController {
     private Organization getLoggedUserOrg() {
         Organization org = securityUtils.getCurrentOrganization();
         if (org != null) return org;
-        return organizationRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
+        if (securityUtils.isSuperAdmin()) {
+            return organizationRepository.findAll().stream().findFirst().orElse(null);
+        }
+        return null;
     }
 
     private Tenant getAuthorizedTenant(UUID tenantId) {
-        Organization organization = null;
-        try {
-            organization = getLoggedUserOrg();
-        } catch (Exception ignored) {}
+        if (tenantId == null) {
+            throw new IllegalArgumentException("Tenant ID is required");
+        }
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("Tenant profile not found"));
 
-        Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
-        if (tenant != null) {
-            if (organization == null) return tenant;
-            if (tenant.getOrganization() == null || organization.getId().equals(tenant.getOrganization().getId()) || (tenant.getOrgId() != null && organization.getId().equals(tenant.getOrgId()))) {
+        if (securityUtils.isSuperAdmin()) {
+            return tenant;
+        }
+
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
+            boolean isTenant = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_TENANT"));
+            if (isTenant) {
+                if (userDetails.getEmail() == null || tenant.getEmail() == null || !tenant.getEmail().equalsIgnoreCase(userDetails.getEmail())) {
+                    throw new IllegalArgumentException("Unauthorized access to tenant adjustments");
+                }
                 return tenant;
             }
         }
-        return tenantRepository.findByIdAndOrganization(tenantId, organization)
-                .orElseThrow(() -> new IllegalArgumentException("Tenant profile not found or unauthorized"));
+
+        Organization organization = getLoggedUserOrg();
+        if (organization != null && tenant.getOrganization() != null && !organization.getId().equals(tenant.getOrganization().getId())) {
+            throw new IllegalArgumentException("Tenant profile belongs to another organization");
+        }
+        return tenant;
     }
 
     @PostMapping
@@ -81,6 +95,7 @@ public class PenaltyDiscountController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'PROPERTY_MANAGER', 'RECEPTIONIST', 'ACCOUNTANT', 'SUPER_ADMIN', 'TENANT', 'ADMIN')")
     public ResponseEntity<?> getAdjustments(@PathVariable UUID tenantId) {
         Tenant tenant;
         try {

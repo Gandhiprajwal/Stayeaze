@@ -9,11 +9,11 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { usePropertyStore } from '@/lib/stores/property-store';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { Property, Tenant, Invoice, User, UserRole } from '@/lib/types';
+import type { UserRole } from '@/lib/types';
 import {
-  Hotel, Users, Receipt, Search, ArrowRight, LayoutDashboard,
+  Hotel, Users, Receipt, ArrowRight, LayoutDashboard,
   LogIn, LogOut, MessageSquareWarning, Wrench, UserCheck, UserCog,
-  ShieldCheck, ScrollText, Building2, Globe, Check,
+  ShieldCheck, ScrollText, Building2, Globe, Check, DoorOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,6 +33,7 @@ const allQuickActions: QuickActionItem[] = [
   { label: 'View Audit Logs', to: '/audit-logs', icon: ScrollText, roles: ['SUPER_ADMIN', 'ADMIN'] },
 
   // Property Admin / Owner / Manager Operations
+  { label: 'Rooms & Space Matrix', to: '/rooms', icon: DoorOpen, roles: ['ADMIN', 'PROPERTY_MANAGER'] },
   { label: 'Add New Tenant', to: '/tenants', icon: Users, roles: ['ADMIN', 'PROPERTY_MANAGER'] },
   { label: 'New Check-in', to: '/check-ins', icon: LogIn, roles: ['ADMIN', 'PROPERTY_MANAGER', 'RECEPTIONIST'] },
   { label: 'New Check-out', to: '/check-outs', icon: LogOut, roles: ['ADMIN', 'PROPERTY_MANAGER', 'RECEPTIONIST'] },
@@ -46,44 +47,30 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { selectedPropertyId, setSelectedPropertyId } = usePropertyStore();
+  const [searchTerm, setSearchTerm] = useState('');
 
   const role = user?.role;
   const isOrgUser = role && role !== 'SUPER_ADMIN' && role !== 'SUPPORT' && role !== 'TENANT';
 
-  // Strict role-gated queries
-  const canSeeProperties = role === 'SUPER_ADMIN';
-  const canSeeUsers = role === 'SUPER_ADMIN' || role === 'ADMIN';
-  const canSeeTenants = role === 'ADMIN' || role === 'PROPERTY_MANAGER' || role === 'RECEPTIONIST';
-  const canSeeInvoices = role === 'ADMIN' || role === 'PROPERTY_MANAGER' || role === 'ACCOUNTANT';
-
+  // Lightweight Property list for quick switching
   const { data: orgProperties } = useQuery<any[]>({
     queryKey: ['cmd', 'org-properties'],
     queryFn: () => api.get('/properties/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any).data || []),
     enabled: open && !!isOrgUser,
   });
 
-  const { data: properties } = useQuery({
-    queryKey: ['cmd', 'properties'],
-    queryFn: () => api.get<{ data: Property[] }>('/properties', { params: { pageSize: 50 } }).then((r) => r.data.data),
-    enabled: open && canSeeProperties,
-  });
-
-  const { data: usersList } = useQuery({
-    queryKey: ['cmd', 'users'],
-    queryFn: () => api.get<{ data: User[] }>('/users', { params: { pageSize: 50 } }).then((r) => r.data.data),
-    enabled: open && canSeeUsers,
-  });
-
-  const { data: tenants } = useQuery({
-    queryKey: ['cmd', 'tenants'],
-    queryFn: () => api.get<{ data: Tenant[] }>('/tenants', { params: { pageSize: 50 } }).then((r) => r.data.data),
-    enabled: open && canSeeTenants,
-  });
-
-  const { data: invoices } = useQuery({
-    queryKey: ['cmd', 'invoices'],
-    queryFn: () => api.get<{ data: Invoice[] }>('/invoices', { params: { pageSize: 50 } }).then((r) => r.data.data),
-    enabled: open && canSeeInvoices,
+  // Fast Omni Search Query
+  const { data: omniResults } = useQuery<{
+    properties: any[];
+    tenants: any[];
+    rooms: any[];
+    invoices: any[];
+    users: any[];
+  }>({
+    queryKey: ['cmd', 'omni-search', searchTerm],
+    queryFn: () => api.get('/search/omni', { params: { q: searchTerm } }).then((r) => r.data),
+    enabled: open && searchTerm.trim().length > 1,
+    staleTime: 5000,
   });
 
   const navSections = user ? filterNavForRole(user.role) : [];
@@ -98,9 +85,76 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Type a command or search..." />
+      <CommandInput
+        placeholder="Type a command, room #, resident name, or search..."
+        value={searchTerm}
+        onValueChange={setSearchTerm}
+      />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        <CommandEmpty>No matching results.</CommandEmpty>
+
+        {/* Real-time Omni-Search Results */}
+        {searchTerm.trim().length > 1 && omniResults && (
+          <>
+            {omniResults.tenants && omniResults.tenants.length > 0 && (
+              <CommandGroup heading="Residents & Tenants">
+                {omniResults.tenants.map((t: any) => (
+                  <CommandItem key={t.id} onSelect={() => go(t.url)} value={`tenant ${t.title} ${t.subtitle}`}>
+                    <Users className="mr-2 h-4 w-4 text-primary" />
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">{t.title}</span>
+                      <span className="text-xs text-muted-foreground">{t.subtitle}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {omniResults.rooms && omniResults.rooms.length > 0 && (
+              <CommandGroup heading="Rooms & Inventory">
+                {omniResults.rooms.map((r: any) => (
+                  <CommandItem key={r.id} onSelect={() => go(r.url)} value={`room ${r.title} ${r.subtitle}`}>
+                    <DoorOpen className="mr-2 h-4 w-4 text-emerald-500" />
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">{r.title}</span>
+                      <span className="text-xs text-muted-foreground">{r.subtitle}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {omniResults.invoices && omniResults.invoices.length > 0 && (
+              <CommandGroup heading="Invoices & Dues">
+                {omniResults.invoices.map((inv: any) => (
+                  <CommandItem key={inv.id} onSelect={() => go(inv.url)} value={`invoice ${inv.title} ${inv.subtitle}`}>
+                    <Receipt className="mr-2 h-4 w-4 text-amber-500" />
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">{inv.title}</span>
+                      <span className="text-xs text-muted-foreground">{inv.subtitle}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            {omniResults.properties && omniResults.properties.length > 0 && (
+              <CommandGroup heading="Properties">
+                {omniResults.properties.map((p: any) => (
+                  <CommandItem key={p.id} onSelect={() => go(p.url)} value={`property ${p.title} ${p.subtitle}`}>
+                    <Hotel className="mr-2 h-4 w-4 text-primary" />
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">{p.title}</span>
+                      <span className="text-xs text-muted-foreground">{p.subtitle}</span>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+
+            <CommandSeparator />
+          </>
+        )}
 
         {/* Quick actions */}
         {allowedQuickActions.length > 0 && (
@@ -167,70 +221,6 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             ))}
           </CommandGroup>
         ))}
-
-        {/* Role-gated Properties (SUPER_ADMIN) */}
-        {canSeeProperties && properties && properties.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Properties">
-              {properties.slice(0, 6).map((p) => (
-                <CommandItem key={p.id} onSelect={() => go(`/properties/${p.id}`)} value={`property ${p.name} ${p.code} ${p.city}`}>
-                  <Hotel className="mr-2 h-4 w-4" />
-                  <span>{p.name}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{p.code}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
-        )}
-
-        {/* Role-gated System Users (SUPER_ADMIN / ADMIN) */}
-        {canSeeUsers && usersList && usersList.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Users">
-              {usersList.slice(0, 6).map((u) => (
-                <CommandItem key={u.id} onSelect={() => go('/users')} value={`user ${u.name} ${u.email} ${u.role}`}>
-                  <UserCog className="mr-2 h-4 w-4" />
-                  <span>{u.name}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{u.role}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
-        )}
-
-        {/* Role-gated Tenants */}
-        {canSeeTenants && tenants && tenants.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Tenants">
-              {tenants.slice(0, 6).map((t) => (
-                <CommandItem key={t.id} onSelect={() => go(`/tenants/${t.id}`)} value={`tenant ${t.name} ${t.email} ${t.roomNumber}`}>
-                  <Users className="mr-2 h-4 w-4" />
-                  <span>{t.name}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">Room {t.roomNumber}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
-        )}
-
-        {/* Role-gated Invoices */}
-        {canSeeInvoices && invoices && invoices.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Invoices">
-              {invoices.slice(0, 6).map((inv) => (
-                <CommandItem key={inv.id} onSelect={() => go('/billing')} value={`invoice ${inv.invoiceNumber} ${inv.tenantName}`}>
-                  <Receipt className="mr-2 h-4 w-4" />
-                  <span>{inv.invoiceNumber}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{inv.tenantName}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
-        )}
       </CommandList>
     </CommandDialog>
   );

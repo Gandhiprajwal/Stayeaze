@@ -27,10 +27,19 @@ public class InvoiceService {
     private InvoiceRepository invoiceRepository;
 
     @Autowired
+    private com.stayeaze.backend.repository.PaymentRepository paymentRepository;
+
+    @Autowired
     private EmailService emailService;
 
     @Autowired
     private InvoiceSequenceService invoiceSequenceService;
+
+    @Autowired
+    private com.stayeaze.backend.repository.OrganizationBillingProfileRepository organizationBillingProfileRepository;
+
+    @Autowired
+    private com.stayeaze.backend.repository.TenantRepository tenantRepository;
 
     @Cacheable(value = "invoices", key = "#tenant != null ? #tenant.id.toString() : 'all'")
     public List<Invoice> getInvoicesByTenant(Tenant tenant) {
@@ -77,20 +86,59 @@ public class InvoiceService {
             if (deposit == null) deposit = BigDecimal.valueOf(16000);
 
             BigDecimal advance = checkIn.getAdvanceAmount() != null ? checkIn.getAdvanceAmount() : BigDecimal.ZERO;
-            BigDecimal netDue = rent.add(deposit).subtract(advance);
+
+            com.stayeaze.backend.models.Organization org = tenant.getOrganization();
+            com.stayeaze.backend.models.OrganizationBillingProfile bp = org != null 
+                    ? organizationBillingProfileRepository.findByOrganization(org).orElse(null)
+                    : null;
+            String policy = (bp != null && bp.getOnboardingBillingPolicy() != null)
+                    ? bp.getOnboardingBillingPolicy()
+                    : "FULL_WITH_ADVANCE_CREDIT";
+
+            int maxDaysInMonth = today.lengthOfMonth();
+            int startDay = today.getDayOfMonth();
+            int stayedDays = maxDaysInMonth - startDay + 1;
+            boolean isMidMonth = startDay > 1;
+
+            BigDecimal billedRent = rent;
+            BigDecimal advanceCredited = BigDecimal.ZERO;
+
+            if (isMidMonth) {
+                billedRent = rent.multiply(BigDecimal.valueOf(stayedDays))
+                        .divide(BigDecimal.valueOf(maxDaysInMonth), 0, java.math.RoundingMode.HALF_UP);
+                if (!"PRORATA_ONLY".equalsIgnoreCase(policy)) {
+                    advanceCredited = rent.subtract(billedRent);
+                }
+            }
+
+            // If tenant paid full rent upfront, credit the unconsumed days to tenant advanceBalance
+            if (advanceCredited.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal existingAdv = tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO;
+                tenant.setAdvanceBalance(existingAdv.add(advanceCredited));
+                try { tenantRepository.save(tenant); } catch (Exception ignored) {}
+            }
+
+            BigDecimal totalCharges = billedRent.add(deposit);
+            BigDecimal netDue = totalCharges.subtract(advance);
             if (netDue.compareTo(BigDecimal.ZERO) < 0) netDue = BigDecimal.ZERO;
 
+            boolean isPaid = !"LATER".equalsIgnoreCase(paymentMode) && !"UNPAID".equalsIgnoreCase(paymentMode);
             Invoice invoice = new Invoice(tenant, invNum, today, today, netDue);
-            invoice.setAmountPaid(netDue);
-            invoice.setStatus("PAID");
-            invoice.setPaymentMethod(paymentMode != null ? paymentMode : "CASH");
+            invoice.setAmountPaid(isPaid ? netDue : BigDecimal.ZERO);
+            invoice.setStatus(isPaid ? "PAID" : "UNPAID");
+            invoice.setPaymentMethod(paymentMode != null ? paymentMode.toUpperCase() : "CASH");
             if (razorpayPaymentId != null) {
                 invoice.setRazorpayPaymentId(razorpayPaymentId);
                 invoice.setPaymentReference(razorpayPaymentId);
             }
 
             List<InvoiceItem> items = new ArrayList<>();
-            items.add(new InvoiceItem(invoice, "1st Month Rent Charges", rent));
+            String monthName = today.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH);
+            String rentDesc = isMidMonth
+                    ? String.format("Pro-Rata Rent (%d days: %s %d–%d)", stayedDays, monthName, startDay, maxDaysInMonth)
+                    : String.format("1st Month Rent Charges (%s %d)", monthName, today.getYear());
+
+            items.add(new InvoiceItem(invoice, rentDesc, billedRent));
             items.add(new InvoiceItem(invoice, "Security Deposit Agreement", deposit));
             if (advance.compareTo(BigDecimal.ZERO) > 0) {
                 items.add(new InvoiceItem(invoice, "Less: Advance Booking Deposit Paid", advance.negate()));
@@ -98,6 +146,23 @@ public class InvoiceService {
             invoice.setItems(items);
 
             Invoice saved = invoiceRepository.save(invoice);
+
+            // Record Payment transaction in payments ledger if paid at check-in
+            if (isPaid && netDue.compareTo(BigDecimal.ZERO) > 0) {
+                try {
+                    com.stayeaze.backend.models.Payment payment = new com.stayeaze.backend.models.Payment();
+                    payment.setInvoice(saved);
+                    payment.setAmount(netDue);
+                    payment.setPaymentDate(java.time.OffsetDateTime.now());
+                    payment.setPaymentMethod(paymentMode != null ? paymentMode.toUpperCase() : "CASH");
+                    payment.setReceiptNumber("REC-" + invNum.replace("INV-", ""));
+                    payment.setTransactionReference(razorpayPaymentId != null && !razorpayPaymentId.isBlank() ? razorpayPaymentId : ("CHKIN-OFFLINE-" + System.currentTimeMillis()));
+                    payment.setStatus("COMPLETED");
+                    paymentRepository.save(payment);
+                } catch (Exception payEx) {
+                    logger.warn("Failed to record Payment entity for check-in: {}", payEx.getMessage());
+                }
+            }
 
             // Send Check-In Tax Invoice Email
             String emailTo = tenant.getEmail();

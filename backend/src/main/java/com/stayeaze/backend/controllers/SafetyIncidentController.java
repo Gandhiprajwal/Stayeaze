@@ -6,13 +6,11 @@ import com.stayeaze.backend.payload.request.SafetyIncidentRequest;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.SafetyIncidentRepository;
-import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -35,8 +33,10 @@ public class SafetyIncidentController {
     private Organization getLoggedUserOrg() {
         Organization org = securityUtils.getCurrentOrganization();
         if (org != null) return org;
-        return organizationRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
+        if (securityUtils.isSuperAdmin()) {
+            return organizationRepository.findAll().stream().findFirst().orElse(null);
+        }
+        return null;
     }
 
     @PostMapping

@@ -5,13 +5,11 @@ import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.MaintenanceRepository;
 import com.stayeaze.backend.repository.OrganizationRepository;
-import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;

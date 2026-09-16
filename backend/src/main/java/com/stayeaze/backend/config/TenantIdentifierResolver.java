@@ -17,9 +17,30 @@ import java.util.UUID;
 public class TenantIdentifierResolver implements CurrentTenantIdentifierResolver<UUID> {
 
     public static final UUID DEFAULT_TENANT_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+    private static final ThreadLocal<UUID> currentTenant = new ThreadLocal<>();
+
+    public static void setCurrentTenant(UUID tenantId) {
+        if (tenantId != null) {
+            currentTenant.set(tenantId);
+        } else {
+            currentTenant.remove();
+        }
+    }
+
+    public static UUID getCurrentTenant() {
+        return currentTenant.get();
+    }
+
+    public static void clear() {
+        currentTenant.remove();
+    }
 
     @Override
     public UUID resolveCurrentTenantIdentifier() {
+        UUID explicit = currentTenant.get();
+        if (explicit != null) {
+            return explicit;
+        }
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null && authentication.getPrincipal() instanceof UserDetailsImpl userDetails) {

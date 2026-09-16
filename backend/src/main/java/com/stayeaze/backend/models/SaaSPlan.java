@@ -31,7 +31,7 @@ public class SaaSPlan {
     private Integer maxProperties = 1;
 
     @Column(name = "max_beds", nullable = false)
-    private Integer maxBeds = 25;
+    private Integer maxBeds = 35;
 
     @Column(name = "max_staff_users", nullable = false)
     private Integer maxStaffUsers = 2;

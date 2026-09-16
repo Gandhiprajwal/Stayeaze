@@ -58,9 +58,6 @@ public class OrganizationFinancialSettingsIntegrationTest {
     private InvoiceRepository invoiceRepository;
 
     @Autowired
-    private PaymentRepository paymentRepository;
-
-    @Autowired
     private BuildingRepository buildingRepository;
 
     @Autowired
@@ -726,7 +723,7 @@ public class OrganizationFinancialSettingsIntegrationTest {
 
         Building building = buildingRepository.save(new Building(property, "Wing A", "WA"));
         Floor floor = floorRepository.save(new Floor(building, 1, "1st Floor"));
-        Room room = roomRepository.save(new Room(floor, "105", "SINGLE", new BigDecimal("11000.00")));
+        roomRepository.save(new Room(floor, "105", "SINGLE", new BigDecimal("11000.00")));
 
         Tenant tenant = new Tenant();
         tenant.setOrganization(organization);
@@ -770,7 +767,7 @@ public class OrganizationFinancialSettingsIntegrationTest {
 
         Building building = buildingRepository.save(new Building(property, "Wing B", "WB"));
         Floor floor3 = floorRepository.save(new Floor(building, 3, "3rd Floor"));
-        Room room301 = roomRepository.save(new Room(floor3, "301", "SINGLE", new BigDecimal("13000.00")));
+        roomRepository.save(new Room(floor3, "301", "SINGLE", new BigDecimal("13000.00")));
 
         Tenant tenant = new Tenant();
         tenant.setOrganization(organization);
@@ -847,7 +844,7 @@ public class OrganizationFinancialSettingsIntegrationTest {
 
         Building towerB = buildingRepository.save(new Building(property, "Tower B", "TWR-B"));
         Floor floor2 = floorRepository.save(new Floor(towerB, 2, "2nd Floor"));
-        Room room201 = roomRepository.save(new Room(floor2, "201", "DOUBLE", new BigDecimal("9500.00")));
+        roomRepository.save(new Room(floor2, "201", "DOUBLE", new BigDecimal("9500.00")));
 
         Tenant tenant = new Tenant();
         tenant.setOrganization(organization);
@@ -893,7 +890,7 @@ public class OrganizationFinancialSettingsIntegrationTest {
 
         Building towerB = buildingRepository.save(new Building(property, "Tower B", "TWR-B"));
         Floor floor1 = floorRepository.save(new Floor(towerB, 1, "1st Floor"));
-        Room room101 = roomRepository.save(new Room(floor1, "101", "SINGLE", new BigDecimal("15000.00")));
+        roomRepository.save(new Room(floor1, "101", "SINGLE", new BigDecimal("15000.00")));
 
         Tenant tenant = new Tenant();
         tenant.setOrganization(organization);

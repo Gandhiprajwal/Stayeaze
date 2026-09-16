@@ -22,9 +22,6 @@ public class BedService {
     private BedRepository bedRepository;
 
     @Autowired
-    private com.stayeaze.backend.repository.RoomRepository roomRepository;
-
-    @Autowired
     private com.stayeaze.backend.repository.TenantRepository tenantRepository;
 
     @Autowired

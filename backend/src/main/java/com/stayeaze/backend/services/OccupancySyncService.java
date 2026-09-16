@@ -130,11 +130,18 @@ public class OccupancySyncService {
 
     @Transactional
     public void syncStatsForRoom(Room room) {
-        if (room != null && room.getFloor() != null) {
-            syncStatsAndEvictCaches(room.getFloor());
-        } else {
+        if (room == null || room.getId() == null) {
             floorService.evictCaches();
+            return;
         }
+        try {
+            Room fresh = roomRepository.findById(room.getId()).orElse(room);
+            if (fresh != null && fresh.getFloor() != null) {
+                syncStatsAndEvictCaches(fresh.getFloor());
+                return;
+            }
+        } catch (Exception ignored) {}
+        floorService.evictCaches();
     }
 
     /**

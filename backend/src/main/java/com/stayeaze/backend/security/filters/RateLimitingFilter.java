@@ -4,7 +4,6 @@ import com.stayeaze.backend.models.SystemIntegrationSettings;
 import com.stayeaze.backend.repository.SystemIntegrationSettingsRepository;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
-import io.github.bucket4j.Refill;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,10 +13,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class RateLimitingFilter extends OncePerRequestFilter {
@@ -25,8 +26,15 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     @Autowired(required = false)
     private SystemIntegrationSettingsRepository settingsRepository;
 
-    private final Map<String, Bucket> apiBuckets = new ConcurrentHashMap<>();
-    private final Map<String, Bucket> authBuckets = new ConcurrentHashMap<>();
+    private final Cache<String, Bucket> apiBuckets = Caffeine.newBuilder()
+            .maximumSize(50_000)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build();
+
+    private final Cache<String, Bucket> authBuckets = Caffeine.newBuilder()
+            .maximumSize(50_000)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build();
 
     private volatile SystemIntegrationSettings cachedSettings = null;
     private volatile long lastSettingsFetch = 0;
@@ -46,14 +54,12 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
 
     private Bucket createNewApiBucket(int maxPerSec) {
-        Refill refill = Refill.greedy(maxPerSec, Duration.ofSeconds(1));
-        Bandwidth limit = Bandwidth.classic(maxPerSec, refill);
+        Bandwidth limit = Bandwidth.builder().capacity(maxPerSec).refillGreedy(maxPerSec, Duration.ofSeconds(1)).build();
         return Bucket.builder().addLimit(limit).build();
     }
 
     private Bucket createNewAuthBucket(int maxPerMin) {
-        Refill refill = Refill.greedy(maxPerMin, Duration.ofMinutes(1));
-        Bandwidth limit = Bandwidth.classic(maxPerMin, refill);
+        Bandwidth limit = Bandwidth.builder().capacity(maxPerMin).refillGreedy(maxPerMin, Duration.ofMinutes(1)).build();
         return Bucket.builder().addLimit(limit).build();
     }
 
@@ -85,18 +91,18 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (enabled) {
+        if (enabled && path != null) {
             if (path.contains("/api/v1/auth/signin") || path.contains("/api/v1/auth/signup") || path.contains("/api/v1/auth/login")) {
-                Bucket authBucket = authBuckets.compute(clientIp, (k, existing) -> existing != null ? existing : createNewAuthBucket(authLimit));
-                if (!authBucket.tryConsume(1)) {
+                Bucket authBucket = authBuckets.get(clientIp, k -> createNewAuthBucket(authLimit));
+                if (authBucket != null && !authBucket.tryConsume(1)) {
                     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                     response.setContentType("application/json");
                     response.getWriter().write("{\"error\": \"Too Many Requests\", \"message\": \"Authentication rate limit exceeded. Please try again shortly.\"}");
                     return;
                 }
             } else if (path.startsWith("/api/")) {
-                Bucket apiBucket = apiBuckets.compute(clientIp, (k, existing) -> existing != null ? existing : createNewApiBucket(apiLimit));
-                if (!apiBucket.tryConsume(1)) {
+                Bucket apiBucket = apiBuckets.get(clientIp, k -> createNewApiBucket(apiLimit));
+                if (apiBucket != null && !apiBucket.tryConsume(1)) {
                     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                     response.setContentType("application/json");
                     response.getWriter().write("{\"error\": \"Too Many Requests\", \"message\": \"API rate limit exceeded. Please slow down your requests.\"}");

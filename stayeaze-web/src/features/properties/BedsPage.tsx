@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BedDouble, Plus, Pencil, Trash2, User, Building2, Layers } from 'lucide-react';
+import { BedDouble, Plus, Pencil, Trash2, User, Building2, Layers, LayoutGrid } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
 import { PageHeader } from '@/components/common/PageHeader';
@@ -159,8 +159,29 @@ export default function BedsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Beds" description="Manage individual bed allocations, building structures and availability." icon={BedDouble}
-        actions={<Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" /> Add Bed</Button>} />
+      <PageHeader
+        title="Beds Inventory"
+        description="Manage individual bed allocations, occupancy status, and building allocations."
+        icon={BedDouble}
+        actions={
+          <div className="flex items-center gap-2.5">
+            <Button
+              variant="outline"
+              onClick={() => {
+                localStorage.setItem('rooms_view_mode', 'visual');
+                window.location.href = '/rooms';
+              }}
+              className="gap-1.5 text-xs shadow-xs"
+            >
+              <LayoutGrid className="h-3.5 w-3.5 text-primary" />
+              <span>Visual Floor Matrix</span>
+            </Button>
+            <Button onClick={openCreate} className="gap-1.5 shadow-sm">
+              <Plus className="h-4 w-4" /> Add Bed
+            </Button>
+          </div>
+        }
+      />
       <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search beds, rooms, buildings..." exportFilename="beds" initialSortBy="number"
         filters={[
           { key: 'status', label: 'Status', options: statuses },

@@ -61,6 +61,7 @@ export default function VisitorsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Visitor | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   // Form State for Walk-In logging (Staff / Security)
   const [walkInForm, setWalkInForm] = useState({
@@ -93,13 +94,14 @@ export default function VisitorsPage() {
 
   const { data: tenantsList } = useQuery({
     queryKey: ['visitors-tenants-list'],
-    queryFn: () => api.get<any>('/tenants', { params: { pageSize: 100 } }).then((r) => r.data?.data || []),
+    queryFn: () => api.get<any[]>('/tenants/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any)?.data || []),
     enabled: !isTenant,
   });
 
   const { data: users } = useQuery({
-    queryKey: ['visitors-users'],
-    queryFn: () => api.get<{ data: UserType[] }>('/users', { params: { pageSize: 100 } }).then((r) => r.data.data),
+    queryKey: ['visitors-staff-users'],
+    queryFn: () => api.get<any[]>('/users').then((r) => Array.isArray(r.data) ? r.data : (r.data as any)?.data || []),
+    enabled: !isTenant,
   });
 
   // Tenant-specific pending approval requests
@@ -147,6 +149,19 @@ export default function VisitorsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 3 * 1024 * 1024) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      setPhotoError(`Selected photo is too large (${sizeMb} MB). Maximum allowed size is 3MB.`);
+      toast({
+        title: 'File Size Exceeded',
+        description: `Photo size (${sizeMb} MB) exceeds the 3MB limit. Please choose a smaller photo.`,
+        variant: 'destructive',
+      });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setPhotoError(null);
     setUploadingPhoto(true);
     const formData = new FormData();
     formData.append('file', file);
@@ -160,9 +175,11 @@ export default function VisitorsPage() {
       setWalkInForm((f) => ({ ...f, photoUrl: url }));
       toast({ title: 'Photo Captured', description: 'Visitor photo attached successfully.' });
     } catch (err: any) {
+      const errMsg = err?.response?.data?.detail || err?.response?.data?.message || 'Failed to capture photo';
+      setPhotoError(errMsg);
       toast({
         title: 'Upload Failed',
-        description: err?.response?.data?.message || 'Failed to capture photo',
+        description: errMsg,
         variant: 'destructive',
       });
     } finally {
@@ -678,7 +695,7 @@ export default function VisitorsPage() {
                   </div>
                   <div>
                     <p className="text-sm font-bold text-slate-900 dark:text-white">Visitor Photo Capture</p>
-                    <p className="text-xs text-muted-foreground">Take photo via webcam / smartphone camera or upload file</p>
+                    <p className="text-xs text-muted-foreground">Take photo via webcam / smartphone camera or upload file (Max: 3MB)</p>
                   </div>
                   <Button
                     type="button"
@@ -690,6 +707,12 @@ export default function VisitorsPage() {
                     <Camera className="h-4 w-4" /> {uploadingPhoto ? 'Uploading...' : 'Take / Upload Photo'}
                   </Button>
                 </div>
+              )}
+              {photoError && (
+                <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mt-1.5 flex items-center justify-center gap-1.5 bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg border border-rose-200 dark:border-rose-900">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                  {photoError}
+                </p>
               )}
               <input
                 ref={fileInputRef}

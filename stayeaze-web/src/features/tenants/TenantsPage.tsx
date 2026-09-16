@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Plus, Pencil, Trash2, Eye, Phone, Mail, LogOut, CreditCard, Zap, Wallet, Calendar, QrCode, KeyRound, ShieldCheck, CheckCircle2, Copy, Printer, ExternalLink, Check, Archive, RotateCcw, FileSpreadsheet, UserPlus, Sparkles } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, Eye, Phone, Mail, LogOut, CreditCard, Zap, Wallet, Calendar, QrCode, KeyRound, ShieldCheck, CheckCircle2, Copy, Printer, ExternalLink, Check, Archive, RotateCcw, FileSpreadsheet, UserPlus, Sparkles, ArrowLeftRight } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
@@ -19,6 +19,8 @@ import { RoomSelect } from '@/components/common/RoomSelect';
 import { BulkImportTenantsModal } from './BulkImportTenantsModal';
 import { QuickAddTenantModal } from './QuickAddTenantModal';
 import { Tenant360Drawer } from './Tenant360Drawer';
+import RoomTransferWizardModal from './RoomTransferWizardModal';
+import { DoorOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -28,8 +30,8 @@ import {
 } from '@/components/ui/select';
 import api from '@/lib/api';
 import type { Tenant, Property, Room, Bed } from '@/lib/types';
-import { formatCurrency, formatDate, initials, formatRoomName } from '@/lib/format';
-import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
+import { formatCurrency, formatDate, initials, formatRoomName, getTodayIsoDate } from '@/lib/format';
+import { useCreate, useDelete, useForm } from '@/lib/hooks/use-crud';
 
 import { validateEmail, validatePhone, validatePan, validateAadhaar, validateRequired, validateIdNumber } from '@/lib/validation';
 
@@ -53,8 +55,10 @@ const emptyForm = {
   emergencyName: '', emergencyContact: '',
   propertyId: '', roomId: '', roomNumber: '', bedNumber: '',
   rent: 8000, deposit: 16000,
-  leaseStart: new Date().toISOString().slice(0, 10),
+  leaseStart: getTodayIsoDate(),
   leaseEnd: '',
+  lockInMonths: undefined as number | undefined,
+  noticePeriodDays: undefined as number | undefined,
   status: 'active' as Tenant['status'],
 };
 
@@ -62,14 +66,14 @@ export default function TenantsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Tenant | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Tenant | null>(null);
-  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<Tenant | null>(null);
-  const [isDeletingPermanent, setIsDeletingPermanent] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [drawerTenantId, setDrawerTenantId] = useState<string | null>(null);
+  const [transferTarget, setTransferTarget] = useState<Tenant | null>(null);
+  const form = useForm(emptyForm);
+  const [selectedBldId, setSelectedBldId] = useState<string>('');
 
   // Fetch properties for dropdown
   const { data: properties } = useQuery({
@@ -79,25 +83,20 @@ export default function TenantsPage() {
   });
   const propMap = new Map((properties ?? []).map((p: any) => [p.id, p.name]));
 
-  // Fetch all rooms — filtered in-memory by selected property
+  // Fetch all rooms — reactively by selected property
   const { data: allRooms } = useQuery({
-    queryKey: ['tenants-rooms'],
-    queryFn: () => api.get<Room[]>('/rooms', { params: { pageSize: 500 } }).then((r) => {
-      // DataTable wraps in { data: [] }, but flat /rooms returns an array directly
+    queryKey: ['tenants-rooms', form.values.propertyId],
+    queryFn: () => api.get<Room[]>('/rooms/minimal', { params: { propertyId: form.values.propertyId || undefined } }).then((r) => {
       const payload = r.data as unknown;
       if (Array.isArray(payload)) return payload as Room[];
       return (payload as { data: Room[] }).data ?? [];
     }),
     enabled: dialogOpen,
-    staleTime: 300000,
   });
-
-  const form = useForm(emptyForm);
-  const [selectedBldId, setSelectedBldId] = useState<string>('');
 
   const { data: buildings } = useQuery({
     queryKey: ['tenants-buildings', form.values.propertyId],
-    queryFn: () => api.get<any[]>('/buildings', { params: { propertyId: form.values.propertyId || undefined, pageSize: 100 } }).then((r) => {
+    queryFn: () => api.get<any[]>('/buildings/minimal', { params: { propertyId: form.values.propertyId || undefined } }).then((r) => {
       const payload = r.data as unknown;
       if (Array.isArray(payload)) return payload;
       return (payload as { data: any[] })?.data ?? [];
@@ -108,8 +107,9 @@ export default function TenantsPage() {
   const roomOptions = useMemo(() => {
     return (allRooms ?? []).filter((r: any) => {
       if (r.status === 'archived' || r.status === 'maintenance' || r.status === 'blocked') return false;
-      if (form.values.propertyId && r.propertyId && r.propertyId !== form.values.propertyId) return false;
-      if (selectedBldId && r.buildingId && r.buildingId !== selectedBldId) return false;
+      const targetProp = form.values.propertyId;
+      if (targetProp && r.propertyId && String(r.propertyId).toLowerCase() !== String(targetProp).toLowerCase()) return false;
+      if (selectedBldId && r.buildingId && String(r.buildingId).toLowerCase() !== String(selectedBldId).toLowerCase()) return false;
       return true;
     });
   }, [allRooms, form.values.propertyId, selectedBldId]);
@@ -117,7 +117,7 @@ export default function TenantsPage() {
   // Fetch beds for the selected room
   const { data: bedsForRoom } = useQuery({
     queryKey: ['tenants-beds', selectedRoomId],
-    queryFn: () => api.get<Bed[]>(`/rooms/${selectedRoomId}/beds`).then((r) => {
+    queryFn: () => api.get<Bed[]>('/beds/minimal', { params: { roomId: selectedRoomId } }).then((r) => {
       const payload = r.data as unknown;
       if (Array.isArray(payload)) return payload as Bed[];
       return (payload as { data: Bed[] }).data ?? [];
@@ -143,14 +143,60 @@ export default function TenantsPage() {
   });
 
   const createMut = useCreate<Tenant>(ENDPOINT, 'Tenant');
-  const updateMut = useUpdate<Tenant>(ENDPOINT, 'Tenant');
-  const deleteMut = useDelete(ENDPOINT, 'Tenant');
 
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cash' | 'later'>('cash');
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [proRataBilling, setProRataBilling] = useState(true);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [qrPropertyId, setQrPropertyId] = useState('');
+
+  // Mutual Bed Swap State (P2.2)
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
+  const [swapTenant1Id, setSwapTenant1Id] = useState('');
+  const [swapTenant2Id, setSwapTenant2Id] = useState('');
+  const [isSwappingBeds, setIsSwappingBeds] = useState(false);
+
+  const { data: activeResidentsForSwap } = useQuery({
+    queryKey: ['tenants-active-swap-list'],
+    queryFn: () => api.get<Tenant[]>('/tenants', { params: { pageSize: 500 } }).then(r => {
+      const d = r.data as any;
+      const list = Array.isArray(d) ? d : (d.data || []);
+      return list.filter((t: any) => t.status !== 'ARCHIVED' && t.status !== 'archived' && t.status !== 'checked_out' && t.status !== 'CHECKED_OUT' && t.roomNumber && t.bedNumber);
+    }),
+    enabled: swapModalOpen,
+  });
+
+  async function handleExecuteBedSwap() {
+    if (!swapTenant1Id || !swapTenant2Id) {
+      toast({ title: 'Select Residents', description: 'Please select both residents to perform bed swap.', variant: 'destructive' });
+      return;
+    }
+    if (swapTenant1Id === swapTenant2Id) {
+      toast({ title: 'Invalid Selection', description: 'Cannot swap beds for the same resident.', variant: 'destructive' });
+      return;
+    }
+    setIsSwappingBeds(true);
+    try {
+      const res = await api.post('/tenants/swap-beds', { tenantId1: swapTenant1Id, tenantId2: swapTenant2Id });
+      toast({
+        title: 'Bed Swap Completed',
+        description: res.data?.message || 'Mutual bed swap and lease addendums generated successfully!',
+      });
+      queryClient.invalidateQueries();
+      setSwapModalOpen(false);
+      setSwapTenant1Id('');
+      setSwapTenant2Id('');
+    } catch (err: any) {
+      toast({
+        title: 'Swap Failed',
+        description: err?.response?.data?.message || 'Failed to execute bed swap.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSwappingBeds(false);
+    }
+  }
 
   // Auto-select first property for QR when properties load
   const firstPropId = (properties ?? [])[0]?.id || '';
@@ -165,57 +211,10 @@ export default function TenantsPage() {
   function openCreate() {
     queryClient.invalidateQueries({ queryKey: ['tenants-rooms'] });
     queryClient.invalidateQueries({ queryKey: ['tenants-beds'] });
-    setEditing(null);
     setPaymentMethod('cash');
+    setProRataBilling(true);
     const defaultDep = Number(defaultDepData?.defaultSecurityDeposit || 0);
     form.reset({ ...emptyForm, deposit: defaultDep });
-    setSelectedRoomId('');
-    setDialogOpen(true);
-  }
-
-  async function openEdit(row: Tenant) {
-    setEditing(row);
-    let fullTenant = row;
-    try {
-      const res = await api.get<Tenant>(`/tenants/${row.id}`);
-      if (res.data) fullTenant = res.data;
-    } catch (err) {
-      console.warn('Could not fetch full tenant details for editing:', err);
-    }
-
-    const idNum = fullTenant.idNumber || fullTenant.idProofNumber || (fullTenant as any).identityNumber || '';
-    const emName = fullTenant.emergencyName || fullTenant.emergencyContactName || (fullTenant as any).emergencyContactPerson || '';
-    const emContact = fullTenant.emergencyContact || fullTenant.emergencyContactMobile || (fullTenant as any).emergencyPhone || '';
-
-    const toDateInput = (val?: string | null) => {
-      if (!val) return '';
-      const s = String(val).trim();
-      if (s.includes('T')) return s.split('T')[0];
-      if (s.length >= 10 && s.includes('-')) return s.slice(0, 10);
-      return s;
-    };
-
-    form.reset({
-      name: fullTenant.name || (fullTenant.firstName ? `${fullTenant.firstName} ${fullTenant.lastName}`.trim() : ''),
-      email: fullTenant.email ?? '',
-      phone: fullTenant.phone ?? fullTenant.mobile ?? '',
-      gender: fullTenant.gender ?? 'male',
-      dob: toDateInput(fullTenant.dob),
-      occupation: fullTenant.occupation ?? '',
-      idType: fullTenant.idType ?? (fullTenant as any).idProofType ?? 'aadhaar',
-      idNumber: idNum,
-      emergencyName: emName,
-      emergencyContact: emContact,
-      propertyId: String(fullTenant.propertyId ?? ''),
-      roomId: '',
-      roomNumber: fullTenant.roomNumber ?? '',
-      bedNumber: fullTenant.bedNumber ?? '',
-      rent: Number(fullTenant.rent ?? 0),
-      deposit: Number(fullTenant.deposit ?? 0),
-      leaseStart: toDateInput(fullTenant.leaseStart),
-      leaseEnd: toDateInput(fullTenant.leaseEnd),
-      status: fullTenant.status,
-    });
     setSelectedRoomId('');
     setDialogOpen(true);
   }
@@ -274,16 +273,29 @@ export default function TenantsPage() {
       deposit: form.values.deposit,
       leaseStart: form.values.leaseStart || undefined,
       leaseEnd: form.values.leaseEnd || undefined,
+      lockInMonths: form.values.lockInMonths !== undefined && form.values.lockInMonths !== null && String(form.values.lockInMonths) !== '' ? Number(form.values.lockInMonths) : undefined,
+      noticePeriodDays: form.values.noticePeriodDays !== undefined && form.values.noticePeriodDays !== null && String(form.values.noticePeriodDays) !== '' ? Number(form.values.noticePeriodDays) : undefined,
       status: form.values.status,
+      billingMode: proRataBilling ? 'PRO_RATA' : 'FULL_MONTH',
     };
 
-    const totalDue = Number(form.values.rent || 0) + Number(form.values.deposit || 0);
+    // Calculate dynamic pro-rata rent for first month
+    const leaseStartDate = form.values.leaseStart ? new Date(form.values.leaseStart) : new Date();
+    const dayOfMonth = isNaN(leaseStartDate.getTime()) ? 1 : leaseStartDate.getDate();
+    const daysInMonth = isNaN(leaseStartDate.getTime()) ? 30 : new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth() + 1, 0).getDate();
+    const isMidMonth = dayOfMonth > 1;
+    const remainingDays = Math.max(1, daysInMonth - dayOfMonth + 1);
+    const monthlyRent = Number(form.values.rent || 0);
+    const initialRent = isMidMonth && proRataBilling
+      ? Math.round((monthlyRent / daysInMonth) * remainingDays)
+      : monthlyRent;
+    const totalDue = initialRent + Number(form.values.deposit || 0);
 
-    if (!editing && paymentMethod === 'razorpay' && totalDue > 0) {
+    if (paymentMethod === 'razorpay' && totalDue > 0) {
       setProcessingPayment(true);
       api.post('/tenants/onboarding-order', {
         propertyId: form.values.propertyId,
-        rent: form.values.rent,
+        rent: initialRent,
         deposit: form.values.deposit,
         tenantName: `${firstName} ${lastName}`,
         tenantEmail: form.values.email,
@@ -344,8 +356,7 @@ export default function TenantsPage() {
       status: (paymentMethod === 'cash' ? 'active' : 'pending_checkin') as any,
     };
 
-    if (editing) updateMut.mutate({ id: editing.id, payload: payload as any }, { onSuccess: () => { queryClient.invalidateQueries(); setDialogOpen(false); } });
-    else createMut.mutate(finalPayload as any, { onSuccess: () => { queryClient.invalidateQueries(); setDialogOpen(false); } });
+    createMut.mutate(finalPayload as any, { onSuccess: () => { queryClient.invalidateQueries(); setDialogOpen(false); } });
   }
 
   const archiveMut = useDelete(ENDPOINT, 'Tenant');
@@ -359,25 +370,6 @@ export default function TenantsPage() {
         setArchiveTarget(null);
       },
     });
-  }
-
-  async function confirmPermanentDelete() {
-    if (!permanentDeleteTarget) return;
-    setIsDeletingPermanent(true);
-    try {
-      await api.delete(`/tenants/${permanentDeleteTarget.id}/permanent`);
-      toast({ title: 'Tenant Permanently Deleted', description: `Tenant "${permanentDeleteTarget.name}" and all historical records removed.` });
-      queryClient.invalidateQueries();
-      setPermanentDeleteTarget(null);
-    } catch (err: any) {
-      toast({
-        title: 'Delete Failed',
-        description: err?.response?.data?.message || 'Failed to permanently delete tenant.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsDeletingPermanent(false);
-    }
   }
 
   async function handleUnarchive(row: Tenant) {
@@ -401,8 +393,19 @@ export default function TenantsPage() {
           <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">{initials(r.name)}</AvatarFallback>
         </Avatar>
         <div>
-          <p className="font-medium">{r.name}</p>
-          <p className="text-xs text-muted-foreground">{r.occupation}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="font-medium">{r.name}</p>
+            {(r as any).billingResponsibility === 'CORPORATE_SPONSORED' && (
+              <Badge className="text-[9px] px-1.5 py-0 bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30 font-bold">
+                🏢 B2B
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {(r as any).billingResponsibility === 'CORPORATE_SPONSORED'
+              ? ((r as any).corporateCompanyName ? `Sponsored by ${(r as any).corporateCompanyName}` : 'Corporate Lease')
+              : (r.occupation || 'Resident')}
+          </p>
         </div>
       </div>
     )},
@@ -421,9 +424,14 @@ export default function TenantsPage() {
         {r.bedNumber ? ` · ${r.bedNumber}` : ''}
       </span>
     )},
-    { key: 'rent', header: 'Rent', sortable: true, cell: (r) =>
-      <span className="font-medium tabular-nums">{formatCurrency(Number(r.rent ?? 0))}</span>
-    },
+    { key: 'rent', header: 'Rent', sortable: true, cell: (r) => (
+      <div>
+        <span className="font-medium tabular-nums">{formatCurrency(Number(r.rent ?? 0))}</span>
+        {(r as any).billingResponsibility === 'CORPORATE_SPONSORED' && (
+          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Corporate Covered</p>
+        )}
+      </div>
+    )},
     { key: 'leaseEnd', header: 'Lease Ends', sortable: true, cell: (r) =>
       <span className="text-sm">{r.leaseEnd ? formatDate(r.leaseEnd) : <span className="text-muted-foreground">—</span>}</span>
     },
@@ -641,6 +649,9 @@ export default function TenantsPage() {
             <Button variant="outline" onClick={() => setBulkImportOpen(true)} className="gap-1.5 border-emerald-600/30 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-semibold">
               <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Import Excel / CSV
             </Button>
+            <Button variant="outline" onClick={() => setSwapModalOpen(true)} className="gap-1.5 border-indigo-500/30 hover:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 font-semibold">
+              <ArrowLeftRight className="h-4 w-4 text-indigo-600" /> Swap Beds
+            </Button>
             <Button variant="outline" onClick={() => setQrModalOpen(true)} className="gap-1.5">
               <QrCode className="h-4 w-4 text-indigo-600" /> Reception QR
             </Button>
@@ -680,7 +691,6 @@ export default function TenantsPage() {
                 // 1. Primary Actions
                 { label: 'Quick 360 View', icon: Sparkles, onSelect: () => setDrawerTenantId(row.id) },
                 { label: 'View Profile', icon: Eye, onSelect: () => navigate(`/tenants/${row.id}`) },
-                { label: 'Edit Details', icon: Pencil, onSelect: () => openEdit(row) },
 
                 // 2. Contextual Check-in & KYC
                 ...(isPendingCheckin ? [{
@@ -705,10 +715,15 @@ export default function TenantsPage() {
 
                 // 3. Resident Operations
                 {
-                  label: 'Send Credentials',
-                  icon: KeyRound,
+                  label: 'Transfer Room',
+                  icon: DoorOpen,
                   separatorBefore: !isPendingCheckin && !isKycPending,
                   sectionHeader: !isPendingCheckin && !isKycPending ? 'Operations' : undefined,
+                  onSelect: () => setTransferTarget(row),
+                },
+                {
+                  label: 'Send Credentials',
+                  icon: KeyRound,
                   onSelect: () => handleSendCredentials(row),
                 },
 
@@ -731,30 +746,21 @@ export default function TenantsPage() {
                   label: 'Archive Tenant',
                   icon: Archive,
                   separatorBefore: true,
-                  sectionHeader: 'Danger Zone',
+                  sectionHeader: 'Record Status',
                   description: 'Frees bed, preserves invoices',
                   onSelect: () => setArchiveTarget(row),
                 }]),
-
-                {
-                  label: 'Permanent Delete',
-                  icon: Trash2,
-                  variant: 'destructive' as const,
-                  badge: 'Erase',
-                  description: 'Irreversibly deletes all history',
-                  onSelect: () => setPermanentDeleteTarget(row),
-                },
               ]}
             />
           );
         }} />
 
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen}
-        title={editing ? 'Edit Tenant' : 'Add New Tenant'}
+        title="Onboard New Resident"
         description="Personal, contact and lease details."
         onSubmit={submit}
-        loading={createMut.isPending || updateMut.isPending || processingPayment}
-        submitLabel={editing ? 'Save Changes' : (processingPayment ? 'Opening Razorpay...' : 'Create Tenant')}
+        loading={createMut.isPending || processingPayment}
+        submitLabel={processingPayment ? 'Opening Razorpay...' : 'Onboard Resident'}
         size="xl">
         <div className="space-y-4">
 
@@ -849,6 +855,7 @@ export default function TenantsPage() {
                   value={form.values.propertyId}
                   onChange={(v) => {
                     form.setValue('propertyId', v);
+                    setSelectedBldId('');
                     form.setValue('roomId', '');
                     form.setValue('roomNumber', '');
                     form.setValue('bedNumber', '');
@@ -893,7 +900,7 @@ export default function TenantsPage() {
                   selectedRoomNumber={form.values.roomNumber || form.values.roomId}
                   selectedBedNumber={form.values.bedNumber}
                   existingTenants={existingTenants}
-                  currentTenantId={editing?.id}
+                  currentTenantId={undefined}
                   onSelectRoom={(rNum, rId, rentVal) => {
                     form.setValue('roomNumber', rNum);
                     form.setValue('roomId', rId || rNum);
@@ -913,10 +920,24 @@ export default function TenantsPage() {
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormInput label="Monthly Rent (₹)" type="number" id="rent" value={String(form.values.rent)}
-                  onChange={(e) => form.setValue('rent', Number(e.target.value))} />
-                <FormInput label="Deposit (₹)" type="number" id="deposit" value={String(form.values.deposit)}
-                  onChange={(e) => form.setValue('deposit', Number(e.target.value))} />
+                <FormInput
+                  label="Monthly Rent (₹)"
+                  type="number"
+                  id="rent"
+                  value={String(form.values.rent)}
+                  readOnly
+                  hint="Auto-fetched from selected room rate"
+                  className="bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed text-slate-700 dark:text-slate-300 font-mono font-medium"
+                />
+                <FormInput
+                  label="Deposit (₹)"
+                  type="number"
+                  id="deposit"
+                  value={String(form.values.deposit)}
+                  readOnly
+                  hint="Auto-configured by property billing policy"
+                  className="bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed text-slate-700 dark:text-slate-300 font-mono font-medium"
+                />
               </div>
 
               <div className="grid gap-4 sm:grid-cols-3">
@@ -933,67 +954,143 @@ export default function TenantsPage() {
                 <FormInput label="Lease End (optional)" type="date" id="leaseEnd" value={form.values.leaseEnd}
                   onChange={(e) => form.setValue('leaseEnd', e.target.value)} />
               </div>
+
+              {/* Contractual Policy Overrides (Optional) (P3.3) */}
+              <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-3 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  <ShieldCheck className="h-3.5 w-3.5 text-indigo-500" />
+                  <span>Contractual Lease Policy Overrides (Optional)</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Leave blank to inherit the selected property's standard policy defaults.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormInput
+                    label="Contract Lock-In (Months)"
+                    type="number"
+                    id="lockInMonths"
+                    value={form.values.lockInMonths !== undefined && form.values.lockInMonths !== null ? String(form.values.lockInMonths) : ''}
+                    onChange={(e) => form.setValue('lockInMonths', e.target.value !== '' ? parseInt(e.target.value) || 0 : undefined)}
+                    placeholder="Inherit Property Default"
+                  />
+                  <FormInput
+                    label="Contract Notice Period (Days)"
+                    type="number"
+                    id="noticePeriodDays"
+                    value={form.values.noticePeriodDays !== undefined && form.values.noticePeriodDays !== null ? String(form.values.noticePeriodDays) : ''}
+                    onChange={(e) => form.setValue('noticePeriodDays', e.target.value !== '' ? parseInt(e.target.value) || 0 : undefined)}
+                    placeholder="Inherit Property Default"
+                  />
+                </div>
+              </div>
             </div>
 
-            {!editing && (
-              <div className="rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 p-4 space-y-3 mt-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
-                    <CreditCard className="h-4 w-4" /> Initial Onboarding Payment (Rent + Deposit)
-                  </span>
-                  <span className="text-sm font-extrabold text-indigo-900 dark:text-indigo-200">
-                    Total: ₹{Number(form.values.rent || 0) + Number(form.values.deposit || 0)}
-                  </span>
+            {(() => {
+              const leaseStartDate = form.values.leaseStart ? new Date(form.values.leaseStart) : new Date();
+              const dayOfMonth = isNaN(leaseStartDate.getTime()) ? 1 : leaseStartDate.getDate();
+              const daysInMonth = isNaN(leaseStartDate.getTime()) ? 30 : new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth() + 1, 0).getDate();
+              const isMidMonth = dayOfMonth > 1;
+              const remainingDays = Math.max(1, daysInMonth - dayOfMonth + 1);
+              const monthlyRent = Number(form.values.rent || 0);
+              const initialRent = isMidMonth && proRataBilling
+                ? Math.round((monthlyRent / daysInMonth) * remainingDays)
+                : monthlyRent;
+              const depositAmount = Number(form.values.deposit || 0);
+              const totalAmount = initialRent + depositAmount;
+
+              return (
+                <div className="rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 p-4 space-y-3 mt-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
+                      <CreditCard className="h-4 w-4" /> Initial Onboarding Payment (Rent + Deposit)
+                    </span>
+                    <span className="text-sm font-extrabold text-indigo-900 dark:text-indigo-200 font-mono">
+                      Total: ₹{totalAmount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  {/* Mid-Month Pro-Rata Alert & Toggle (P0.1) */}
+                  {isMidMonth && monthlyRent > 0 && (
+                    <div className="p-2.5 rounded-lg bg-indigo-100/70 dark:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1">
+                          <Sparkles className="h-3.5 w-3.5 text-indigo-600" /> Mid-Month Move-In (Day {dayOfMonth} of {daysInMonth})
+                        </span>
+                        <span className="font-bold text-indigo-800 dark:text-indigo-300 font-mono text-[11px]">
+                          {remainingDays} days remaining
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-700 dark:text-slate-300 pt-1 border-t border-indigo-200/60">
+                        <label className="flex items-center gap-2 cursor-pointer font-semibold select-none">
+                          <input
+                            type="checkbox"
+                            checked={proRataBilling}
+                            onChange={(e) => setProRataBilling(e.target.checked)}
+                            className="h-3.5 w-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <span>Calculate Pro-Rata Rent (₹{initialRent.toLocaleString('en-IN')})</span>
+                        </label>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {proRataBilling ? 'Prevents double-charging on 1st' : 'Full rent'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 flex items-center justify-between px-1">
+                    <span>Rent: <strong className="text-slate-900 dark:text-slate-100">₹{initialRent.toLocaleString('en-IN')}</strong> {isMidMonth && proRataBilling ? `(Pro-rata ${remainingDays}d)` : '(Full month)'}</span>
+                    <span>Deposit: <strong className="text-slate-900 dark:text-slate-100">₹{depositAmount.toLocaleString('en-IN')}</strong></span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('razorpay')}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-xs font-semibold transition-all ${
+                        paymentMethod === 'razorpay'
+                          ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Zap className="h-4 w-4 mb-1" />
+                      <span>Razorpay Online</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('cash')}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-xs font-semibold transition-all ${
+                        paymentMethod === 'cash'
+                          ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Wallet className="h-4 w-4 mb-1" />
+                      <span>Cash / Offline</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('later')}
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-xs font-semibold transition-all ${
+                        paymentMethod === 'later'
+                          ? 'border-amber-600 bg-amber-600 text-white shadow-xs'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Calendar className="h-4 w-4 mb-1" />
+                      <span>Pay Later</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground">
+                    {paymentMethod === 'razorpay' && 'Launches Razorpay checkout for immediate online payment (UPI, Cards, Netbanking).'}
+                    {paymentMethod === 'cash' && 'Marks tenant as active and records initial rent & deposit paid via cash/offline.'}
+                    {paymentMethod === 'later' && 'Creates tenant record and issues an onboarding invoice due in 7 days.'}
+                  </p>
                 </div>
-
-                <div className="grid grid-cols-3 gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('razorpay')}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-xs font-semibold transition-all ${
-                      paymentMethod === 'razorpay'
-                        ? 'border-indigo-600 bg-indigo-600 text-white shadow-xs'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Zap className="h-4 w-4 mb-1" />
-                    <span>Razorpay Online</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('cash')}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-xs font-semibold transition-all ${
-                      paymentMethod === 'cash'
-                        ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Wallet className="h-4 w-4 mb-1" />
-                    <span>Cash / Offline</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('later')}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-lg border text-xs font-semibold transition-all ${
-                      paymentMethod === 'later'
-                        ? 'border-amber-600 bg-amber-600 text-white shadow-xs'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Calendar className="h-4 w-4 mb-1" />
-                    <span>Pay Later</span>
-                  </button>
-                </div>
-
-                <p className="text-[11px] text-muted-foreground">
-                  {paymentMethod === 'razorpay' && 'Launches Razorpay checkout for immediate online payment (UPI, Cards, Netbanking).'}
-                  {paymentMethod === 'cash' && 'Marks tenant as active and records initial rent & deposit paid via cash/offline.'}
-                  {paymentMethod === 'later' && 'Creates tenant record and issues an onboarding invoice due in 7 days.'}
-                </p>
-              </div>
-            )}
+              );
+            })()}
           </section>
         </div>
       </FormDialog>
@@ -1002,11 +1099,6 @@ export default function TenantsPage() {
         title="Archive Tenant (Soft Delete)" variant="default"
         description={`Archive resident "${archiveTarget?.name}"? The tenant will be marked as archived, their assigned room/bed will be freed up, and all financial ledger records and invoices will be safely preserved.`}
         confirmLabel="Archive Resident" onConfirm={confirmArchive} loading={archiveMut.isPending} />
-
-      <ConfirmDialog open={!!permanentDeleteTarget} onOpenChange={(o) => !o && setPermanentDeleteTarget(null)}
-        title="Permanent Delete Tenant" variant="destructive"
-        description={`Are you sure you want to PERMANENTLY delete "${permanentDeleteTarget?.name}"? This action cannot be undone. All linked records, invoices, receipts, and tenant accounts will be permanently erased.`}
-        confirmLabel="Permanently Delete" onConfirm={confirmPermanentDelete} loading={isDeletingPermanent} />
 
       <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
         <DialogContent id="reception-qr-print-poster" className="w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-0 shadow-2xl max-h-[88vh] overflow-hidden">
@@ -1081,6 +1173,107 @@ export default function TenantsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Mutual Bed Swap & Auto-Reconcile Modal (P2.2) */}
+      <Dialog open={swapModalOpen} onOpenChange={setSwapModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+              <ArrowLeftRight className="h-5 w-5 text-indigo-600" /> Mutual Bed Swap &amp; Transfer
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Directly swap room and bed assignments between two active residents. The engine atomically swaps occupancy locks, auto-reconciles rent/deposit deltas, and generates legal digital lease addendums.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Resident 1 (First Party)</Label>
+                <Select value={swapTenant1Id} onValueChange={setSwapTenant1Id}>
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Select Resident 1" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(activeResidentsForSwap || []).map((t) => (
+                      <SelectItem key={t.id} value={t.id} disabled={t.id === swapTenant2Id} className="text-xs">
+                        {t.name || `${t.firstName} ${t.lastName || ''}`} (Room {t.roomNumber} - Bed {t.bedNumber})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Resident 2 (Second Party)</Label>
+                <Select value={swapTenant2Id} onValueChange={setSwapTenant2Id}>
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Select Resident 2" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(activeResidentsForSwap || []).map((t) => (
+                      <SelectItem key={t.id} value={t.id} disabled={t.id === swapTenant1Id} className="text-xs">
+                        {t.name || `${t.firstName} ${t.lastName || ''}`} (Room {t.roomNumber} - Bed {t.bedNumber})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Swap Preview Matrix */}
+            {swapTenant1Id && swapTenant2Id && (() => {
+              const t1 = (activeResidentsForSwap || []).find(t => t.id === swapTenant1Id);
+              const t2 = (activeResidentsForSwap || []).find(t => t.id === swapTenant2Id);
+              if (!t1 || !t2) return null;
+
+              return (
+                <div className="space-y-2 p-3 rounded-lg bg-muted/40 border border-indigo-200/50 dark:border-indigo-900/50">
+                  <p className="font-semibold text-indigo-900 dark:text-indigo-200 text-xs flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-indigo-600" /> Swap Preview &amp; Addendum Details
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 rounded bg-background border">
+                      <p className="font-bold text-foreground truncate">{t1.name || t1.firstName}</p>
+                      <p className="text-muted-foreground line-through">Room {t1.roomNumber} (Bed {t1.bedNumber})</p>
+                      <p className="text-emerald-600 font-bold">➔ Room {t2.roomNumber} (Bed {t2.bedNumber})</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Rent: ₹{t2.rent || t1.rent} / mo</p>
+                    </div>
+
+                    <div className="p-2 rounded bg-background border">
+                      <p className="font-bold text-foreground truncate">{t2.name || t2.firstName}</p>
+                      <p className="text-muted-foreground line-through">Room {t2.roomNumber} (Bed {t2.bedNumber})</p>
+                      <p className="text-emerald-600 font-bold">➔ Room {t1.roomNumber} (Bed {t1.bedNumber})</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Rent: ₹{t1.rent || t2.rent} / mo</p>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground italic">
+                    ℹ️ Pro-rata rent adjustments will be auto-calculated if room rents differ. Signed digital lease addendums will be attached to both profiles.
+                  </p>
+                </div>
+              );
+            })()}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setSwapModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                onClick={handleExecuteBedSwap}
+                disabled={!swapTenant1Id || !swapTenant2Id || isSwappingBeds}
+              >
+                {isSwappingBeds ? <RotateCcw className="h-3.5 w-3.5 animate-spin" /> : <ArrowLeftRight className="h-3.5 w-3.5" />}
+                {isSwappingBeds ? 'Swapping Beds...' : 'Execute Mutual Bed Swap'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Existing Tenant Bulk CSV / Excel Import */}
       <BulkImportTenantsModal
         open={bulkImportOpen}
@@ -1105,6 +1298,15 @@ export default function TenantsPage() {
         open={Boolean(drawerTenantId)}
         onOpenChange={(open) => !open && setDrawerTenantId(null)}
       />
+
+      {/* P2.2: Room Transfer Reconciliation Wizard */}
+      {transferTarget && (
+        <RoomTransferWizardModal
+          open={Boolean(transferTarget)}
+          onClose={() => setTransferTarget(null)}
+          tenant={transferTarget}
+        />
+      )}
     </div>
   );
 }

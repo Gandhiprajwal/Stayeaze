@@ -17,6 +17,10 @@ import java.util.UUID;
 @Repository
 public interface BuildingRepository extends JpaRepository<Building, UUID> {
     List<Building> findByProperty(Property property);
+
+    @Query("SELECT b FROM Building b WHERE b.property.id = :propertyId")
+    List<Building> findByPropertyId(@Param("propertyId") UUID propertyId);
+
     Optional<Building> findByIdAndProperty(UUID id, Property property);
     Boolean existsByPropertyAndCode(Property property, String code);
 

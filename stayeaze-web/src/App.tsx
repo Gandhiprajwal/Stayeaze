@@ -48,9 +48,12 @@ const ComplaintsPage = lazy(() => import('@/features/complaints/ComplaintsPage')
 const MaintenancePage = lazy(() => import('@/features/maintenance/MaintenancePage'));
 const VisitorsPage = lazy(() => import('@/features/visitors/VisitorsPage'));
 const ReportsPage = lazy(() => import('@/features/reports/ReportsPage'));
+const AnalyticsPage = lazy(() => import('@/features/analytics/AnalyticsPage'));
 const UsersPage = lazy(() => import('@/features/users/UsersPage'));
 const RolesPage = lazy(() => import('@/features/roles/RolesPage'));
 const SettingsPage = lazy(() => import('@/features/settings/SettingsPage'));
+const ParcelsPage = lazy(() => import('@/features/parcels/ParcelsPage'));
+const NotificationLogsPage = lazy(() => import('@/features/notifications/NotificationLogsPage'));
 const AuditLogsPage = lazy(() => import('@/features/audit-logs/AuditLogsPage'));
 const BackendLogsPage = lazy(() => import('@/features/super-admin/BackendLogsPage'));
 import OfflinePage from '@/features/common/OfflinePage';
@@ -174,6 +177,7 @@ export default function App() {
                 <Route path="/beds" element={<RequireAuth module="rooms"><BedsPage /></RequireAuth>} />
                 <Route path="/tenants" element={<RequireAuth module="tenants"><TenantsPage /></RequireAuth>} />
                 <Route path="/tenants/:id" element={<RequireAuth module="tenants"><TenantDetailPage /></RequireAuth>} />
+                <Route path="/parcels" element={<RequireAuth module="tenants"><ParcelsPage /></RequireAuth>} />
                 <Route path="/agreements" element={<RequireAuth module="tenants"><AgreementsPage /></RequireAuth>} />
                 <Route path="/bookings" element={<RequireAuth module="bookings"><BookingsPage /></RequireAuth>} />
                 <Route path="/bookings/:id" element={<RequireAuth module="bookings"><BookingDetailPage /></RequireAuth>} />
@@ -187,12 +191,14 @@ export default function App() {
                 <Route path="/maintenance" element={<RequireAuth module="maintenance"><MaintenancePage /></RequireAuth>} />
                 <Route path="/visitors" element={<RequireAuth module="visitors"><VisitorsPage /></RequireAuth>} />
                 <Route path="/reports" element={<RequireAuth module="reports"><ReportsPage /></RequireAuth>} />
+                <Route path="/analytics" element={<RequireAuth module="reports"><AnalyticsPage /></RequireAuth>} />
                 <Route path="/reports/gst-tax" element={<RequireAuth module="reports"><GstTaxReportsPage /></RequireAuth>} />
                 <Route path="/reports/deposit-ledger" element={<RequireAuth module="reports"><SecurityDepositLedgerPage /></RequireAuth>} />
                 <Route path="/reports/financial-ledger" element={<RequireAuth module="reports"><FinancialLedgerPage /></RequireAuth>} />
-                <Route path="/users" element={<RequireAuth allowedRoles={['SUPER_ADMIN', 'ADMIN', 'OWNER']}><UsersPage /></RequireAuth>} />
+                <Route path="/users" element={<RequireAuth allowedRoles={['SUPER_ADMIN', 'ADMIN', 'OWNER', 'PROPERTY_MANAGER']}><UsersPage /></RequireAuth>} />
                 <Route path="/roles" element={<RequireAuth allowedRoles={['SUPER_ADMIN']}><RolesPage /></RequireAuth>} />
                 <Route path="/settings" element={<RequireAuth module="settings"><SettingsPage /></RequireAuth>} />
+                <Route path="/notification-logs" element={<RequireAuth allowedRoles={['SUPER_ADMIN', 'ADMIN', 'OWNER', 'PROPERTY_MANAGER', 'RECEPTIONIST']}><NotificationLogsPage /></RequireAuth>} />
                 <Route path="/audit-logs" element={<RequireAuth module="audit"><AuditLogsPage /></RequireAuth>} />
                 <Route path="/security/sessions" element={<RequireAuth module="settings"><SecuritySessionsPage /></RequireAuth>} />
                 <Route path="/security/backup" element={<RequireAuth module="settings"><DataBackupPage /></RequireAuth>} />
@@ -211,11 +217,11 @@ export default function App() {
                 <Route path="/support/subscribers" element={<RequireAuth allowedRoles={['SUPPORT']}><SupportSubscribersPage /></RequireAuth>} />
                 <Route path="/support/leads" element={<RequireAuth allowedRoles={['SUPPORT']}><SupportLeadsPage /></RequireAuth>} />
                 <Route path="/support/tickets" element={<RequireAuth allowedRoles={['SUPPORT']}><SupportTicketsPage /></RequireAuth>} />
-                <Route path="/accountant/dashboard" element={<RequireAuth allowedRoles={['ACCOUNTANT','ADMIN','OWNER']}><AccountantDashboardPage /></RequireAuth>} />
+                <Route path="/accountant/dashboard" element={<RequireAuth allowedRoles={['ACCOUNTANT', 'ADMIN', 'OWNER', 'PROPERTY_MANAGER']}><AccountantDashboardPage /></RequireAuth>} />
                 <Route path="/accountant/ledger" element={<RequireAuth module="reports"><FinancialLedgerPage /></RequireAuth>} />
                 <Route path="/accountant/gst-reports" element={<RequireAuth module="reports"><GstTaxReportsPage /></RequireAuth>} />
-                <Route path="/accountant/security-deposits" element={<RequireAuth module="reports"><SecurityDepositLedgerPage /></RequireAuth>} />
-                <Route path="/receptionist/dashboard" element={<RequireAuth allowedRoles={['RECEPTIONIST']}><ReceptionistDashboardPage /></RequireAuth>} />
+                <Route path="/receptionist" element={<RequireAuth allowedRoles={['RECEPTIONIST', 'PROPERTY_MANAGER', 'OWNER', 'ADMIN', 'SUPER_ADMIN']}><ReceptionistDashboardPage /></RequireAuth>} />
+                <Route path="/receptionist/dashboard" element={<RequireAuth allowedRoles={['RECEPTIONIST', 'PROPERTY_MANAGER', 'OWNER', 'ADMIN', 'SUPER_ADMIN']}><ReceptionistDashboardPage /></RequireAuth>} />
                 <Route path="/security/dashboard" element={<RequireAuth allowedRoles={['SECURITY_GUARD']}><SecurityGuardDashboardPage /></RequireAuth>} />
                 <Route path="/staff/dashboard" element={<RequireAuth allowedRoles={['STAFF']}><StaffDashboardPage /></RequireAuth>} />
               </Route>

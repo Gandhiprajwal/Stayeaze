@@ -7,13 +7,10 @@ import com.stayeaze.backend.repository.*;
 import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -29,8 +26,6 @@ import com.stayeaze.backend.services.PropertyService;
 @RequestMapping("/api/v1/properties")
 public class PropertyController {
 
-    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(PropertyController.class);
-
     @Autowired
     private PropertyService propertyService;
 
@@ -44,22 +39,7 @@ public class PropertyController {
     private UserRepository userRepository;
 
     @Autowired
-    private RoleRepository roleRepository;
-
-    @Autowired
-    private PasswordEncoder encoder;
-
-    @Autowired
     private com.stayeaze.backend.services.SubscriptionEnforcementService enforcementService;
-
-    @Autowired
-    private com.stayeaze.backend.services.EmailService emailService;
-
-    @Autowired
-    private com.stayeaze.backend.services.WebSocketNotificationService webSocketNotificationService;
-
-    @Autowired
-    private com.stayeaze.backend.repository.OnboardingLeadRepository onboardingLeadRepository;
 
     @Autowired
     private com.stayeaze.backend.security.SecurityUtils securityUtils;
@@ -67,8 +47,10 @@ public class PropertyController {
     private Organization getLoggedUserOrg() {
         Organization org = securityUtils.getCurrentOrganization();
         if (org != null) return org;
-        return organizationRepository.findAll().stream().findFirst()
-                .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
+        if (isSuperAdminUser()) {
+            return organizationRepository.findAll().stream().findFirst().orElse(null);
+        }
+        return null;
     }
 
     private boolean isSuperAdminUser() {
@@ -106,8 +88,9 @@ public class PropertyController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('SUPER_ADMIN')")
     @org.springframework.cache.annotation.CacheEvict(value = "properties-minimal", allEntries = true)
+    @SuppressWarnings("unchecked")
     public ResponseEntity<?> createProperty(@RequestBody Map<String, Object> request) {
         Organization organization = getLoggedUserOrg();
         if (organization == null) {
@@ -209,6 +192,27 @@ public class PropertyController {
         if (request.get("razorpayKeySecret") != null && !((String) request.get("razorpayKeySecret")).isBlank() && !((String) request.get("razorpayKeySecret")).contains("•"))
             property.setRazorpayKeySecret(((String) request.get("razorpayKeySecret")).trim());
 
+        if (request.get("minimumLockInMonths") != null) {
+            try {
+                property.setMinimumLockInMonths(Integer.parseInt(request.get("minimumLockInMonths").toString()));
+            } catch (Exception ignored) {}
+        }
+        if (request.get("noticePeriodDays") != null) {
+            try {
+                property.setNoticePeriodDays(Integer.parseInt(request.get("noticePeriodDays").toString()));
+            } catch (Exception ignored) {}
+        }
+        if (request.get("defaultExitCleaningFee") != null) {
+            try {
+                property.setDefaultExitCleaningFee(new java.math.BigDecimal(request.get("defaultExitCleaningFee").toString()));
+            } catch (Exception ignored) {}
+        }
+        if (request.get("defaultElectricityRatePerUnit") != null) {
+            try {
+                property.setDefaultElectricityRatePerUnit(new java.math.BigDecimal(request.get("defaultElectricityRatePerUnit").toString()));
+            } catch (Exception ignored) {}
+        }
+
         Property saved = propertyService.saveProperty(property);
 
         try {
@@ -253,55 +257,11 @@ public class PropertyController {
         return new ResponseEntity<>(map, HttpStatus.CREATED);
     }
 
-    private Map<String, Object> mapPropertyToDto(Property p) {
-        Map<String, Object> dto = new HashMap<>();
-        dto.put("id", p.getId());
-        dto.put("name", p.getName());
-        dto.put("code", p.getCode());
-        dto.put("type", p.getType());
-        dto.put("description", p.getDescription());
-        dto.put("address", p.getAddress());
-        dto.put("city", p.getCity());
-        dto.put("state", p.getState());
-        dto.put("pincode", p.getPincode());
-        dto.put("manager", p.getManager());
-        dto.put("phone", p.getPhone());
-        dto.put("email", p.getEmail());
-        dto.put("landlordPan", p.getLandlordPan());
-        dto.put("pgLicenseNo", p.getPgLicenseNo());
-        dto.put("bankAccountName", p.getBankAccountName());
-        dto.put("bankName", p.getBankName());
-        dto.put("bankAccountNumber", p.getBankAccountNumber());
-        dto.put("bankIfsc", p.getBankIfsc());
-        dto.put("upiVpa", p.getUpiVpa());
-        dto.put("authorizedSignatory", p.getAuthorizedSignatory());
-        try {
-            dto.put("amenities", p.getAmenities());
-        } catch (Exception e) {
-            dto.put("amenities", new ArrayList<>());
-        }
-        dto.put("status", p.getStatus());
-        dto.put("currency", p.getCurrency());
-        dto.put("timezone", p.getTimezone());
-        dto.put("totalBuildings", p.getTotalBuildings());
-        dto.put("totalRooms", p.getTotalRooms());
-        dto.put("totalBeds", p.getTotalBeds());
-        dto.put("occupiedBeds", p.getOccupiedBeds());
-        dto.put("orgId", p.getOrganization() != null ? p.getOrganization().getId() : null);
-        dto.put("createdAt", p.getCreatedAt() != null ? p.getCreatedAt().toString() : null);
-        return dto;
-    }
-
     @GetMapping
     public ResponseEntity<?> getAllProperties(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int pageSize) {
         boolean isSuperAdmin = isSuperAdminUser();
-
-        org.springframework.data.domain.Pageable pageable =
-                org.springframework.data.domain.PageRequest.of(Math.max(0, page - 1), Math.max(1, pageSize));
-
-        org.springframework.data.domain.Page<PropertyDTO> pageResult;
         if (isSuperAdmin) {
             List<PropertySummaryDTO> superAdminProps = propertyService.getPropertySummariesByOrganization(null);
             int total = superAdminProps.size();
@@ -376,7 +336,7 @@ public class PropertyController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> updateProperty(@PathVariable UUID id, @Valid @RequestBody PropertyRequest request) {
         boolean isSuperAdmin = isSuperAdminUser();
 
@@ -455,19 +415,63 @@ public class PropertyController {
         if (request.getWifiNetworksJson() != null) {
             property.setWifiNetworksJson(request.getWifiNetworksJson());
         }
-        if (!isSuperAdmin) {
-            if (request.getRazorpayKeyId() != null)
-                property.setRazorpayKeyId(request.getRazorpayKeyId().trim());
-            if (request.getRazorpayKeySecret() != null && !request.getRazorpayKeySecret().isBlank() && !request.getRazorpayKeySecret().contains("•"))
-                property.setRazorpayKeySecret(request.getRazorpayKeySecret().trim());
+        if (request.getMinimumLockInMonths() != null) {
+            property.setMinimumLockInMonths(request.getMinimumLockInMonths());
+        }
+        if (request.getNoticePeriodDays() != null) {
+            property.setNoticePeriodDays(request.getNoticePeriodDays());
+        }
+        if (request.getDefaultExitCleaningFee() != null) {
+            property.setDefaultExitCleaningFee(request.getDefaultExitCleaningFee());
+        }
+        if (request.getDefaultElectricityRatePerUnit() != null) {
+            property.setDefaultElectricityRatePerUnit(request.getDefaultElectricityRatePerUnit());
         }
 
         Property updated = propertyService.saveProperty(property);
         return ResponseEntity.ok(updated);
     }
 
+    @PutMapping("/{id}/front-desk-config")
+    @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> updatePropertyFrontDeskConfig(@PathVariable UUID id, @RequestBody Map<String, Object> payload) {
+        boolean isSuperAdmin = isSuperAdminUser();
+        Property property;
+        if (isSuperAdmin) {
+            property = propertyRepository.findByIdSuperAdmin(id).orElse(null);
+        } else {
+            Organization organization = getLoggedUserOrg();
+            property = propertyRepository.findByIdAndOrganization(id, organization).orElse(null);
+            if (property == null && organization != null) {
+                property = propertyRepository.findByIdSuperAdmin(id)
+                        .filter(p -> p.getOrganization() != null && p.getOrganization().getId().equals(organization.getId()))
+                        .orElse(null);
+            }
+        }
+
+        if (property == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new MessageResponse("Error: Property not found or unauthorized."));
+        }
+
+        if (payload.containsKey("phone") && payload.get("phone") != null) property.setPhone(payload.get("phone").toString().trim());
+        if (payload.containsKey("emergencyHospitalPhone") && payload.get("emergencyHospitalPhone") != null) property.setEmergencyHospitalPhone(payload.get("emergencyHospitalPhone").toString().trim());
+        if (payload.containsKey("emergencyPolicePhone") && payload.get("emergencyPolicePhone") != null) property.setEmergencyPolicePhone(payload.get("emergencyPolicePhone").toString().trim());
+        if (payload.containsKey("emergencyElectricianPhone") && payload.get("emergencyElectricianPhone") != null) property.setEmergencyElectricianPhone(payload.get("emergencyElectricianPhone").toString().trim());
+        if (payload.containsKey("emergencyPlumberPhone") && payload.get("emergencyPlumberPhone") != null) property.setEmergencyPlumberPhone(payload.get("emergencyPlumberPhone").toString().trim());
+        if (payload.containsKey("curfewTime") && payload.get("curfewTime") != null) property.setCurfewTime(payload.get("curfewTime").toString().trim());
+        if (payload.containsKey("wifiSsid") && payload.get("wifiSsid") != null) property.setWifiSsid(payload.get("wifiSsid").toString().trim());
+        if (payload.containsKey("wifiPassword") && payload.get("wifiPassword") != null) property.setWifiPassword(payload.get("wifiPassword").toString().trim());
+        if (payload.containsKey("lostKeyPenaltyFee") && payload.get("lostKeyPenaltyFee") != null) {
+            try { property.setLostKeyPenaltyFee(new java.math.BigDecimal(payload.get("lostKeyPenaltyFee").toString())); } catch (Exception ignored) {}
+        }
+
+        Property saved = propertyService.saveProperty(property);
+        return ResponseEntity.ok(saved);
+    }
+
     @PutMapping("/{id}/wifi-networks")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> updatePropertyWifiNetworks(@PathVariable UUID id, @RequestBody Map<String, Object> payload) {
         boolean isSuperAdmin = isSuperAdminUser();
         Property property;

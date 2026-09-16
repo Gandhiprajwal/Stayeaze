@@ -5,12 +5,10 @@ import com.stayeaze.backend.models.SystemConfig;
 import com.stayeaze.backend.payload.request.SystemConfigRequest;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.SystemConfigRepository;
-import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
@@ -35,21 +33,10 @@ public class SystemConfigController {
                 });
     }
 
-    private Organization getLoggedUserOrg() {
-        try {
-            UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                    .getAuthentication().getPrincipal();
-            if (userDetails.getOrgId() != null) {
-                return organizationRepository.findById(userDetails.getOrgId())
-                        .orElseGet(this::getOrCreateSystemOrg);
-            }
-        } catch (Exception ignored) {}
-        return getOrCreateSystemOrg();
-    }
-
     @GetMapping
     @org.springframework.transaction.annotation.Transactional
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
+    @org.springframework.cache.annotation.Cacheable(value = "system_config", key = "'global'")
     public ResponseEntity<SystemConfig> getSystemConfig() {
         try {
             Organization organization = getOrCreateSystemOrg();
@@ -67,9 +54,13 @@ public class SystemConfigController {
         }
     }
 
+    @Autowired
+    private com.stayeaze.backend.repository.SystemIntegrationSettingsRepository systemIntegrationSettingsRepository;
+
     @PutMapping
     @org.springframework.transaction.annotation.Transactional
-    @PreAuthorize("hasRole('OWNER') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @org.springframework.cache.annotation.CacheEvict(value = "system_config", allEntries = true)
     public ResponseEntity<SystemConfig> updateSystemConfig(@Valid @RequestBody SystemConfigRequest request) {
         Organization organization = getOrCreateSystemOrg();
 
@@ -96,6 +87,21 @@ public class SystemConfigController {
         }
 
         SystemConfig saved = systemConfigRepository.save(config);
+
+        // Also synchronize to primary SystemIntegrationSettings
+        try {
+            var settings = systemIntegrationSettingsRepository.findAll().stream().findFirst()
+                    .orElseGet(com.stayeaze.backend.models.SystemIntegrationSettings::new);
+            if (request.getSmtpHost() != null) settings.setSmtpHost(request.getSmtpHost());
+            if (request.getSmtpPort() != null) settings.setSmtpPort(request.getSmtpPort());
+            if (request.getSmtpUsername() != null) settings.setSmtpUsername(request.getSmtpUsername());
+            if (request.getSmtpPassword() != null) settings.setSmtpPassword(request.getSmtpPassword());
+            if (request.getRazorpayKeyId() != null) settings.setRazorpayMasterKeyId(request.getRazorpayKeyId());
+            if (request.getRazorpayKeySecret() != null) settings.setRazorpayMasterKeySecret(request.getRazorpayKeySecret());
+            if (request.getMaintenanceMode() != null) settings.setMaintenanceModeEnabled(request.getMaintenanceMode());
+            systemIntegrationSettingsRepository.save(settings);
+        } catch (Exception ignored) {}
+
         return ResponseEntity.ok(saved);
     }
 

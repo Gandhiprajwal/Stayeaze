@@ -1,12 +1,10 @@
 package com.stayeaze.backend.controllers;
 
-import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.models.Tenant;
 import com.stayeaze.backend.models.TenantDocument;
 import com.stayeaze.backend.models.User;
 import com.stayeaze.backend.payload.request.TenantDocumentRequest;
 import com.stayeaze.backend.payload.response.MessageResponse;
-import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.TenantDocumentRepository;
 import com.stayeaze.backend.repository.TenantRepository;
 import com.stayeaze.backend.repository.UserRepository;
@@ -37,16 +35,6 @@ public class TenantDocumentController {
     @Autowired
     private UserRepository userRepository;
 
-    @Autowired
-    private OrganizationRepository organizationRepository;
-
-    private Organization getLoggedUserOrg() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext()
-                .getAuthentication().getPrincipal();
-        return organizationRepository.findById(userDetails.getOrgId())
-                .orElseThrow(() -> new RuntimeException("Logged in Organization not found"));
-    }
-
     private boolean isSuperAdminUser() {
         if (SecurityContextHolder.getContext().getAuthentication() == null) return false;
         var auth = SecurityContextHolder.getContext().getAuthentication();
@@ -59,18 +47,30 @@ public class TenantDocumentController {
 
     private Tenant getAuthorizedTenant(UUID tenantId) {
         if (tenantId == null) return null;
+        Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
+        if (tenant == null) return null;
+
         if (isSuperAdminUser()) {
-            return tenantRepository.findByIdSuperAdmin(tenantId).orElse(null);
+            return tenant;
         }
+
         try {
-            Organization organization = getLoggedUserOrg();
-            if (organization != null) {
-                return tenantRepository.findByIdAndOrganization(tenantId, organization)
-                        .orElseGet(() -> tenantRepository.findByIdSuperAdmin(tenantId).orElse(null));
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
+                boolean isTenant = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_TENANT"));
+                if (isTenant) {
+                    if (userDetails.getEmail() != null && tenant.getEmail() != null && tenant.getEmail().equalsIgnoreCase(userDetails.getEmail())) {
+                        return tenant;
+                    }
+                    return null;
+                }
+                if (userDetails.getOrgId() != null && tenant.getOrganization() != null && userDetails.getOrgId().equals(tenant.getOrganization().getId())) {
+                    return tenant;
+                }
             }
         } catch (Exception ignored) {}
 
-        return tenantRepository.findByIdSuperAdmin(tenantId).orElse(null);
+        return null;
     }
 
     @Autowired
@@ -134,6 +134,7 @@ public class TenantDocumentController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'PROPERTY_MANAGER', 'RECEPTIONIST', 'ACCOUNTANT', 'SUPER_ADMIN', 'TENANT', 'ADMIN')")
     public ResponseEntity<?> getAllDocuments(@PathVariable UUID tenantId) {
         Tenant tenant = getAuthorizedTenant(tenantId);
         if (tenant == null) {

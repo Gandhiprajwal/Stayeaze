@@ -18,29 +18,46 @@ import {
 } from '@/components/ui/select';
 import api from '@/lib/api';
 import type { Booking, Property, Room, Bed } from '@/lib/types';
-import { formatCurrency, formatDate, formatRoomName } from '@/lib/format';
+import { formatCurrency, formatDate, formatRoomName, getTodayIsoDate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 import { RoomSelect } from '@/components/common/RoomSelect';
+import { SearchableSelect } from '@/components/common/SearchableSelect';
+
+import { usePropertyStore } from '@/lib/stores/property-store';
 
 const ENDPOINT = '/bookings';
 const statuses = [
-  { value: 'pending', label: 'Pending' }, { value: 'confirmed', label: 'Confirmed' },
-  { value: 'cancelled', label: 'Cancelled' }, { value: 'expired', label: 'Expired' },
+  { value: 'confirmed', label: 'Confirmed (Active Reserve)' },
+  { value: 'pending', label: 'Pending Payment' },
   { value: 'checked_in', label: 'Checked In' },
+  { value: 'cancelled', label: 'Cancelled' },
 ];
 const sources = [
-  { value: 'direct', label: 'Direct' }, { value: 'website', label: 'Website' },
-  { value: 'agent', label: 'Agent' }, { value: 'referral', label: 'Referral' },
+  { value: 'direct', label: 'Direct Walk-in' },
+  { value: 'website', label: 'Website Inquiry' },
+  { value: 'housing', label: 'Housing Portal' },
+  { value: 'referral', label: 'Friend Referral' },
 ];
 
 const emptyForm = {
-  tenantName: '', tenantEmail: '', tenantPhone: '', propertyId: '',
-  roomNumber: '', bedNumber: 'B1', checkInDate: new Date().toISOString().slice(0, 10),
-  durationMonths: 6, rent: 8000, deposit: 16000, advanceAmount: 2000, status: 'pending' as Booking['status'],
+  tenantName: '',
+  tenantEmail: '',
+  tenantPhone: '',
+  propertyId: '',
+  roomNumber: '',
+  bedNumber: 'B1',
+  checkInDate: getTodayIsoDate(),
+  durationMonths: 6,
+  rent: 8000,
+  deposit: 16000,
+  advanceAmount: 2000,
+  status: 'confirmed' as Booking['status'],
   source: 'direct' as Booking['source'],
+  notes: '',
 };
 
 export default function BookingsPage() {
+  const { selectedPropertyId } = usePropertyStore();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -49,6 +66,7 @@ export default function BookingsPage() {
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cash' | 'later'>('cash');
   const [processingPayment, setProcessingPayment] = useState(false);
+  const form = useForm(emptyForm);
 
   const { data: properties } = useQuery({
     queryKey: ['bookings-properties-minimal'],
@@ -58,8 +76,8 @@ export default function BookingsPage() {
 
   // Fetch all rooms for dropdown
   const { data: allRooms } = useQuery({
-    queryKey: ['bookings-rooms'],
-    queryFn: () => api.get<Room[]>('/rooms', { params: { pageSize: 500 } }).then((r) => {
+    queryKey: ['bookings-rooms', form.values.propertyId],
+    queryFn: () => api.get<Room[]>('/rooms/minimal', { params: { propertyId: form.values.propertyId || undefined } }).then((r) => {
       const payload = r.data as unknown;
       if (Array.isArray(payload)) return payload as Room[];
       return (payload as { data: Room[] }).data ?? [];
@@ -67,12 +85,11 @@ export default function BookingsPage() {
     enabled: dialogOpen,
   });
 
-  const form = useForm(emptyForm);
-
   const roomOptions = useMemo(() => {
     return (allRooms ?? []).filter((r: any) => {
       if (r.status === 'archived' || r.status === 'maintenance' || r.status === 'blocked') return false;
-      if (form.values.propertyId && r.propertyId && r.propertyId !== form.values.propertyId) return false;
+      const targetProp = form.values.propertyId;
+      if (targetProp && r.propertyId && String(r.propertyId).toLowerCase() !== String(targetProp).toLowerCase()) return false;
       return true;
     });
   }, [allRooms, form.values.propertyId]);
@@ -80,7 +97,7 @@ export default function BookingsPage() {
   // Fetch beds for selected room
   const { data: bedsForRoom } = useQuery({
     queryKey: ['bookings-beds', selectedRoomId],
-    queryFn: () => api.get<Bed[]>(`/rooms/${selectedRoomId}/beds`).then((r) => {
+    queryFn: () => api.get<Bed[]>('/beds/minimal', { params: { roomId: selectedRoomId } }).then((r) => {
       const payload = r.data as unknown;
       if (Array.isArray(payload)) return payload as Bed[];
       return (payload as { data: Bed[] }).data ?? [];
@@ -104,7 +121,8 @@ export default function BookingsPage() {
     setPaymentMethod('cash');
     setSelectedRoomId('');
     const defaultDep = Number(defaultDepData?.defaultSecurityDeposit || 0);
-    form.reset({ ...emptyForm, deposit: defaultDep });
+    const defaultProp = selectedPropertyId && selectedPropertyId !== 'ALL' ? selectedPropertyId : '';
+    form.reset({ ...emptyForm, propertyId: defaultProp, deposit: defaultDep, notes: '' });
     setDialogOpen(true);
   }
 
@@ -113,10 +131,20 @@ export default function BookingsPage() {
     const matchedRoom = (allRooms ?? []).find((r) => r.number === row.roomNumber);
     setSelectedRoomId(matchedRoom?.id ?? '');
     form.reset({
-      tenantName: row.tenantName, tenantEmail: row.tenantEmail, tenantPhone: row.tenantPhone,
-      propertyId: row.propertyId, roomNumber: row.roomNumber, bedNumber: row.bedNumber,
-      checkInDate: row.checkInDate, durationMonths: row.durationMonths, rent: row.rent,
-      deposit: row.deposit, advanceAmount: (row as any).advanceAmount ?? 2000, status: row.status, source: row.source,
+      tenantName: row.tenantName,
+      tenantEmail: row.tenantEmail,
+      tenantPhone: row.tenantPhone,
+      propertyId: row.propertyId,
+      roomNumber: row.roomNumber,
+      bedNumber: row.bedNumber,
+      checkInDate: row.checkInDate,
+      durationMonths: row.durationMonths,
+      rent: row.rent,
+      deposit: row.deposit,
+      advanceAmount: (row as any).advanceAmount ?? 2000,
+      status: row.status,
+      source: row.source,
+      notes: (row as any).notes || '',
     });
     setDialogOpen(true);
   }
@@ -264,11 +292,24 @@ export default function BookingsPage() {
             <FormInput label="Email" required type="email" id="tenantEmail" value={form.values.tenantEmail} onChange={(e) => form.setValue('tenantEmail', e.target.value)} error={form.errors.tenantEmail} />
             <FormInput label="Phone" id="tenantPhone" value={form.values.tenantPhone} onChange={(e) => form.setValue('tenantPhone', e.target.value)} />
             <div className="space-y-1.5">
-              <Label required>Property</Label>
-              <Select value={form.values.propertyId} onValueChange={(v) => form.setValue('propertyId', v)}>
-                <SelectTrigger className={form.errors.propertyId ? 'border-destructive' : ''}><SelectValue placeholder="Select property" /></SelectTrigger>
-                <SelectContent>{(properties ?? []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-              </Select>
+              <Label required>Property / Hostel</Label>
+              <SearchableSelect
+                options={(properties ?? []).map((p: any) => ({
+                  value: p.id,
+                  label: p.name,
+                  sublabel: p.city || p.code || 'Property',
+                  badge: p.type || 'PG',
+                }))}
+                value={form.values.propertyId}
+                onChange={(v) => {
+                  form.setValue('propertyId', v);
+                  form.setValue('roomNumber', '');
+                  form.setValue('bedNumber', '');
+                  setSelectedRoomId('');
+                }}
+                placeholder="Search & select property..."
+                searchPlaceholder="Search properties..."
+              />
               {form.errors.propertyId && <p className="text-xs font-medium text-destructive">{form.errors.propertyId}</p>}
             </div>
 
@@ -299,11 +340,48 @@ export default function BookingsPage() {
 
             <FormInput label="Check-in Date" required type="date" id="checkInDate" value={form.values.checkInDate} onChange={(e) => form.setValue('checkInDate', e.target.value)} error={form.errors.checkInDate} />
             <FormInput label="Duration (months)" type="number" id="durationMonths" value={String(form.values.durationMonths)} onChange={(e) => form.setValue('durationMonths', Number(e.target.value))} />
-            <FormInput label="Monthly Rent (₹)" type="number" id="rent" value={String(form.values.rent)} onChange={(e) => form.setValue('rent', Number(e.target.value))} />
-            <FormInput label="Deposit (₹)" type="number" id="deposit" value={String(form.values.deposit)} onChange={(e) => form.setValue('deposit', Number(e.target.value))} />
+            <FormInput
+              label="Monthly Rent (₹)"
+              type="number"
+              id="rent"
+              value={String(form.values.rent)}
+              readOnly
+              hint="Auto-fetched from selected room rate"
+              className="bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed text-slate-700 dark:text-slate-300 font-mono font-medium"
+            />
+            <FormInput
+              label="Deposit (₹)"
+              type="number"
+              id="deposit"
+              value={String(form.values.deposit)}
+              readOnly
+              hint="Auto-configured by property billing policy"
+              className="bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed text-slate-700 dark:text-slate-300 font-mono font-medium"
+            />
             <FormInput label="Advance Booking Deposit (₹)" type="number" id="advanceAmount" value={String(form.values.advanceAmount)} onChange={(e) => form.setValue('advanceAmount', Number(e.target.value))} />
-            <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Booking['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-1.5"><Label>Source</Label><Select value={form.values.source} onValueChange={(v) => form.setValue('source', v as Booking['source'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{sources.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5">
+              <Label>Reservation Status</Label>
+              <Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as Booking['status'])}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Booking Source</Label>
+              <Select value={form.values.source} onValueChange={(v) => form.setValue('source', v as Booking['source'])}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{sources.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <FormInput
+                label="Special Requests / Guest Notes"
+                id="notes"
+                placeholder="e.g. Needs lower bunk, vegetarian meal preference, late night arrival"
+                value={form.values.notes || ''}
+                onChange={(e) => form.setValue('notes', e.target.value)}
+              />
+            </div>
           </div>
 
           {!editing && (

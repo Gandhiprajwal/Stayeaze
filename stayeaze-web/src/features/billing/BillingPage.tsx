@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Receipt, Plus, Pencil, Trash2, Wallet, TrendingUp, AlertCircle, CheckCircle2,
   RefreshCw, CreditCard, Printer, Banknote, QrCode, Building2, ShieldCheck,
-  Sparkles, Hourglass, Check, X, UserCheck, Zap
+  Sparkles, Hourglass, Check, X, UserCheck, Zap, XCircle
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -27,11 +27,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import api from '@/lib/api';
 import { usePropertyStore } from '@/lib/stores/property-store';
 import type { Invoice, InvoiceIssuerSnapshot, Property, Tenant } from '@/lib/types';
-import { formatCurrency, formatDate, numberToWords } from '@/lib/format';
+import { formatCurrency, formatDate, numberToWords, getTodayIsoDate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm, useBulkDelete } from '@/lib/hooks/use-crud';
 
 import { TenantSelect } from '@/components/common/TenantSelect';
 import { SearchableSelect } from '@/components/common/SearchableSelect';
+import RentRunPreviewModal from './RentRunPreviewModal';
+import { usePlanFeatures } from '@/hooks/usePlanFeatures';
+import { FeatureUpgradeDialog } from '@/components/subscription/FeatureUpgradeDialog';
 
 const ENDPOINT = '/invoices';
 const statuses = [
@@ -40,16 +43,18 @@ const statuses = [
   { value: 'pending_approval', label: 'Pending Approval (UTR)' },
   { value: 'partial', label: 'Partial' },
   { value: 'overdue', label: 'Overdue' },
+  { value: 'written_off', label: 'Written Off / Waived' },
+  { value: 'cancelled', label: 'Cancelled' },
 ];
 
 const emptyForm = {
   tenantId: '',
   tenantName: '',
   propertyId: '',
-  period: new Date().toISOString().slice(0, 7),
+  period: `${getTodayIsoDate().slice(0, 7)}`,
   amount: 8000,
   paidAmount: 0,
-  dueDate: new Date().toISOString().slice(0, 10),
+  dueDate: getTodayIsoDate(),
   status: 'unpaid' as Invoice['status'],
 };
 
@@ -58,9 +63,14 @@ export default function BillingPage() {
   const queryClient = useQueryClient();
   const { selectedPropertyId } = usePropertyStore();
 
+  const planFeatures = usePlanFeatures();
+  const [rentRunUpgradeModalOpen, setRentRunUpgradeModalOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Invoice | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Invoice | null>(null);
+  const [showRentRunPreview, setShowRentRunPreview] = useState(false);
+  const [writeOffTarget, setWriteOffTarget] = useState<{ invoice: Invoice; waivedAmount: number; reason: string } | null>(null);
   
   // Receipt Preview State
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
@@ -149,6 +159,41 @@ export default function BillingPage() {
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.message || 'Failed to reject payment');
+    },
+  });
+
+  const cancelInvoiceMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.put(`/invoices/${id}/cancel`);
+      return res.data;
+    },
+    onSuccess: (data: any) => {
+      toast.success(data?.message || 'Invoice cancelled successfully.');
+      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/payments'] });
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to cancel invoice');
+    },
+  });
+
+  const writeOffMut = useMutation({
+    mutationFn: async ({ id, waivedAmount, reason }: { id: string; waivedAmount: number; reason: string }) => {
+      const res = await api.post(`/invoices/${id}/write-off`, { waivedAmount, reason });
+      return res.data;
+    },
+    onSuccess: (data: any) => {
+      toast.success(data?.message || 'Invoice balance written off/waived successfully.');
+      setWriteOffTarget(null);
+      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      queryClient.invalidateQueries({ queryKey: ['billing-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/payments'] });
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to process write-off');
     },
   });
 
@@ -425,10 +470,15 @@ export default function BillingPage() {
             <Button
               variant="outline"
               className="rounded-xl h-9.5 text-xs font-semibold shrink-0"
-              disabled={batchGenerateMut.isPending}
-              onClick={() => batchGenerateMut.mutate()}
+              onClick={() => {
+                if (!planFeatures.allowsBulkRentRun) {
+                  setRentRunUpgradeModalOpen(true);
+                } else {
+                  setShowRentRunPreview(true);
+                }
+              }}
             >
-              <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${batchGenerateMut.isPending ? 'animate-spin' : ''}`} />
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               Generate Monthly Invoices
             </Button>
             <Button onClick={openCreate} className="rounded-xl h-9.5 text-xs font-bold shrink-0">
@@ -560,7 +610,24 @@ export default function BillingPage() {
                 { label: 'Record Payment', icon: CreditCard, onSelect: () => openRecordPayment(row) },
               ] : []),
               { label: 'View Rent Receipt', icon: Printer, onSelect: () => setViewInvoice(row) },
-              { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
+              ...(String(row.status || '').toLowerCase() !== 'cancelled' && String(row.status || '').toLowerCase() !== 'written_off' && (Number(row.amount || 0) - Number(row.paidAmount || 0)) > 0 ? [
+                {
+                  label: 'Write-off / Waive',
+                  icon: ShieldCheck,
+                  variant: 'destructive' as const,
+                  onSelect: () => setWriteOffTarget({
+                    invoice: row,
+                    waivedAmount: Math.max(0, Number(row.amount || 0) - Number(row.paidAmount || 0)),
+                    reason: 'Bad Debt / Uncollectible',
+                  }),
+                },
+              ] : []),
+              ...(String(row.status || '').toLowerCase() !== 'cancelled' && String(row.status || '').toLowerCase() !== 'paid' ? [
+                { label: 'Cancel Invoice', icon: XCircle, variant: 'destructive' as const, onSelect: () => setCancelTarget(row) },
+              ] : []),
+              ...(String(row.status || '').toLowerCase() !== 'paid' && Number(row.paidAmount || 0) <= 0 ? [
+                { label: 'Delete Draft / Unpaid', icon: Trash2, variant: 'destructive' as const, onSelect: () => setDeleteTarget(row) },
+              ] : []),
             ]}
           />
         )}
@@ -716,6 +783,26 @@ export default function BillingPage() {
                 value={String(paymentAmount)}
                 onChange={(e) => setPaymentAmount(Number(e.target.value))}
               />
+
+              {/* Real-time Overpayment & Advance Rollover Helper (P0.1) */}
+              {(() => {
+                const due = Math.max(0, paymentInvoice.amount - (paymentInvoice.paidAmount || 0));
+                const surplus = Math.max(0, paymentAmount - due);
+                if (surplus > 0 && paymentAmount > 0) {
+                  return (
+                    <div className="p-3 rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 flex items-start gap-2.5">
+                      <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold">Overpayment Surplus (+₹{surplus.toLocaleString('en-IN')})</p>
+                        <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                          ₹{due.toLocaleString('en-IN')} will fully settle this invoice, and the excess <strong>₹{surplus.toLocaleString('en-IN')}</strong> will automatically rollover to the resident's Advance Wallet to offset next month's rent.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {/* Payment Method Selector */}
               <div className="space-y-1.5">
@@ -1203,6 +1290,23 @@ export default function BillingPage() {
       </Dialog>
 
       <ConfirmDialog
+        open={!!cancelTarget}
+        onOpenChange={(o) => !o && setCancelTarget(null)}
+        title="Cancel Invoice"
+        variant="destructive"
+        description={`Are you sure you want to cancel invoice "${cancelTarget?.invoiceNumber}"? Any Advance Wallet funds applied to this invoice will be automatically rolled back and refunded to the resident's wallet.`}
+        confirmLabel="Cancel Invoice"
+        onConfirm={() => {
+          if (cancelTarget) {
+            cancelInvoiceMut.mutate(cancelTarget.id, {
+              onSettled: () => setCancelTarget(null),
+            });
+          }
+        }}
+        loading={cancelInvoiceMut.isPending}
+      />
+
+      <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
         title="Delete Invoice"
@@ -1211,6 +1315,137 @@ export default function BillingPage() {
         confirmLabel="Delete"
         onConfirm={confirmDelete}
         loading={deleteMut.isPending}
+      />
+
+      {/* P2.1: Rent Run Preview Modal */}
+      <RentRunPreviewModal
+        open={showRentRunPreview}
+        onClose={() => setShowRentRunPreview(false)}
+        propertyId={selectedPropertyId}
+      />
+      {/* P2.3: Invoice Write-off & Waiver Modal */}
+      <Dialog open={!!writeOffTarget} onOpenChange={(open) => !open && setWriteOffTarget(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <span className="p-2 rounded-xl bg-destructive/10 text-destructive">
+                <ShieldCheck className="h-5 w-5" />
+              </span>
+              <div>
+                <DialogTitle>Write-Off / Waive Balance</DialogTitle>
+                <DialogDescription>
+                  Invoice {writeOffTarget?.invoice.invoiceNumber} · {writeOffTarget?.invoice.tenantName}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {writeOffTarget && (
+            <div className="space-y-4 py-2 text-xs sm:text-sm">
+              <div className="rounded-xl bg-muted/50 p-3 space-y-1.5 border">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Original Invoice Amount:</span>
+                  <span className="font-semibold">{formatCurrency(writeOffTarget.invoice.amount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Amount Already Paid:</span>
+                  <span className="font-semibold text-emerald-600">{formatCurrency(writeOffTarget.invoice.paidAmount)}</span>
+                </div>
+                <div className="flex justify-between pt-1 border-t font-bold text-foreground">
+                  <span>Outstanding Remaining:</span>
+                  <span className="text-destructive font-bold">
+                    {formatCurrency(Math.max(0, Number(writeOffTarget.invoice.amount || 0) - Number(writeOffTarget.invoice.paidAmount || 0)))}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="waive-amount">Waive / Write-off Amount (₹)</Label>
+                <Input
+                  id="waive-amount"
+                  type="number"
+                  min={1}
+                  max={Math.max(0, Number(writeOffTarget.invoice.amount || 0) - Number(writeOffTarget.invoice.paidAmount || 0))}
+                  value={writeOffTarget.waivedAmount}
+                  onChange={(e) => {
+                    const max = Math.max(0, Number(writeOffTarget.invoice.amount || 0) - Number(writeOffTarget.invoice.paidAmount || 0));
+                    const val = Number(e.target.value);
+                    setWriteOffTarget({ ...writeOffTarget, waivedAmount: Math.min(max, Math.max(0, val)) });
+                  }}
+                  className="rounded-xl"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  {writeOffTarget.waivedAmount >= Math.max(0, Number(writeOffTarget.invoice.amount || 0) - Number(writeOffTarget.invoice.paidAmount || 0))
+                    ? 'Full write-off: status will be set to WRITTEN_OFF.'
+                    : 'Partial waiver: outstanding balance will be reduced by this amount.'}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="writeoff-reason">Reason / Justification <span className="text-destructive">*</span></Label>
+                <Select
+                  value={['Bad Debt / Uncollectible', 'Dispute Settlement', 'Financial Hardship Concession', 'Administrative Error / Cancellation'].includes(writeOffTarget.reason) ? writeOffTarget.reason : 'Other'}
+                  onValueChange={(val) => {
+                    if (val !== 'Other') {
+                      setWriteOffTarget({ ...writeOffTarget, reason: val });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Select reason" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Bad Debt / Uncollectible">Bad Debt / Uncollectible (Eviction/Abandoned)</SelectItem>
+                    <SelectItem value="Financial Hardship Concession">Financial Hardship Concession</SelectItem>
+                    <SelectItem value="Dispute Settlement">Dispute Settlement</SelectItem>
+                    <SelectItem value="Administrative Error / Cancellation">Administrative Adjustment</SelectItem>
+                    <SelectItem value="Other">Other (Custom Reason)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Enter detailed justification..."
+                  value={writeOffTarget.reason}
+                  onChange={(e) => setWriteOffTarget({ ...writeOffTarget, reason: e.target.value })}
+                  className="rounded-xl"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 text-xs">
+                ⚠️ This action is permanent and will be logged in the immutable Organization Audit Trail.
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setWriteOffTarget(null)} className="rounded-xl">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={writeOffMut.isPending || !writeOffTarget?.reason.trim() || !writeOffTarget?.waivedAmount}
+              onClick={() => {
+                if (writeOffTarget) {
+                  writeOffMut.mutate({
+                    id: writeOffTarget.invoice.id,
+                    waivedAmount: writeOffTarget.waivedAmount,
+                    reason: writeOffTarget.reason,
+                  });
+                }
+              }}
+              className="rounded-xl font-semibold"
+            >
+              {writeOffMut.isPending ? 'Processing...' : 'Confirm Write-Off / Waiver'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <FeatureUpgradeDialog
+        open={rentRunUpgradeModalOpen}
+        onOpenChange={setRentRunUpgradeModalOpen}
+        featureTitle="1-Click Bulk Monthly Rent Runs"
+        featureDescription="Automate monthly rent invoicing for all active tenants across all buildings and properties simultaneously with integrated sub-meter utility splits."
+        requiredTier="GROWTH"
       />
     </div>
   );

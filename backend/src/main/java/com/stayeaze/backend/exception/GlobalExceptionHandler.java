@@ -52,6 +52,46 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(problem);
     }
 
+    @ExceptionHandler(DomainExceptions.ResourceNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleResourceNotFound(DomainExceptions.ResourceNotFoundException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Resource Not Found");
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+    }
+
+    @ExceptionHandler(DomainExceptions.BedAlreadyOccupiedException.class)
+    public ResponseEntity<ProblemDetail> handleBedOccupied(DomainExceptions.BedAlreadyOccupiedException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Bed Already Occupied");
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    @ExceptionHandler(DomainExceptions.DuplicateResourceException.class)
+    public ResponseEntity<ProblemDetail> handleDuplicateResource(DomainExceptions.DuplicateResourceException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Duplicate Resource");
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    @ExceptionHandler(DomainExceptions.PaymentProcessingException.class)
+    public ResponseEntity<ProblemDetail> handlePaymentProcessing(DomainExceptions.PaymentProcessingException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        problem.setTitle("Payment Processing Error");
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(problem);
+    }
+
+    @ExceptionHandler(DomainExceptions.SubscriptionLimitExceededException.class)
+    public ResponseEntity<ProblemDetail> handleSubscriptionLimit(DomainExceptions.SubscriptionLimitExceededException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        problem.setTitle("Subscription Plan Limit Exceeded");
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);
+    }
+
     private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler({
@@ -84,6 +124,42 @@ public class GlobalExceptionHandler {
         problem.setTitle("Conflict Detected");
         problem.setProperty("timestamp", Instant.now());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ProblemDetail> handleMaxUploadSize(org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "File size exceeds the allowed limit (max 3MB). Please compress the image or document and try again."
+        );
+        problem.setTitle("File Size Too Large");
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(problem);
+    }
+
+    @ExceptionHandler({
+        org.springframework.web.multipart.support.MissingServletRequestPartException.class,
+        org.springframework.web.bind.MissingServletRequestParameterException.class
+    })
+    public ResponseEntity<ProblemDetail> handleMissingRequestPart(Exception ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                "Required request parameter or file part is missing: " + ex.getMessage()
+        );
+        problem.setTitle("Missing Request Part");
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException.class)
+    public ResponseEntity<ProblemDetail> handleMultipartException(org.springframework.web.multipart.MultipartException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST,
+                "Failed to parse multipart file upload: " + ex.getMessage()
+        );
+        problem.setTitle("Multipart Upload Error");
+        problem.setProperty("timestamp", Instant.now());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problem);
     }
 
     @ExceptionHandler(Exception.class)

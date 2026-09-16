@@ -22,9 +22,9 @@ const accentMap = {
 export function StatCard({ label, value, icon: Icon, trend, hint, accent = 'primary' }: StatCardProps) {
   return (
     <Card className="overflow-hidden transition-shadow hover:shadow-md">
-      <CardContent className="flex items-start justify-between gap-3 p-5">
+      <CardContent className="flex items-start justify-between gap-3 p-3.5 sm:p-5">
         <div className="min-w-0 space-y-1">
-          <p className="truncate text-sm font-medium text-muted-foreground">{label}</p>
+          <p className="truncate text-xs sm:text-sm font-medium text-muted-foreground">{label}</p>
           <p className="font-heading text-xl sm:text-2xl font-bold tracking-tight truncate" title={String(value)}>{value}</p>
           {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
           {trend && (
@@ -42,8 +42,8 @@ export function StatCard({ label, value, icon: Icon, trend, hint, accent = 'prim
             </div>
           )}
         </div>
-        <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-lg', accentMap[accent])}>
-          <Icon className="h-5.5 w-5.5" />
+        <div className={cn('flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-lg', accentMap[accent])}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
         </div>
       </CardContent>
     </Card>

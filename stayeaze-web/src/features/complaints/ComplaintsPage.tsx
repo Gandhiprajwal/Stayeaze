@@ -1,6 +1,12 @@
 import { useState } from 'react';
-import { MessageSquareWarning, Plus, Trash2, CheckCircle, Search, UserCheck, Check, X, Phone, Mail, Eye, User as UserIcon, Home, Building2, Loader2, MessageSquare } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import {
+  MessageSquareWarning, Plus, Trash2, CheckCircle, Search, UserCheck, Check, X,
+  Phone, Mail, Eye, User as UserIcon, Home, Building2, Loader2, MessageSquare,
+  DollarSign, Receipt, Wrench, Flame, AlertTriangle, Clock, ShieldAlert, RefreshCw,
+  Zap, TrendingUp, AlertCircle
+} from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 import { ComplaintChatDialog } from './ComplaintChatDialog';
 
@@ -100,6 +106,7 @@ export default function ComplaintsPage() {
   const isTenant = userRole === 'TENANT';
   const canChangeStatus = ['ADMIN', 'OWNER', 'PROPERTY_MANAGER'].includes(userRole);
 
+  const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [statusTarget, setStatusTarget] = useState<Complaint | null>(null);
   const [statusVal, setStatusVal] = useState<Complaint['status']>('open');
@@ -109,6 +116,103 @@ export default function ComplaintsPage() {
   const [chatComplaint, setChatComplaint] = useState<Complaint | null>(null);
   const [tenantSearch, setTenantSearch] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState<string | number | null>(null);
+
+  // Damage & Maintenance Chargeback State (P3.2)
+  const [chargebackComplaint, setChargebackComplaint] = useState<Complaint | null>(null);
+  const [chargebackAmount, setChargebackAmount] = useState<string>('');
+  const [chargeMode, setChargeMode] = useState<'INDIVIDUAL' | 'SPLIT_ROOMMATES'>('INDIVIDUAL');
+  const [chargeRemarks, setChargeRemarks] = useState<string>('');
+  const [isSubmittingChargeback, setIsSubmittingChargeback] = useState<boolean>(false);
+
+  function openChargebackDialog(row: Complaint) {
+    setChargebackComplaint(row);
+    setChargebackAmount('');
+    setChargeMode('INDIVIDUAL');
+    setChargeRemarks(`Repair/damage charge for ${row.category} ticket (${row.ticketNumber || 'TKT'})`);
+  }
+
+  async function handleExecuteChargeback() {
+    if (!chargebackComplaint) return;
+    const amt = parseFloat(chargebackAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast.error('Please enter a valid chargeback amount greater than 0');
+      return;
+    }
+
+    setIsSubmittingChargeback(true);
+    try {
+      const res = await api.post(`/complaints/${chargebackComplaint.id}/chargeback`, {
+        amount: amt,
+        chargeMode,
+        remarks: chargeRemarks,
+      });
+      toast.success(res.data?.message || 'Complaint resolved and chargeback invoices generated!');
+      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      queryClient.invalidateQueries({ queryKey: ['complaints-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/invoices'] });
+      setChargebackComplaint(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to apply chargeback');
+    } finally {
+      setIsSubmittingChargeback(false);
+    }
+  }
+
+  const { data: slaMetrics, refetch: refetchSlaMetrics } = useQuery({
+    queryKey: ['complaints-sla-metrics'],
+    queryFn: () => api.get<any>('/complaints/sla-metrics').then((r) => r.data || {}),
+  });
+
+  const [isCheckingSla, setIsCheckingSla] = useState(false);
+  async function handleCheckSlaBreaches() {
+    setIsCheckingSla(true);
+    try {
+      const res = await api.post('/complaints/check-sla-breaches');
+      toast.success(res.data?.message || 'SLA breach sweep completed');
+      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      queryClient.invalidateQueries({ queryKey: ['complaints-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['complaints-sla-metrics'] });
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to trigger SLA breach check');
+    } finally {
+      setIsCheckingSla(false);
+    }
+  }
+
+  // Escalation State
+  const [escalateTarget, setEscalateTarget] = useState<Complaint | null>(null);
+  const [escalationReason, setEscalationReason] = useState<string>('');
+  const [isSubmittingEscalation, setIsSubmittingEscalation] = useState<boolean>(false);
+
+  function openEscalateDialog(row: Complaint) {
+    setEscalateTarget(row);
+    setEscalationReason('');
+  }
+
+  async function handleExecuteEscalation() {
+    if (!escalateTarget) return;
+    if (!escalationReason.trim()) {
+      toast.error('Please specify an escalation reason');
+      return;
+    }
+    setIsSubmittingEscalation(true);
+    try {
+      await api.post(`/complaints/${escalateTarget.id}/escalate`, { reason: escalationReason.trim() });
+      toast.success(`Complaint ${escalateTarget.ticketNumber || 'ticket'} has been escalated to leadership!`);
+      queryClient.invalidateQueries({ queryKey: [ENDPOINT] });
+      queryClient.invalidateQueries({ queryKey: ['complaints-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['complaints-sla-metrics'] });
+      if (selectedComplaint?.id === escalateTarget.id) {
+        setSelectedComplaint((prev) => prev ? { ...prev, isEscalated: true, escalationReason: escalationReason.trim() } : null);
+      }
+      setEscalateTarget(null);
+      setEscalationReason('');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to escalate complaint');
+    } finally {
+      setIsSubmittingEscalation(false);
+    }
+  }
 
   const { data: properties } = useQuery({
     queryKey: ['complaints-properties-minimal'],
@@ -263,6 +367,58 @@ export default function ComplaintsPage() {
       const prio = normalizePriority(r.priority);
       return <StatusBadge status={prio} tone={prio === 'critical' ? 'destructive' : prio === 'high' ? 'warning' : prio === 'medium' ? 'info' : 'neutral'} />;
     } },
+    {
+      key: 'slaStatus',
+      header: 'SLA Status',
+      sortable: false,
+      cell: (r) => {
+        const isResolved = r.status === 'resolved' || r.status === 'closed' || !!r.resolvedAt;
+        if (r.isEscalated) {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-600 border border-rose-500/30 dark:text-rose-400">
+              <Flame className="h-3 w-3 animate-pulse" /> Escalated
+            </span>
+          );
+        }
+        if (r.slaBreached) {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/15 text-red-600 border border-red-500/30 dark:text-red-400">
+              <AlertTriangle className="h-3 w-3" /> Breached
+            </span>
+          );
+        }
+        if (isResolved) {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 dark:text-emerald-400">
+              <CheckCircle className="h-3 w-3" /> Met SLA
+            </span>
+          );
+        }
+        if (r.slaMinutesRemaining !== undefined && r.slaMinutesRemaining !== null) {
+          const hours = Math.round(r.slaMinutesRemaining / 60);
+          if (r.slaMinutesRemaining <= 0) {
+            return (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/15 text-red-600 border border-red-500/30">
+                <AlertTriangle className="h-3 w-3" /> Overdue
+              </span>
+            );
+          }
+          if (r.slaMinutesRemaining <= 360) {
+            return (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-600 border border-amber-500/30 dark:text-amber-400">
+                <Clock className="h-3 w-3" /> {hours > 0 ? `${hours}h left` : `${r.slaMinutesRemaining}m left`}
+              </span>
+            );
+          }
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600 border border-blue-500/20 dark:text-blue-400">
+              <Clock className="h-3 w-3" /> {hours}h left
+            </span>
+          );
+        }
+        return <span className="text-xs text-muted-foreground">Standard SLA</span>;
+      }
+    },
     { key: 'description', header: 'Description', cell: (r) => <span className="line-clamp-1 max-w-[240px] text-sm text-muted-foreground">{r.description}</span> },
     { key: 'assignedTo', header: 'Assigned', sortable: true, cell: (r) => <span className="text-sm">{r.assignedTo || (r as any).assignedStaff || '—'}</span> },
     { key: 'createdAt', header: 'Created', sortable: true, cell: (r) => <span className="text-sm">{formatDate(r.createdAt)}</span> },
@@ -271,15 +427,60 @@ export default function ComplaintsPage() {
 
   const propertyFilterOptions = (properties ?? []).map((p: any) => ({ value: p.id, label: p.name }));
 
+  const slaComplianceRate = slaMetrics?.slaCompliance ?? 100.0;
+  const escalatedCount = slaMetrics?.escalatedTickets ?? safeComplaints.filter((c) => c.isEscalated).length;
+  const breachedCount = slaMetrics?.breachedTickets ?? safeComplaints.filter((c) => c.slaBreached).length;
+  const avgHours = slaMetrics?.avgResolutionHours ?? 0;
+
   return (
     <div className="space-y-6">
-      <PageHeader title="Complaint Management" description="Review and resolve tenant complaints (management view)." icon={MessageSquareWarning}
-        actions={<Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" /> Log Complaint</Button>} />
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Open" value={open} icon={MessageSquareWarning} accent="warning" />
-        <StatCard label="In Progress" value={inProgress} icon={CheckCircle} accent="info" />
-        <StatCard label="Resolved" value={resolved} icon={CheckCircle} accent="success" />
+      <PageHeader
+        title="Complaint Management & SLA Engine"
+        description="Review tickets, monitor category SLAs, escalate breaches, and resolve tenant complaints."
+        icon={MessageSquareWarning}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCheckSlaBreaches}
+              disabled={isCheckingSla}
+              className="gap-1.5 border-border shadow-xs"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", isCheckingSla && "animate-spin text-primary")} />
+              {isCheckingSla ? 'Checking SLAs...' : 'Sync SLA Breaches'}
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus className="mr-1.5 h-4 w-4" /> Log Complaint
+            </Button>
+          </div>
+        }
+      />
+
+      {/* KPI Cards Grid */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatCard label="Open Tickets" value={open} icon={MessageSquareWarning} accent="warning" />
+        <StatCard label="In Progress" value={inProgress} icon={Clock} accent="info" />
+        <StatCard
+          label="SLA Compliance"
+          value={`${slaComplianceRate}%`}
+          icon={TrendingUp}
+          accent={slaComplianceRate >= 90 ? 'success' : slaComplianceRate >= 75 ? 'warning' : 'destructive'}
+        />
+        <StatCard
+          label="SLA Breached"
+          value={breachedCount}
+          icon={AlertTriangle}
+          accent={breachedCount > 0 ? 'destructive' : 'primary'}
+        />
+        <StatCard
+          label="Escalated Tickets"
+          value={escalatedCount}
+          icon={Flame}
+          accent={escalatedCount > 0 ? 'destructive' : 'primary'}
+        />
       </div>
+
       <DataTable endpoint={ENDPOINT} columns={columns} searchPlaceholder="Search tickets, tenants..." exportFilename="complaints" initialSortBy="createdAt"
         onRowClick={(row) => setSelectedComplaint(row)}
         filters={[
@@ -301,7 +502,16 @@ export default function ComplaintsPage() {
               },
             },
             { label: 'View Details', icon: Eye, onSelect: () => setSelectedComplaint(row) },
-            ...(canChangeStatus ? [{ label: 'Update Status', icon: CheckCircle, onSelect: () => openStatusDialog(row) }] : []),
+            {
+              label: row.isEscalated ? '🔥 Already Escalated' : 'Escalate Ticket',
+              icon: Flame,
+              disabled: row.isEscalated || row.status === 'resolved' || row.status === 'closed',
+              onSelect: () => openEscalateDialog(row),
+            },
+            ...(canChangeStatus ? [
+              { label: 'Update Status', icon: CheckCircle, onSelect: () => openStatusDialog(row) },
+              { label: 'Resolve & Chargeback', icon: DollarSign, onSelect: () => openChargebackDialog(row) },
+            ] : []),
             { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
           ]} />
         )} />
@@ -321,6 +531,11 @@ export default function ComplaintsPage() {
                       {selectedComplaint.ticketNumber}
                     </span>
                     <StatusBadge status={normalizePriority(selectedComplaint.priority)} tone={normalizePriority(selectedComplaint.priority) === 'critical' ? 'destructive' : normalizePriority(selectedComplaint.priority) === 'high' ? 'warning' : 'neutral'} />
+                    {selectedComplaint.isEscalated && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500 text-white shadow-sm">
+                        <Flame className="h-3 w-3 animate-pulse" /> Escalated
+                      </span>
+                    )}
                   </div>
                   <StatusBadge status={selectedComplaint.status} tone={statusTone(selectedComplaint.status)} />
                 </div>
@@ -335,6 +550,56 @@ export default function ComplaintsPage() {
 
               {/* Details Content */}
               <div className="p-6 space-y-5 bg-background">
+                {/* SLA Status Card */}
+                <div className={cn(
+                  "p-3.5 rounded-xl border flex items-center justify-between text-xs",
+                  selectedComplaint.isEscalated
+                    ? "bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300"
+                    : selectedComplaint.slaBreached
+                    ? "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-300"
+                    : "bg-muted/40 border-border/80 text-muted-foreground"
+                )}>
+                  <div className="flex items-center gap-2.5">
+                    {selectedComplaint.isEscalated ? (
+                      <Flame className="h-4 w-4 text-rose-500 shrink-0" />
+                    ) : selectedComplaint.slaBreached ? (
+                      <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+                    ) : (
+                      <Clock className="h-4 w-4 text-primary shrink-0" />
+                    )}
+                    <div>
+                      <p className="font-semibold text-foreground">
+                        {selectedComplaint.isEscalated
+                          ? 'Escalated Ticket Alert'
+                          : selectedComplaint.slaBreached
+                          ? 'SLA Target Breached'
+                          : 'SLA Resolution Window'}
+                      </p>
+                      <p className="text-[11px] opacity-80">
+                        {selectedComplaint.isEscalated && selectedComplaint.escalationReason
+                          ? `Reason: ${selectedComplaint.escalationReason}`
+                          : selectedComplaint.slaDueAt
+                          ? `Target Deadline: ${formatDate(selectedComplaint.slaDueAt)}`
+                          : 'Standard Category Target Active'}
+                      </p>
+                    </div>
+                  </div>
+                  {!selectedComplaint.isEscalated && selectedComplaint.status !== 'resolved' && selectedComplaint.status !== 'closed' && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-7 text-xs gap-1 font-semibold"
+                      onClick={() => {
+                        const target = selectedComplaint;
+                        setSelectedComplaint(null);
+                        openEscalateDialog(target);
+                      }}
+                    >
+                      <Flame className="h-3 w-3" /> Escalate
+                    </Button>
+                  )}
+                </div>
+
                 {/* Key Info Grid */}
                 <div className="grid grid-cols-2 gap-4 rounded-xl border border-border/60 bg-muted/30 p-4 text-xs">
                   <div className="space-y-1">
@@ -560,6 +825,115 @@ export default function ComplaintsPage() {
       </FormDialog>
       <ConfirmDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)} title="Delete Complaint" variant="destructive"
         description={`Delete complaint "${deleteTarget?.ticketNumber}"?`} confirmLabel="Delete" onConfirm={confirmDelete} loading={deleteMut.isPending} />
+
+      {/* Resolve & Chargeback Invoicing Modal (P3.2) */}
+      <Dialog open={!!chargebackComplaint} onOpenChange={(o) => !o && setChargebackComplaint(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+              <DollarSign className="h-5 w-5 text-amber-600" /> Resolve &amp; Issue Damage Chargeback
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Resolve this complaint ticket and bill repair or damage costs directly into tenant rent accounts with itemized invoice line items.
+            </DialogDescription>
+          </DialogHeader>
+
+          {chargebackComplaint && (
+            <div className="space-y-4 py-1 text-xs">
+              <div className="p-3 rounded-lg bg-muted/40 border border-border/80 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-foreground">{chargebackComplaint.ticketNumber}</span>
+                  <span className="capitalize font-semibold text-primary">{chargebackComplaint.category} Issue</span>
+                </div>
+                <p className="text-muted-foreground line-clamp-2 italic">"{chargebackComplaint.description}"</p>
+                <div className="pt-1 text-[11px] text-muted-foreground flex items-center justify-between border-t border-border/40">
+                  <span>Resident: <b>{chargebackComplaint.tenantName}</b></span>
+                  <span>Room: <b>{chargebackComplaint.roomNumber ? `Room ${chargebackComplaint.roomNumber}` : 'General'}</b></span>
+                </div>
+              </div>
+
+              {/* Allocation Mode */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Charge Allocation Mode</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setChargeMode('INDIVIDUAL')}
+                    className={cn(
+                      "p-2.5 rounded-lg border text-left transition-all",
+                      chargeMode === 'INDIVIDUAL'
+                        ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                        : "border-border bg-background hover:bg-muted text-muted-foreground"
+                    )}
+                  >
+                    <p className="text-xs">Individual Resident</p>
+                    <p className="text-[10px] font-normal opacity-80">Bill 100% to reporting resident</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setChargeMode('SPLIT_ROOMMATES')}
+                    className={cn(
+                      "p-2.5 rounded-lg border text-left transition-all",
+                      chargeMode === 'SPLIT_ROOMMATES'
+                        ? "border-primary bg-primary/10 text-primary font-bold shadow-xs"
+                        : "border-border bg-background hover:bg-muted text-muted-foreground"
+                    )}
+                  >
+                    <p className="text-xs">Split Across Room</p>
+                    <p className="text-[10px] font-normal opacity-80">Equal split among active roommates</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Amount */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Total Chargeback Amount (₹)</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-muted-foreground font-bold">₹</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    placeholder="e.g. 1500"
+                    value={chargebackAmount}
+                    onChange={(e) => setChargebackAmount(e.target.value)}
+                    className="w-full h-9 pl-7 pr-3 text-sm font-mono font-bold rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              {/* Remarks */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Invoice Item Description / Remarks</Label>
+                <textarea
+                  rows={2}
+                  value={chargeRemarks}
+                  onChange={(e) => setChargeRemarks(e.target.value)}
+                  placeholder="Explain the repair, replacement, or technician cost..."
+                  className="w-full p-2.5 text-xs rounded-lg border border-input bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <Button type="button" variant="outline" size="sm" onClick={() => setChargebackComplaint(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+                  onClick={handleExecuteChargeback}
+                  disabled={isSubmittingChargeback || !chargebackAmount}
+                >
+                  {isSubmittingChargeback ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Receipt className="h-3.5 w-3.5" />}
+                  {isSubmittingChargeback ? 'Issuing Invoices...' : 'Resolve & Issue Chargeback'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

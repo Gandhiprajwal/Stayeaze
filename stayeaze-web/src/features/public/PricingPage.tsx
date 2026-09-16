@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { 
   Check, Sparkles, HelpCircle, ArrowRight, X, ShieldCheck, 
   CreditCard, Smartphone, Zap, IndianRupee, Layers, FileText,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, MessageSquare, Building2, Users, Receipt,
+  DoorOpen, Gauge, FileSignature
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,15 +31,15 @@ export default function PricingPage() {
         priceAnnual: Math.round((p.annualPrice || p.monthlyPrice * 10) / 12),
         beds: `Up to ${p.maxBeds} Beds`,
         properties: `Up to ${p.maxProperties} Property Workspace(s)`,
-        badge: p.planKey === 'PROFESSIONAL' ? 'Most Popular' : (p.planKey === 'ENTERPRISE' ? 'Large Chains' : 'Small PGs'),
+        badge: p.planKey === 'PROFESSIONAL' ? 'Most Popular' : (p.planKey === 'ENTERPRISE' ? 'Multi-City Chains' : 'Standalone PG'),
         popular: p.planKey === 'PROFESSIONAL',
         features: [
-          `Up to ${p.maxBeds} Total Beds`,
-          `Up to ${p.maxProperties} Properties / Branches`,
+          `Up to ${p.maxBeds} Total Beds (2 & 3 Sharing optimized)`,
+          `Up to ${p.maxProperties} Properties / Campus Workspaces`,
           `Up to ${p.maxStaffUsers} Staff Logins`,
-          p.allowWhatsApp ? 'Automated WhatsApp Notifications' : 'Standard Email Alerts',
-          p.allowCustomBranding ? 'Custom Organization Branding & Logo' : 'Standard StayEaze Receipts',
-          p.allowRazorpayOnline ? 'Per-Property Razorpay Gateway Support' : 'Offline Payment Support',
+          p.allowWhatsApp ? 'Automated WhatsApp Notifications & Deep Links' : 'Standard 1-Click WhatsApp Reminders',
+          p.allowCustomBranding ? 'Custom Organization Branding & Subdomain' : 'Standard StayEaze Receipts',
+          p.allowRazorpayOnline ? 'Direct Per-Property Razorpay Bank Settlement' : 'Offline Payment Tracking',
         ],
       }))
     : [
@@ -46,101 +47,137 @@ export default function PricingPage() {
           name: 'Starter PG Plan',
           priceMonthly: 1499,
           priceAnnual: 1199,
-          beds: 'Up to 30 Beds',
-          properties: '1 Property',
-          badge: 'Small PGs',
+          beds: 'Up to 35 Beds',
+          properties: '1 Property & 1 Building',
+          badge: 'Standalone PG',
+          popular: false,
           features: [
-            'Up to 30 Total Beds',
-            '1 Property Workspace',
-            '2 Staff Accounts (Manager & Warden)',
-            'Building & Room Visual Bed Matrix',
-            'Tenant Rent Invoicing & Receipts',
-            'WhatsApp Receipt Auto-Dispatch',
-            'Standard Reports & Analytics',
+            'Up to 35 Total Beds (15 Rooms in 2 & 3 sharing)',
+            '1 Property & 1 Building Workspace',
+            '2 Staff Logins (Owner + 1 Caretaker/Manager)',
+            'Visual Floor Matrix & Space Inventory Hub',
+            'Tenant Check-ins, Check-outs & Room Allocations',
+            '1-Click WhatsApp Rent Reminders & Receipts',
+            'Security Deposit & Basic Financial Ledgers',
           ],
         },
         {
-          name: 'Professional Hostel',
-          priceMonthly: 2999,
-          priceAnnual: 2399,
-          beds: 'Up to 100 Beds',
-          properties: 'Up to 3 Properties',
-          badge: 'Most Popular',
+          name: 'Growth Hostel & PG',
+          priceMonthly: 3499,
+          priceAnnual: 2799,
+          beds: 'Up to 120 Beds',
+          properties: 'Up to 2 Properties (4 Buildings)',
+          badge: 'Most Popular ⭐',
           popular: true,
           features: [
-            'Up to 100 Total Beds',
-            'Up to 3 Property Workspaces',
-            '10 Staff Accounts across all branches',
-            'Per-Property Razorpay Gateway Credentials',
-            'Sub-Meter Electricity Formula Billing',
-            'Contactless Reception QR Standee',
-            'Complaints & Maintenance SLA Hub',
-            'Custom Organization Branding & Logo',
+            'Up to 120 Total Beds (50 Rooms in 2 & 3 sharing)',
+            'Up to 2 Properties & Up to 4 Buildings (Boys/Girls wings)',
+            '6 Staff Logins (Manager, Accountant, Receptionist, Warden)',
+            'Automated Pro-Rata Rent & Utility Meter Engine',
+            'Digital KYC & Rental Agreements with Lock-in Enforcement',
+            'Visitor Gate Pass & Parcel Log with WhatsApp Alerts',
+            'Automated Room Transfer Wizard & Deposit Reconciliation',
+            'GST Tax Reports & Compliant HRA Rent Statements',
           ],
         },
         {
-          name: 'Enterprise Co-Living',
-          priceMonthly: 5999,
-          priceAnnual: 4799,
-          beds: 'Up to 500 Beds',
-          properties: 'Up to 10 Properties',
-          badge: 'Large Chains',
+          name: 'Enterprise Living Chain',
+          priceMonthly: 7999,
+          priceAnnual: 6399,
+          beds: '500+ Beds (Expandable)',
+          properties: 'Unlimited Properties & Buildings',
+          badge: 'Multi-City Chains',
+          popular: false,
           features: [
-            'Up to 500 Total Beds (or Custom)',
-            'Up to 10 Property Workspaces',
-            'Unlimited Staff & Multi-Role Logins',
-            'Dedicated Account & Onboarding Manager',
-            'Custom WhatsApp Cloud Gateway Integrations',
-            'MicroTik Router Wi-Fi Provisioning',
-            'Full Multi-Branch GSTR-1 & Audit Exports',
-            'Super Admin Priority Support Queue',
+            'Unlimited Properties & Buildings (500+ to 1,000+ Beds)',
+            'Unlimited Multi-Role Staff Logins with Granular RBAC',
+            '1-Click Bulk Monthly Rent Runs across all branches',
+            'Multi-Property Aggregate Hub & Real-time Omni Search',
+            'Custom Subdomain & White-label Receipt Branding',
+            'Security Incident Escalations & Full Audit Trails',
+            'Dedicated Account Manager & Priority SLA Support',
           ],
         },
       ];
 
+  const consumptionAddons = [
+    {
+      title: 'WhatsApp Automation Pack',
+      price: '₹499',
+      unit: '/ 1,500 Messages',
+      icon: MessageSquare,
+      desc: 'Automated 1st-of-month rent invoice alerts, payment receipt notifications, and visitor entry verification OTPs.',
+      badge: 'High Efficiency',
+    },
+    {
+      title: 'Elastic Bed Overage',
+      price: '₹25',
+      unit: '/ extra bed / month',
+      icon: DoorOpen,
+      desc: 'Grow beyond your plan bed limits without jumping full tiers. Only pay for the extra occupied beds you add.',
+      badge: 'Pay-As-You-Grow',
+    },
+    {
+      title: 'Additional Building Wing',
+      price: '₹399',
+      unit: '/ building / month',
+      icon: Building2,
+      desc: 'Add extra wings or residential blocks to your existing property campus with dedicated sub-meter tracking.',
+      badge: 'Campus Scale',
+    },
+    {
+      title: 'Digital Agreement & E-Sign',
+      price: '₹15',
+      unit: '/ agreement',
+      icon: FileSignature,
+      desc: 'Instant digital rental agreement generation with resident OTP agreement consent and Aadhaar/PAN record.',
+      badge: 'Zero Paperwork',
+    },
+  ];
+
   const featureMatrix = [
     {
-      category: 'Capacity & Infrastructure',
+      category: 'Capacity & Infrastructure (PG / Hostel Sharing)',
       items: [
-        { feature: 'Maximum Bed Capacity', starter: '30 Beds', pro: '100 Beds', ent: '500+ Beds' },
-        { feature: 'Property Workspaces', starter: '1 Property', pro: '3 Properties', ent: '10 Properties (Expandable)' },
-        { feature: 'Staff & Manager Logins', starter: '2 Users', pro: '10 Users', ent: 'Unlimited Users' },
-        { feature: 'Visual Bed & Room Matrix', starter: true, pro: true, ent: true },
-        { feature: 'Batch Space Generator', starter: true, pro: true, ent: true },
-        { feature: 'Smart Vacant Bed Matcher', starter: false, pro: true, ent: true },
+        { feature: 'Bed Capacity (2 & 3 Sharing optimized)', starter: '35 Beds', pro: '120 Beds', ent: '500+ Beds (Expandable)' },
+        { feature: 'Property & Campus Workspaces', starter: '1 Property', pro: '2 Properties', ent: 'Unlimited Properties' },
+        { feature: 'Building / Wing Tracking (Boys/Girls Blocks)', starter: '1 Building', pro: 'Up to 4 Buildings', ent: 'Unlimited Buildings' },
+        { feature: 'Staff & Manager Logins', starter: '2 Users', pro: '6 Users', ent: 'Unlimited Users' },
+        { feature: 'Visual Floor & Space Inventory Matrix', starter: true, pro: true, ent: true },
+        { feature: 'Batch Room/Bed Space Generator', starter: true, pro: true, ent: true },
+        { feature: 'Real-time Omni Search (Ctrl + K)', starter: false, pro: true, ent: true },
       ]
     },
     {
-      category: 'Billing & Payment Automation',
+      category: 'Billing, Utility Meters & Payments',
       items: [
-        { feature: 'Per-Property Direct Razorpay', starter: false, pro: true, ent: true },
-        { feature: 'Automated Rent Invoices', starter: true, pro: true, ent: true },
-        { feature: 'Sub-Meter Electricity Unit Billing', starter: false, pro: true, ent: true },
-        { feature: 'WhatsApp Invoice & Receipt Dispatch', starter: true, pro: true, ent: true },
-        { feature: 'HRA Compliant Section 10(13A) Receipts', starter: true, pro: true, ent: true },
-        { feature: 'Automated Late Fee Calculation', starter: true, pro: true, ent: true },
-        { feature: 'Security Deposit Deductions & Settlements', starter: false, pro: true, ent: true },
+        { feature: 'Automated Pro-Rata Rent Calculation', starter: true, pro: true, ent: true },
+        { feature: 'Sub-Meter Electricity Unit Split Engine', starter: false, pro: true, ent: true },
+        { feature: 'Bulk Monthly Rent Run (1-Click All Rooms)', starter: false, pro: false, ent: true },
+        { feature: 'Direct Per-Property Razorpay Settlement', starter: true, pro: true, ent: true },
+        { feature: '1-Click WhatsApp Invoice & Due Reminders', starter: true, pro: true, ent: true },
+        { feature: 'Section 10(13A) Compliant HRA Rent Receipts', starter: true, pro: true, ent: true },
+        { feature: 'Security Deposit Deduction & Settlement Wizard', starter: true, pro: true, ent: true },
       ]
     },
     {
-      category: 'Resident & Reception Experience',
+      category: 'Digital Onboarding & Gate Management',
       items: [
-        { feature: 'Contactless Reception QR Poster', starter: false, pro: true, ent: true },
-        { feature: 'Online Aadhaar / Police KYC Upload', starter: true, pro: true, ent: true },
-        { feature: 'Tenant Self-Service Mobile Portal', starter: true, pro: true, ent: true },
-        { feature: 'Maintenance Ticket SLAs & Staff Assign', starter: false, pro: true, ent: true },
-        { feature: 'Digital Visitor Gate Pass & QR Badges', starter: false, pro: true, ent: true },
-        { feature: 'MicroTik Wi-Fi Router Sync', starter: false, pro: false, ent: true },
+        { feature: 'Digital KYC & Aadhaar Verification', starter: true, pro: true, ent: true },
+        { feature: 'Digital Rental Agreement & Lock-in Tracker', starter: false, pro: true, ent: true },
+        { feature: 'Visitor Gate Pass & Parcel Log Desk', starter: false, pro: true, ent: true },
+        { feature: 'Room Transfer Reconciliation Wizard', starter: false, pro: true, ent: true },
+        { feature: 'Self-Service Tenant Portal with UPI Pay', starter: true, pro: true, ent: true },
+        { feature: 'Security Guard & Reception Desk Modes', starter: false, pro: true, ent: true },
       ]
     },
     {
-      category: 'Accounting, Branding & Governance',
+      category: 'Branding, Compliance & Governance',
       items: [
-        { feature: 'Custom Organization Logo & Header', starter: false, pro: true, ent: true },
-        { feature: 'Multi-Role Portals (Guard, Accountant, etc.)', starter: false, pro: true, ent: true },
-        { feature: 'Downloadable GSTR-1 & Financial Ledgers', starter: false, pro: true, ent: true },
-        { feature: 'Multi-Branch Audit Logs', starter: false, pro: true, ent: true },
-        { feature: 'Dedicated Onboarding Specialist', starter: false, pro: false, ent: true },
+        { feature: 'Custom Subdomain & Organization Logo', starter: false, pro: false, ent: true },
+        { feature: 'GSTR-1 Reports & Exportable Ledgers', starter: false, pro: true, ent: true },
+        { feature: 'Multi-Branch Audit Logs & Incident Escalation', starter: false, pro: false, ent: true },
+        { feature: 'Dedicated Onboarding & Account Manager', starter: false, pro: false, ent: true },
       ]
     }
   ];
@@ -148,15 +185,19 @@ export default function PricingPage() {
   const faqs = [
     {
       q: 'How does per-property Razorpay gateway support work?',
-      a: 'Unlike generic rental apps that force you to collect money in their platform wallet and take days to pay you out, StayEaze connects directly to each property individual Razorpay account. When a tenant pays online, 100% of the funds settle directly into that specific property bank account.'
+      a: 'Unlike generic rental apps that force you to collect money in their platform wallet and take days to pay you out, StayEaze connects directly to each property’s individual Razorpay account. When a tenant pays online, 100% of the funds settle directly into that specific property’s bank account.'
+    },
+    {
+      q: 'How does room sharing (2-sharing, 3-sharing) and utility billing work?',
+      a: 'StayEaze is built specifically for Indian PGs and student hostels. When you record a sub-meter electricity reading for a room, our utility engine automatically divides the consumed units equally across all active roommates in that room and appends it to their monthly rent invoice.'
     },
     {
       q: 'Can I upgrade or downgrade my SaaS subscription later?',
-      a: 'Yes, anytime! When you upgrade, StayEaze automatically calculates fair proration: any unused balance from your current billing cycle is credited against your new plan. Downgrades are subject to a standard 90-day cooldown to ensure capacity stability.'
+      a: 'Yes, anytime! When you upgrade, StayEaze automatically calculates fair proration: any unused balance from your current billing cycle is credited against your new plan.'
     },
     {
       q: 'How do the HRA tax rent receipts work?',
-      a: 'StayEaze generates official rent receipts that comply with Indian Income Tax Section 10(13A). Receipts include your Landlord PAN, tenant Aadhaar verification status, detailed rent and electricity breakdown, and a verification QR code for HR/employer audits.'
+      a: 'StayEaze generates official rent receipts that comply with Indian Income Tax Section 10(13A). Receipts include Landlord PAN, tenant Aadhaar verification status, detailed rent and electricity breakdown, and a verification QR code for employer audits.'
     },
     {
       q: 'Can I migrate my existing tenant data from Excel?',
@@ -177,13 +218,13 @@ export default function PricingPage() {
         {/* Header */}
         <div className="text-center space-y-4 max-w-3xl mx-auto">
           <Badge variant="outline" className="border-blue-500/30 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 text-xs font-semibold px-3 py-1">
-            Simple & Transparent SaaS Plans
+            Built for Real-World Indian PGs & Hostels
           </Badge>
           <h1 className="text-3xl sm:text-5xl font-extrabold text-slate-900 dark:text-white font-heading tracking-tight">
-            Predictable Pricing That Scales With Your Bed Count
+            Predictable Pricing That Scales With Your Bed Count & Wings
           </h1>
           <p className="text-slate-600 dark:text-slate-400 text-sm sm:text-base">
-            Every plan includes a full 14-day free trial. Direct bank settlements, zero mixed funds, and automatic prorated upgrades.
+            Optimized for 2-sharing & 3-sharing rooms, multi-building wings, automated utility splitting, and direct bank payouts.
           </p>
 
           <div className="flex items-center justify-center gap-3 sm:gap-4 pt-2 sm:pt-4 flex-wrap">
@@ -246,6 +287,51 @@ export default function PricingPage() {
           ))}
         </div>
 
+        {/* CONSUMPTION & USAGE-BASED ADD-ONS */}
+        <div className="space-y-8">
+          <div className="text-center space-y-2 max-w-2xl mx-auto">
+            <Badge variant="outline" className="border-emerald-500/30 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 text-xs font-semibold px-3 py-1">
+              Pay-As-You-Grow
+            </Badge>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white font-heading">
+              Flexible Consumption Add-ons
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+              Need more messages, extra wings, or higher bed capacity? Add scalable boosters without jumping subscription tiers.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {consumptionAddons.map((add, idx) => (
+              <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 flex flex-col justify-between space-y-4 shadow-sm hover:border-blue-400 dark:hover:border-blue-500 transition-all">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="p-2.5 bg-blue-50 dark:bg-blue-950/50 rounded-2xl text-blue-600 dark:text-blue-400">
+                      <add.icon className="h-5 w-5" />
+                    </div>
+                    <Badge variant="secondary" className="text-[10px] font-bold uppercase">
+                      {add.badge}
+                    </Badge>
+                  </div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                    {add.title}
+                  </h3>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black font-mono text-slate-900 dark:text-white">{add.price}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">{add.unit}</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                    {add.desc}
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" className="w-full text-xs font-bold rounded-xl">
+                  Add to Account
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* COMPREHENSIVE SIDE-BY-SIDE FEATURE MATRIX */}
         <div className="space-y-8">
           <div className="text-center space-y-2 max-w-2xl mx-auto">
@@ -253,7 +339,7 @@ export default function PricingPage() {
               Complete Feature Comparison Matrix
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-              Deep dive into every capability included across our starter, professional, and enterprise tiers.
+              Deep dive into every capability included across our starter, growth, and enterprise tiers.
             </p>
           </div>
 
@@ -264,8 +350,8 @@ export default function PricingPage() {
                   <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
                     <th className="p-4 sm:p-5 font-bold text-slate-700 dark:text-slate-300 w-2/5 text-sm">Capability Overview</th>
                     <th className="p-4 sm:p-5 font-bold text-slate-700 dark:text-slate-300 w-1/5 text-center">Starter PG</th>
-                    <th className="p-4 sm:p-5 font-extrabold text-blue-600 dark:text-blue-400 w-1/5 text-center bg-blue-50/40 dark:bg-blue-950/40">Professional</th>
-                    <th className="p-4 sm:p-5 font-bold text-purple-600 dark:text-purple-400 w-1/5 text-center">Enterprise</th>
+                    <th className="p-4 sm:p-5 font-extrabold text-blue-600 dark:text-blue-400 w-1/5 text-center bg-blue-50/40 dark:bg-blue-950/40">Growth Hostel ⭐</th>
+                    <th className="p-4 sm:p-5 font-bold text-purple-600 dark:text-purple-400 w-1/5 text-center">Enterprise Chain</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">

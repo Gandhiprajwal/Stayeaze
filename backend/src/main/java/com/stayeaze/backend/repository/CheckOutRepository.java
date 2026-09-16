@@ -32,5 +32,7 @@ public interface CheckOutRepository extends JpaRepository<CheckOut, UUID> {
            "LOWER(c.refundStatus) LIKE LOWER(CONCAT('%', :search, '%')))")
     Page<CheckOut> searchByOrganizationId(@Param("orgId") UUID orgId, @Param("search") String search, Pageable pageable);
 
+    boolean existsByCode(String code);
+
     Page<CheckOut> findAll(Pageable pageable);
 }

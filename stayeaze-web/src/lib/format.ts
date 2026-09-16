@@ -9,6 +9,23 @@ export function formatCurrency(amount?: number | null): string {
   }).format(val);
 }
 
+/**
+ * Returns a YYYY-MM-DD string according to local calendar time (avoids UTC date shift).
+ */
+export function getTodayIsoDate(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function formatToLocalIsoDate(date?: string | Date | null): string {
+  if (!date) return getTodayIsoDate();
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (!d || isNaN(d.getTime())) return getTodayIsoDate();
+  return getTodayIsoDate(d);
+}
+
 export function formatNumber(n: number): string {
   return new Intl.NumberFormat('en-IN').format(n);
 }

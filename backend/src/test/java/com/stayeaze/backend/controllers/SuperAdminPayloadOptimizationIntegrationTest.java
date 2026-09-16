@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Collections;
-import java.util.List;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -66,7 +65,7 @@ public class SuperAdminPayloadOptimizationIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        Role superAdminRole = roleRepository.findByName(ERole.SUPER_ADMIN).orElseGet(() -> {
+        roleRepository.findByName(ERole.SUPER_ADMIN).orElseGet(() -> {
             Role r = new Role("ROLE_SUPER_ADMIN", "[]");
             return roleRepository.save(r);
         });

@@ -11,6 +11,7 @@ import java.util.UUID;
 @Repository
 public interface RoleRepository extends JpaRepository<Role, UUID> {
     Optional<Role> findByName(String name);
+    boolean existsByNameIgnoreCase(String name);
 
     default Optional<Role> findByName(ERole name) {
         if (name == null) return Optional.empty();

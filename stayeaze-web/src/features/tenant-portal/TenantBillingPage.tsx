@@ -19,6 +19,7 @@ import { formatCurrency, formatDate, numberToWords, resolveFileUrl } from '@/lib
 import { useAuthStore } from '@/lib/stores/auth-store';
 import api from '@/lib/api';
 import { RefundAccountCard } from './RefundAccountCard';
+import { HraStatementModal } from '@/features/billing/HraStatementModal';
 
 export default function TenantBillingPage() {
   const { user } = useAuthStore();
@@ -34,6 +35,7 @@ export default function TenantBillingPage() {
   const [isSubmittingUtr, setIsSubmittingUtr] = useState<boolean>(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [selectedMeterPhoto, setSelectedMeterPhoto] = useState<any>(null);
+  const [hraStatementOpen, setHraStatementOpen] = useState<boolean>(false);
 
   const { data: overview } = useQuery({
     queryKey: ['tenant-overview'],
@@ -180,6 +182,15 @@ export default function TenantBillingPage() {
         title="Rent & Billing"
         description="View your monthly rental invoices, make secure online payments, and download official HRA rent receipts."
         icon={Receipt}
+        actions={
+          <Button
+            size="sm"
+            onClick={() => setHraStatementOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs gap-1.5 shadow-xs h-9 px-3.5"
+          >
+            <FileCheck className="h-4 w-4" /> Download HRA Statement
+          </Button>
+        }
       />
 
       {/* 4 Top Financial Metric Cards */}
@@ -586,7 +597,7 @@ export default function TenantBillingPage() {
                 </div>
 
                 {/* Tenant / Rent Summary */}
-                <div className="grid grid-cols-2 gap-4 border border-slate-300 rounded p-3 mb-4 bg-slate-50/70">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border border-slate-300 rounded p-3 mb-4 bg-slate-50/70">
                   <div>
                     <p className="font-bold text-[11px] text-indigo-950 uppercase tracking-wider border-b border-slate-200 pb-1 mb-1.5">Tenant Details (Received From)</p>
                     <p className="font-bold text-sm text-slate-900">{overview?.name || user?.name || 'Resident Tenant'}</p>
@@ -675,7 +686,7 @@ export default function TenantBillingPage() {
                 </div>
 
                 {/* Bank Details & Terms */}
-                <div className="grid grid-cols-2 gap-4 border-t border-slate-300 pt-3 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-300 pt-3 mb-6">
                   <div>
                     <p className="font-bold text-[11px] text-slate-900 uppercase tracking-wider mb-1">Bank Payment Details</p>
                     <div className="text-[10px] text-slate-600 space-y-0.5 leading-tight font-mono">
@@ -886,6 +897,13 @@ export default function TenantBillingPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <HraStatementModal
+        open={hraStatementOpen}
+        onOpenChange={setHraStatementOpen}
+        tenantId={overview?.id || (user as any)?.tenantId || (user as any)?.id || ''}
+        tenantName={overview?.tenantName || user?.name}
+      />
     </div>
   );
 }

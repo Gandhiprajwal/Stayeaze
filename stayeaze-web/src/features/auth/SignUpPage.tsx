@@ -120,6 +120,12 @@ export default function SignUpPage() {
   const [authorizedSignatory, setAuthorizedSignatory] = useState('');
   const [gstin, setGstin] = useState('');
 
+  // Compulsory Lease & Settlement Policies (P3.3)
+  const [minimumLockInMonths, setMinimumLockInMonths] = useState<number>(3);
+  const [noticePeriodDays, setNoticePeriodDays] = useState<number>(30);
+  const [defaultExitCleaningFee, setDefaultExitCleaningFee] = useState<number>(500);
+  const [defaultElectricityRatePerUnit, setDefaultElectricityRatePerUnit] = useState<number>(10.0);
+
   // Step 3: Subscription & Trial
   const [selectedPlan, setSelectedPlan] = useState<'starter' | 'pro' | 'enterprise'>('pro');
   const [isAnnual, setIsAnnual] = useState(false);
@@ -160,64 +166,116 @@ export default function SignUpPage() {
   }, [orgSubdomain]);
 
   const { data: dbPlans } = useQuery<any[]>({
-    queryKey: ['public-onboarding-plans'],
-    queryFn: () => api.get('/auth/public-plans').then((r) => r.data),
+    queryKey: ['public-saas-plans'],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/saas/plans');
+        if (Array.isArray(res.data) && res.data.length > 0) return res.data;
+      } catch (e) {
+        // Fallback to auth public plans
+      }
+      try {
+        const fallbackRes = await api.get('/auth/public-plans');
+        return fallbackRes.data;
+      } catch (e) {
+        return [];
+      }
+    },
+    staleTime: 60_000,
   });
 
   const plans = Array.isArray(dbPlans) && dbPlans.length > 0
-    ? dbPlans.map((p) => ({
-        id: (p.planKey || p.name).toLowerCase().includes('enterprise') ? 'enterprise' : ((p.planKey || p.name).toLowerCase().includes('pro') ? 'pro' : 'starter'),
-        name: p.name,
-        monthlyPrice: p.monthlyPrice,
-        annualPrice: Math.round((p.annualPrice || p.monthlyPrice * 10) / 12),
-        bedsLimit: `Up to ${p.maxBeds} Beds`,
-        propertiesLimit: `Up to ${p.maxProperties} Property Workspace(s)`,
-        features: [
-          `Up to ${p.maxBeds} Beds Capacity`,
-          `Up to ${p.maxProperties} Property Workspace(s)`,
-          `Up to ${p.maxStaffUsers} Staff Accounts`,
-          p.allowWhatsApp ? 'Automated WhatsApp Notices' : 'Standard Email Alerts',
-          p.allowRazorpayOnline ? 'Razorpay Online Rent Gateway' : 'Offline Billing',
-        ],
-        badge: p.planKey === 'PROFESSIONAL' ? 'Most Popular' : (p.planKey === 'ENTERPRISE' ? 'Large Operations' : 'Small PGs'),
-        popular: p.planKey === 'PROFESSIONAL',
-      }))
+    ? dbPlans.map((p) => {
+        const id = (p.planKey || p.name).toLowerCase().includes('enterprise')
+          ? 'enterprise'
+          : ((p.planKey || p.name).toLowerCase().includes('pro') || (p.planKey || p.name).toLowerCase().includes('growth') ? 'pro' : 'starter');
+        const monthly = Number(p.monthlyPrice) || 1499;
+        const annual = Number(p.annualPrice) || Math.round(monthly * 10);
+        return {
+          id,
+          rawPlanKey: p.planKey || id.toUpperCase(),
+          name: p.name,
+          description: p.description || (id === 'starter'
+            ? 'Ideal for Single-Building Standalone PGs (Up to 15 Rooms / 35 Beds in 2 & 3 sharing, 2 Staff logins).'
+            : id === 'pro'
+            ? 'For Multi-Wing Hostels & 2-Branch PGs (Up to 4 Buildings, 50 Rooms / 120 Beds with Meter Engine & Digital Agreements).'
+            : 'For Multi-City Co-Living Chains (Unlimited Buildings, 500+ Beds, Bulk Rent Runs, Custom Subdomain & Priority SLA).'),
+          monthlyPrice: monthly,
+          annualPrice: Math.round(annual / 12),
+          bedsLimit: `Up to ${p.maxBeds || 35} Beds`,
+          propertiesLimit: `Up to ${p.maxProperties || 1} Property Workspace(s)`,
+          features: [
+            `Up to ${p.maxBeds || 35} Beds Capacity`,
+            `Up to ${p.maxProperties || 1} Property Workspace(s)`,
+            `Up to ${p.maxStaffUsers || 2} Staff Account Logins`,
+            p.allowWhatsApp ? 'Automated WhatsApp Notices & Rent Alerts' : 'Standard Email Alerts',
+            p.allowRazorpayOnline ? 'Per-Property Online Razorpay Gateway' : 'Offline Payment Tracking',
+            p.allowCustomBranding ? 'White-Label Custom Branding & Portal Header' : 'StayEaze Standard Suite',
+          ],
+          badge: p.planKey === 'PROFESSIONAL' ? 'Most Popular' : (p.planKey === 'ENTERPRISE' ? 'Large Operations' : 'Small PGs'),
+          popular: p.planKey === 'PROFESSIONAL',
+        };
+      })
     : [
         {
           id: 'starter',
           name: 'Starter PG Plan',
+          description: 'Ideal for Single-Building Standalone PGs (Up to 15 Rooms / 35 Beds in 2 & 3 sharing, 2 Staff logins).',
           monthlyPrice: 1499,
           annualPrice: 1199,
-          bedsLimit: 'Up to 25 Beds',
+          bedsLimit: 'Up to 35 Beds',
           propertiesLimit: '1 Property',
-          features: ['Building & Room Hierarchy', 'Tenant Rent Invoicing', 'WhatsApp Receipt Notices', 'Standard Reports & Analytics'],
+          features: [
+            'Up to 35 Beds Capacity',
+            '1 Property Workspace',
+            'Up to 2 Staff Account Logins',
+            'Building & Room Hierarchy Matrix',
+            'Tenant Rent Invoicing & Ledger',
+            'Standard Email Alerts & Analytics'
+          ],
           badge: 'Small PGs',
         },
         {
           id: 'pro',
-          name: 'Professional Hostel Plan',
-          monthlyPrice: 2999,
-          annualPrice: 2399,
-          bedsLimit: 'Up to 150 Beds',
-          propertiesLimit: 'Up to 3 Properties',
-          features: ['All Starter Features', 'Per-Property Razorpay Gateway', 'Staff Roles & Audit Logs', 'Complaints & Maintenance Hub', 'Custom Branding & GST Receipts'],
+          name: 'Growth Hostel & PG',
+          description: 'For Multi-Wing Hostels & 2-Branch PGs (Up to 4 Buildings, 50 Rooms / 120 Beds with Meter Engine & Digital Agreements).',
+          monthlyPrice: 3499,
+          annualPrice: 2799,
+          bedsLimit: 'Up to 120 Beds',
+          propertiesLimit: 'Up to 2 Properties',
+          features: [
+            'Up to 120 Beds Capacity',
+            'Up to 2 Property Workspaces',
+            'Up to 6 Staff Account Logins',
+            'Per-Property Razorpay Gateway',
+            'Automated WhatsApp Notices & Alerts',
+            'Sub-Meter Utility Engine & GST Receipts'
+          ],
           badge: 'Most Popular',
           popular: true,
         },
         {
           id: 'enterprise',
-          name: 'Enterprise Co-Living Plan',
-          monthlyPrice: 5999,
-          annualPrice: 4799,
-          bedsLimit: 'Up to 1,000 Beds',
+          name: 'Enterprise Living Chain',
+          description: 'For Multi-City Co-Living Chains (Unlimited Buildings, 500+ Beds, Bulk Rent Runs, Custom Subdomain & Priority SLA).',
+          monthlyPrice: 7999,
+          annualPrice: 6399,
+          bedsLimit: 'Up to 500 Beds',
           propertiesLimit: 'Up to 10 Properties',
-          features: ['All Pro Features', 'Dedicated Support Manager', 'Custom SMS/WhatsApp Gateway', 'Multi-Branch Financial Audits', 'Super Admin Priority Queue'],
+          features: [
+            'Up to 500 Beds Capacity (Scalable)',
+            'Up to 10 Property Workspaces',
+            'Up to 25 Staff Account Logins',
+            'Dedicated Platform Account Manager',
+            'Custom WhatsApp / SMS Gateway',
+            'White-Label Custom Branding & Priority SLA'
+          ],
           badge: 'Large Operations',
         },
       ];
 
   const currentPlanObj = plans.find((p) => p.id === selectedPlan) || plans[0];
-  const currentPrice = isTrial ? 0 : (isAnnual ? currentPlanObj.annualPrice * 12 : currentPlanObj.monthlyPrice);
+  const currentPrice = isTrial ? 2 : (isAnnual ? currentPlanObj.annualPrice * 12 : currentPlanObj.monthlyPrice);
 
   function validateStep1(): boolean {
     if (!ownerName.trim()) { toast.error('Please enter Owner / Admin Full Name'); return false; }
@@ -297,7 +355,7 @@ export default function SignUpPage() {
         });
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to submit registration request.');
+      toast.error(err?.message || err?.response?.data?.message || 'Failed to submit registration request.');
     } finally {
       setIsProcessing(false);
     }
@@ -325,6 +383,7 @@ export default function SignUpPage() {
         manager: manager || ownerName, phone: ownerPhone, email: ownerEmail,
         landlordPan, pgLicenseNo, bankAccountName, bankName, bankAccountNumber, bankIfsc,
         upiVpa, authorizedSignatory: authorizedSignatory || ownerName, gstin,
+        minimumLockInMonths, noticePeriodDays, defaultExitCleaningFee, defaultElectricityRatePerUnit,
         planId: selectedPlan, planName: currentPlanObj.name, planPrice: currentPrice,
         billingCycle: isAnnual ? 'ANNUAL' : 'MONTHLY', isTrial, seedSampleData,
         inviteCode: inviteCode ? inviteCode.trim().toUpperCase() : undefined,
@@ -404,13 +463,13 @@ export default function SignUpPage() {
             const completeRes = await api.post('/auth/complete-onboarding', {
               ...onboardingPayload,
               razorpayOrderId: response.razorpay_order_id || orderId,
-              razorpayPaymentId: response.razorpay_payment_id || `pay_rzp_${Date.now()}`,
-              razorpaySignature: response.razorpay_signature || 'sig_verified',
+              razorpayPaymentId: response.razorpay_payment_id || (orderId.startsWith('sub_order_') ? `pay_sim_${Date.now()}` : undefined),
+              razorpaySignature: response.razorpay_signature || (orderId.startsWith('sub_order_') ? 'sandbox_sig' : undefined),
             });
 
             completeAutoLoginSession(completeRes.data);
           } catch (err: any) {
-            toast.error(err.response?.data?.message || 'Payment verification failed. Please register again.');
+            toast.error(err?.message || err?.response?.data?.message || 'Payment verification failed. Please register again.');
           } finally {
             setIsProcessing(false);
           }
@@ -430,7 +489,8 @@ export default function SignUpPage() {
       });
       rzp.open();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to initialize subscription checkout');
+      const errorMsg = err?.message || err?.response?.data?.message || 'Failed to initialize subscription checkout';
+      toast.error(errorMsg);
       setIsProcessing(false);
     }
   }
@@ -814,6 +874,68 @@ export default function SignUpPage() {
                   <Input value={upiVpa} onChange={(e) => setUpiVpa(e.target.value)} placeholder="greenland@hdfcbank" className="bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 font-mono" />
                 </div>
               </div>
+
+              <hr className="border-slate-200 dark:border-slate-800 my-4" />
+
+              {/* Lease Terms & Move-Out Policies (P3.3) */}
+              <div className="space-y-2">
+                <span className="text-xs font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4" /> Property Tenancy, Deposit &amp; Billing Policies
+                </span>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Configure default lock-in duration, notice period, security deposit, and checkout deductions for your resident agreements.
+                </p>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Minimum Lock-In Period (Months)</Label>
+                  <Input
+                    type="number"
+                    value={minimumLockInMonths}
+                    onChange={(e) => setMinimumLockInMonths(Math.max(0, parseInt(e.target.value) || 0))}
+                    placeholder="e.g. 3 (0 for monthly rolling)"
+                    className="bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 font-mono"
+                  />
+                  <p className="text-[11px] text-slate-500">0 = monthly rolling lease without early exit penalty</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Required Notice Period (Days)</Label>
+                  <Input
+                    type="number"
+                    value={noticePeriodDays}
+                    onChange={(e) => setNoticePeriodDays(Math.max(0, parseInt(e.target.value) || 0))}
+                    placeholder="e.g. 30"
+                    className="bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 font-mono"
+                  />
+                  <p className="text-[11px] text-slate-500">Standard notice required from residents before move-out</p>
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Default Exit Deep Cleaning Fee (₹)</Label>
+                  <Input
+                    type="number"
+                    value={defaultExitCleaningFee}
+                    onChange={(e) => setDefaultExitCleaningFee(Math.max(0, parseFloat(e.target.value) || 0))}
+                    placeholder="e.g. 500"
+                    className="bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 font-mono"
+                  />
+                  <p className="text-[11px] text-slate-500">Auto-applied deep cleaning deduction on move-out</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Default Electricity Tariff (₹/Unit)</Label>
+                  <Input
+                    type="number"
+                    value={defaultElectricityRatePerUnit}
+                    onChange={(e) => setDefaultElectricityRatePerUnit(Math.max(0, parseFloat(e.target.value) || 0))}
+                    placeholder="e.g. 12.0"
+                    className="bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 font-mono"
+                  />
+                  <p className="text-[11px] text-slate-500">Rate per sub-meter unit for utility auto-splits</p>
+                </div>
+              </div>
             </CardContent>
             <CardFooter className="flex justify-between border-t border-slate-200 dark:border-slate-800 pt-4">
               <Button variant="outline" onClick={() => setStep(1)} className="border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
@@ -841,7 +963,7 @@ export default function SignUpPage() {
                 <Sparkles className="h-6 w-6 text-amber-500 dark:text-amber-400" /> Step 3: Choose Your StayEaze Plan
               </CardTitle>
               <CardDescription className="text-slate-600 dark:text-slate-400">
-                Select a subscription plan or activate a 14-day free trial with zero risk.
+                Select a live verified subscription plan or activate a 14-day free trial with zero risk.
               </CardDescription>
 
               {/* Billing Toggle & Trial Switch */}
@@ -858,7 +980,7 @@ export default function SignUpPage() {
                 <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-950 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 text-xs">
                   <Switch checked={isTrial} onCheckedChange={setIsTrial} id="trial-mode" />
                   <Label htmlFor="trial-mode" className="cursor-pointer font-medium text-amber-600 dark:text-amber-300">
-                    Activate 14-Day Free Trial (No Card Needed)
+                    Activate 14-Day Free Trial (₹2 Card / Auto-Pay Verification Charge)
                   </Label>
                 </div>
               </div>
@@ -892,10 +1014,18 @@ export default function SignUpPage() {
                       </div>
 
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{p.name}</h3>
+                      {p.description && (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 min-h-[32px] line-clamp-2 leading-relaxed">
+                          {p.description}
+                        </p>
+                      )}
 
                       <div className="mb-4">
                         {isTrial ? (
-                          <span className="text-2xl font-black text-amber-500 dark:text-amber-400">FREE</span>
+                          <div>
+                            <span className="text-2xl font-black text-amber-500 dark:text-amber-400">₹2</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400"> (14-Day Trial • ₹2 Card Auth Charge)</span>
+                          </div>
                         ) : (
                           <div>
                             <span className="text-3xl font-black text-slate-900 dark:text-white">{formatCurrency(isAnnual ? p.annualPrice : p.monthlyPrice)}</span>
@@ -920,6 +1050,27 @@ export default function SignUpPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Transparent SaaS Platform Policies Banner */}
+              <div className="bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-blue-500" /> Transparent Subscription &amp; Operating Policies
+                </div>
+                <div className="grid sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-400">
+                  <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1">
+                    <strong className="text-slate-900 dark:text-slate-200 block">⚡ Instant Prorated Upgrades</strong>
+                    <span>Upgrades activate immediately with credit for unused days from your current billing cycle.</span>
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1">
+                    <strong className="text-slate-900 dark:text-slate-200 block">🔒 90-Day Downgrade Policy</strong>
+                    <span>Downgrades are locked to once per 90 days to prevent quota abuse and preserve ledger history.</span>
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1">
+                    <strong className="text-slate-900 dark:text-slate-200 block">🧾 100% GST Tax Invoices</strong>
+                    <span>Official B2B tax receipts with GSTIN &amp; HRA compliance are automatically emailed on every billing run.</span>
+                  </div>
+                </div>
               </div>
 
               {/* Sample Data Seeding Toggle */}
@@ -952,7 +1103,7 @@ export default function SignUpPage() {
           <Card className="bg-white dark:bg-slate-900/90 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xl dark:shadow-2xl backdrop-blur-md max-w-2xl mx-auto">
             <CardHeader className="text-center">
               <CardTitle className="text-xl font-bold flex items-center justify-center gap-2">
-                <CreditCard className="h-5 w-5 text-blue-500 dark:text-blue-400" /> Step 4: Subscription Order Summary & Checkout
+                <CreditCard className="h-5 w-5 text-blue-500 dark:text-blue-400" /> Step 4: Subscription Order Summary &amp; Checkout
               </CardTitle>
               <CardDescription className="text-slate-600 dark:text-slate-400">
                 Review your registered details and complete checkout to activate your back-office.
@@ -965,10 +1116,14 @@ export default function SignUpPage() {
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
                   <div>
                     <h4 className="font-bold text-slate-900 dark:text-white text-base">{currentPlanObj.name}</h4>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{isTrial ? '14-Day Free Trial' : `${isAnnual ? 'Annual Billing' : 'Monthly Billing'}`}</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {isTrial
+                        ? '14-Day Free Trial (₹2 Refundable Card Auth for Auto-Pay Mandate)'
+                        : `${isAnnual ? 'Annual Billing (20% Discount Applied)' : 'Monthly Billing'}`}
+                    </span>
                   </div>
-                  <Badge variant="outline" className="border-blue-500/30 text-blue-600 dark:text-blue-400">
-                    {isTrial ? 'Free Trial' : formatCurrency(currentPrice)}
+                  <Badge variant="outline" className="border-blue-500/30 text-blue-600 dark:text-blue-400 font-bold">
+                    {isTrial ? '₹2 Card Auth' : formatCurrency(currentPrice)}
                   </Badge>
                 </div>
 
@@ -977,7 +1132,9 @@ export default function SignUpPage() {
                   <div><span className="text-slate-500">Email:</span> <strong className="text-slate-900 dark:text-slate-200">{ownerEmail}</strong></div>
                   <div><span className="text-slate-500">Subdomain:</span> <strong className="text-blue-600 dark:text-blue-400 font-mono">{orgSubdomain}.stayeaze.com</strong></div>
                   <div><span className="text-slate-500">Property:</span> <strong className="text-slate-900 dark:text-slate-200">{propertyName} ({propertyCode})</strong></div>
-                  <div><span className="text-slate-500">City / State:</span> <strong className="text-slate-900 dark:text-slate-200">{city}, {stateName}</strong></div>
+                  <div><span className="text-slate-500">PAN / GSTIN:</span> <strong className="text-slate-900 dark:text-slate-200 font-mono">{landlordPan} {gstin ? `| ${gstin}` : ''}</strong></div>
+                  <div><span className="text-slate-500">Tenancy Policies:</span> <strong className="text-slate-900 dark:text-slate-200">{minimumLockInMonths}m Lock-in • {noticePeriodDays}d Notice</strong></div>
+                  <div><span className="text-slate-500">Cleaning &amp; Tariff:</span> <strong className="text-slate-900 dark:text-slate-200">₹{defaultExitCleaningFee} Exit • ₹{defaultElectricityRatePerUnit}/unit Power</strong></div>
                   <div><span className="text-slate-500">Bank Account:</span> <strong className="text-slate-900 dark:text-slate-200">{bankName} ({bankAccountNumber.slice(-4)})</strong></div>
                 </div>
 
@@ -989,7 +1146,7 @@ export default function SignUpPage() {
 
               <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 justify-center">
                 <ShieldCheck className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
-                <span>256-bit Encrypted SSL Gateway & Instant Access Guarantee</span>
+                <span>256-bit Encrypted SSL Gateway • 99.9% Uptime Guarantee • Instant Provisioning</span>
               </div>
             </CardContent>
 
@@ -1004,15 +1161,15 @@ export default function SignUpPage() {
               >
                 {isProcessing ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying & Activating...
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying &amp; Activating...
                   </>
                 ) : isTrial ? (
                   <>
-                    Activate 14-Day Trial & Launch Dashboard <ArrowRight className="ml-2 h-4 w-4" />
+                    Verify Card (₹2) &amp; Start 14-Day Trial <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 ) : (
                   <>
-                    Pay {formatCurrency(currentPrice)} & Launch Dashboard <ArrowRight className="ml-2 h-4 w-4" />
+                    Pay {formatCurrency(currentPrice)} &amp; Launch Dashboard <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
               </Button>

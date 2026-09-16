@@ -1,6 +1,5 @@
 package com.stayeaze.backend.controllers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stayeaze.backend.models.Bed;
 import com.stayeaze.backend.models.Booking;
 import com.stayeaze.backend.models.Building;
@@ -45,7 +44,6 @@ import java.util.HashSet;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -57,9 +55,6 @@ public class OwnerDashboardIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     @Autowired
     private OrganizationRepository organizationRepository;

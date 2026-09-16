@@ -65,16 +65,7 @@ public class OwnerWorkflowIntegrationTest {
     private FloorRepository floorRepository;
 
     @Autowired
-    private RoomRepository roomRepository;
-
-    @Autowired
-    private BedRepository bedRepository;
-
-    @Autowired
     private TenantRepository tenantRepository;
-
-    @Autowired
-    private InvoiceRepository invoiceRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -90,13 +81,13 @@ public class OwnerWorkflowIntegrationTest {
         testOrg = new Organization("StayEaze Grand PG", "grand-pg-" + UUID.randomUUID().toString().substring(0, 6));
         testOrg = organizationRepository.save(testOrg);
 
-        SaaSPlan starterPlan = saasPlanRepository.findByPlanKey("STARTER").orElseGet(() -> {
-            SaaSPlan p = new SaaSPlan("STARTER", "Starter Plan", BigDecimal.valueOf(999), BigDecimal.valueOf(9999), 1, 30, 2, true, false, "MONTHLY");
+        saasPlanRepository.findByPlanKey("GROWTH").orElseGet(() -> {
+            SaaSPlan p = new SaaSPlan("GROWTH", "Growth Plan", BigDecimal.valueOf(2499), BigDecimal.valueOf(24999), 5, 200, 10, true, true, "MONTHLY");
             return saasPlanRepository.save(p);
         });
 
         OrganizationBillingProfile profile = new OrganizationBillingProfile(testOrg);
-        profile.setSubscriptionPlanName("STARTER");
+        profile.setSubscriptionPlanName("GROWTH");
         profile.setSubscriptionStatus("ACTIVE");
         billingProfileRepository.save(profile);
 
@@ -154,9 +145,9 @@ public class OwnerWorkflowIntegrationTest {
         Map<String, Object> req = new HashMap<>();
         req.put("startFloor", 1);
         req.put("endFloor", 5);
-        req.put("roomsPerFloor", 10);
+        req.put("roomsPerFloor", 25);
         req.put("sharingType", "DOUBLE");
-        req.put("bedsPerRoom", 2); // 5 * 10 * 2 = 100 beds (Starter plan allows 30)
+        req.put("bedsPerRoom", 2); // 5 * 25 * 2 = 250 beds (Growth plan allows 200)
 
         mockMvc.perform(post("/api/v1/properties/" + testProperty.getId() + "/buildings/" + testBuilding.getId() + "/batch-generate-spaces")
                         .with(authentication(ownerAuth))

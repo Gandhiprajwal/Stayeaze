@@ -1,6 +1,5 @@
 package com.stayeaze.backend.controllers;
 
-import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.models.OrganizationBillingProfile;
 import com.stayeaze.backend.models.UserJourneyAudit;
 import com.stayeaze.backend.payload.response.MessageResponse;
@@ -8,7 +7,6 @@ import com.stayeaze.backend.payload.response.PageResponse;
 import com.stayeaze.backend.repository.OrganizationBillingProfileRepository;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.UserJourneyAuditRepository;
-import com.stayeaze.backend.services.UserJourneyAuditService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -16,7 +14,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import jakarta.persistence.criteria.Predicate;
@@ -30,7 +27,6 @@ import java.util.*;
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
 @RequestMapping("/api/v1/super-admin/user-tracking")
-@PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SUPPORT')")
 public class SuperAdminUserTrackingController {
 
     @Autowired
@@ -42,10 +38,39 @@ public class SuperAdminUserTrackingController {
     @Autowired
     private OrganizationBillingProfileRepository billingProfileRepository;
 
-    @Autowired
-    private UserJourneyAuditService auditService;
+    @PostMapping("/telemetry")
+    public ResponseEntity<?> ingestTelemetry(@RequestBody(required = false) Map<String, Object> payload) {
+        try {
+            if (payload != null && payload.containsKey("events")) {
+                Object rawEvents = payload.get("events");
+                if (rawEvents instanceof List) {
+                    List<?> list = (List<?>) rawEvents;
+                    for (Object obj : list) {
+                        if (obj instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> ev = (Map<String, Object>) obj;
+                            String category = ev.get("category") != null ? ev.get("category").toString() : "USER_ACTION";
+                            String action = ev.get("eventName") != null ? ev.get("eventName").toString() : "UI_EVENT";
+                            String msg = ev.get("message") != null ? ev.get("message").toString() : "";
+                            if ("UI_ERROR".equalsIgnoreCase(category) || "NETWORK_ERROR".equalsIgnoreCase(category)) {
+                                UserJourneyAudit audit = new UserJourneyAudit();
+                                audit.setCategory(category);
+                                audit.setAction(action);
+                                audit.setStatus("ERROR");
+                                audit.setDetails(msg + (ev.get("stack") != null ? " | " + ev.get("stack").toString() : ""));
+                                audit.setCreatedAt(OffsetDateTime.now());
+                                auditRepository.save(audit);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return ResponseEntity.ok(Map.of("status", "ok", "received", true));
+    }
 
     @GetMapping("/events")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SUPPORT')")
     public ResponseEntity<?> getEvents(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize,
@@ -97,6 +122,7 @@ public class SuperAdminUserTrackingController {
     }
 
     @GetMapping("/stats")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SUPPORT')")
     public ResponseEntity<?> getStats() {
         long totalEvents = auditRepository.countTotalEvents();
         long paymentFailures = auditRepository.countPaymentFailures();
@@ -113,6 +139,7 @@ public class SuperAdminUserTrackingController {
     }
 
     @GetMapping("/anomalies")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SUPPORT')")
     public ResponseEntity<?> getAnomalies(@RequestParam(defaultValue = "10") int limit) {
         Pageable pageable = PageRequest.of(0, Math.min(50, Math.max(1, limit)));
         List<UserJourneyAudit> anomalies = auditRepository.findTopAnomalies(pageable);
@@ -120,6 +147,7 @@ public class SuperAdminUserTrackingController {
     }
 
     @GetMapping("/user-timeline")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SUPPORT')")
     public ResponseEntity<?> getUserTimeline(
             @RequestParam(required = false) String email,
             @RequestParam(required = false) UUID userId,
@@ -135,6 +163,7 @@ public class SuperAdminUserTrackingController {
     }
 
     @PostMapping("/reconcile/{auditId}")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SUPPORT')")
     public ResponseEntity<?> reconcilePayment(
             @PathVariable UUID auditId,
             @RequestBody(required = false) Map<String, Object> body) {
@@ -185,6 +214,7 @@ public class SuperAdminUserTrackingController {
     }
 
     @GetMapping("/export")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SUPPORT')")
     public void exportCsv(
             @RequestParam(required = false) UUID orgId,
             @RequestParam(required = false) String category,

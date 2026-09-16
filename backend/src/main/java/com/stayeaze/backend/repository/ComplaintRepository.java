@@ -39,5 +39,8 @@ public interface ComplaintRepository extends JpaRepository<Complaint, UUID> {
                    "AND UPPER(c.status) IN ('OPEN', 'IN_PROGRESS', 'PENDING', 'ASSIGNED')", nativeQuery = true)
     long countOpenComplaintsNative(@Param("orgId") UUID orgId);
 
+    boolean existsByTicketNumber(String ticketNumber);
+    Optional<Complaint> findByTicketNumber(String ticketNumber);
+
     Page<Complaint> findAll(Pageable pageable);
 }

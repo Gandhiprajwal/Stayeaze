@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { LogIn, Plus, Pencil, Trash2, BadgeCheck, Calendar, CreditCard, Zap, Wallet, UserCheck, ShieldCheck, FileText } from 'lucide-react';
+import { LogIn, Plus, Pencil, Trash2, BadgeCheck, Calendar, CreditCard, Zap, Wallet, UserCheck, ShieldCheck, FileText, KeyRound, Gauge, Car, CheckSquare, Sparkles } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
 
@@ -18,7 +18,8 @@ import {
 } from '@/components/ui/select';
 import api from '@/lib/api';
 import { usePropertyStore } from '@/lib/stores/property-store';
-import { formatCurrency, formatDate, formatRoomName } from '@/lib/format';
+import { useAuthStore } from '@/lib/stores/auth-store';
+import { formatCurrency, formatDate, formatRoomName, getTodayIsoDate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 import { validateRequired, validateEmail, validatePhone, validateIdNumber, validateNumber } from '@/lib/validation';
 import type { CheckIn, Property, Tenant, Room, Bed } from '@/lib/types';
@@ -28,22 +29,39 @@ import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { RoomSelect } from '@/components/common/RoomSelect';
 
 const ENDPOINT = '/check-ins';
-const statuses = [{ value: 'completed', label: 'Completed' }, { value: 'pending', label: 'Pending' }];
+const statuses = [
+  { value: 'completed', label: 'Check-in Now (Active)' },
+  { value: 'pending', label: 'Schedule Move-in (Pending)' }
+];
 
 const emptyForm = {
-  tenantId: '', tenantName: '', propertyId: '', roomNumber: '', bedNumber: 'B1',
-  checkInDate: new Date().toISOString().slice(0, 10), leaseEnd: '',
-  rent: 8000, depositPaid: 16000, idVerified: true, status: 'pending' as CheckIn['status'],
+  tenantId: '',
+  tenantName: '',
+  propertyId: '',
+  roomNumber: '',
+  bedNumber: 'B1',
+  checkInDate: getTodayIsoDate(),
+  leaseEnd: '',
+  rent: 8000,
+  depositPaid: 16000,
+  idVerified: true,
+  status: 'completed' as CheckIn['status'],
+  keyTagNumber: '',
+  initialMeterReading: '' as unknown as number | undefined,
+  vehicleNumber: '',
+  welcomeKitHandedOver: true,
 };
 
 export default function CheckInsPage() {
+  const currentUser = useAuthStore((s) => s.user);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CheckIn | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CheckIn | null>(null);
   const [checkInTarget, setCheckInTarget] = useState<CheckIn | null>(null);
-  const [checkInDate, setCheckInDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [checkInDate, setCheckInDate] = useState<string>(getTodayIsoDate());
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const form = useForm(emptyForm);
 
   const queryClient = useQueryClient();
 
@@ -65,8 +83,8 @@ export default function CheckInsPage() {
 
   // Fetch all rooms for dropdown
   const { data: allRooms } = useQuery({
-    queryKey: ['checkins-rooms'],
-    queryFn: () => api.get<Room[]>('/rooms', { params: { pageSize: 500 } }).then((r) => {
+    queryKey: ['checkins-rooms', form.values.propertyId],
+    queryFn: () => api.get<Room[]>('/rooms', { params: { propertyId: form.values.propertyId || undefined, pageSize: 500 } }).then((r) => {
       const payload = r.data as unknown;
       if (Array.isArray(payload)) return payload as Room[];
       return (payload as { data: Room[] }).data ?? [];
@@ -74,12 +92,11 @@ export default function CheckInsPage() {
     enabled: dialogOpen,
   });
 
-  const form = useForm(emptyForm);
-
   const roomOptions = useMemo(() => {
     return (allRooms ?? []).filter((r: any) => {
       if (r.status === 'archived' || r.status === 'maintenance' || r.status === 'blocked') return false;
-      if (form.values.propertyId && r.propertyId && r.propertyId !== form.values.propertyId) return false;
+      const targetProp = form.values.propertyId;
+      if (targetProp && r.propertyId && String(r.propertyId).toLowerCase() !== String(targetProp).toLowerCase()) return false;
       return true;
     });
   }, [allRooms, form.values.propertyId]);
@@ -153,16 +170,34 @@ export default function CheckInsPage() {
     const matchedRoom = (allRooms ?? []).find((r) => r.number === row.roomNumber);
     setSelectedRoomId(matchedRoom?.id ?? '');
     form.reset({
-      tenantId: '', tenantName: row.tenantName, propertyId: row.propertyId, roomNumber: row.roomNumber,
-      bedNumber: row.bedNumber, checkInDate: row.checkInDate, leaseEnd: row.leaseEnd,
-      rent: row.rent, depositPaid: row.depositPaid, idVerified: row.idVerified, status: row.status,
+      tenantId: row.tenantId || '',
+      tenantName: row.tenantName,
+      propertyId: row.propertyId,
+      roomNumber: row.roomNumber,
+      bedNumber: row.bedNumber,
+      checkInDate: row.checkInDate,
+      leaseEnd: row.leaseEnd || '',
+      rent: row.rent,
+      depositPaid: row.depositPaid,
+      idVerified: row.idVerified,
+      status: row.status,
+      keyTagNumber: (row as any).keyTagNumber || '',
+      initialMeterReading: (row as any).initialMeterReading !== undefined && (row as any).initialMeterReading !== null ? (row as any).initialMeterReading : ('' as any),
+      vehicleNumber: (row as any).vehicleNumber || '',
+      welcomeKitHandedOver: (row as any).welcomeKitHandedOver !== false,
     });
     setDialogOpen(true);
   }
 
   function submit() {
     if (!form.validate({ tenantName: (v) => !v ? 'Required' : undefined, propertyId: (v) => !v ? 'Select a property' : undefined })) return;
-    const payload = { ...form.values, code: editing?.code ?? `CI-${String(Date.now()).slice(-4)}`, bookingId: editing?.bookingId };
+    const payload = {
+      ...form.values,
+      code: editing?.code ?? `CI-${String(Date.now()).slice(-4)}`,
+      bookingId: editing?.bookingId,
+      initialMeterReading: form.values.initialMeterReading ? Number(form.values.initialMeterReading) : undefined,
+      checkedInBy: currentUser?.name || 'Staff Admin',
+    };
     if (editing) updateMut.mutate({ id: editing.id, payload }, { onSuccess: () => setDialogOpen(false) });
     else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
   }
@@ -288,7 +323,7 @@ export default function CheckInsPage() {
 
   function openProcessModal(row: CheckIn) {
     setCheckInTarget(row);
-    setCheckInDate(row.checkInDate || new Date().toISOString().slice(0, 10));
+    setCheckInDate(row.checkInDate || getTodayIsoDate());
     setCheckInPaymentMethod('cash');
     setTenantDetailsErrors({});
 
@@ -425,7 +460,7 @@ export default function CheckInsPage() {
       roomNumber: checkInTarget.roomNumber,
       bedNumber: checkInTarget.bedNumber,
       propertyId: checkInTarget.propertyId,
-      checkInDate: checkInDate || new Date().toISOString().slice(0, 10),
+      checkInDate: checkInDate || getTodayIsoDate(),
       tenantDetails: tenantDetailsForm,
       paymentMethod: isAlreadyPaid ? (checkInTarget.paymentMethod || 'ALREADY_PAID') : (checkInPaymentMethod === 'cash' ? 'CASH' : (checkInPaymentMethod === 'razorpay' ? 'RAZORPAY' : 'LATER')),
       netRemainingDue,
@@ -597,86 +632,180 @@ export default function CheckInsPage() {
         }} />
 
       {/* New / Edit Check-In Form Dialog */}
-      <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit Check-in' : 'New Check-in'} onSubmit={submit}
-        loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Process Check-in'} size="lg">
-        <div className="grid gap-4 sm:grid-cols-2">
-          {!editing && tenants && tenants.length > 0 && (
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Select Registered Tenant</Label>
-              <TenantSelect
-                tenants={(tenants ?? []).filter((t) => {
-                  const st = (t.status || '').toLowerCase();
-                  return st !== 'active' && st !== 'checked_in' && st !== 'completed' && st !== 'checked_out';
-                })}
-                selectedTenantId={form.values.tenantId}
-                onSelectTenant={(t) => {
-                  if (!t) {
-                    form.setValue('tenantId', '');
-                    return;
-                  }
-                  form.setValue('tenantId', t.id);
-                  form.setValue('tenantName', t.name);
-                  if (t.propertyId) form.setValue('propertyId', t.propertyId);
-                  if (t.rent) form.setValue('rent', t.rent);
-                  if (t.deposit) form.setValue('depositPaid', t.deposit);
-                  if (t.leaseEnd) form.setValue('leaseEnd', t.leaseEnd);
-                }}
+      <FormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        title={editing ? 'Edit Check-in Record' : 'Physical Resident Check-in'}
+        description="Verify room allocation, record key handover, and baseline utility meter reading."
+        onSubmit={submit}
+        loading={createMut.isPending || updateMut.isPending}
+        submitLabel={editing ? 'Save Check-in' : 'Complete Move-in Handover'}
+        size="xl"
+      >
+        <div className="space-y-5">
+          {/* Section 1: Resident & Space Allocation */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-b pb-1.5">
+              <UserCheck className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              1. Resident & Room Allocation
+            </h4>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {!editing && tenants && tenants.length > 0 && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Select Registered Tenant</Label>
+                  <TenantSelect
+                    tenants={(tenants ?? []).filter((t) => {
+                      const st = (t.status || '').toLowerCase();
+                      return st !== 'active' && st !== 'checked_in' && st !== 'completed' && st !== 'checked_out';
+                    })}
+                    selectedTenantId={form.values.tenantId}
+                    onSelectTenant={(t) => {
+                      if (!t) {
+                        form.setValue('tenantId', '');
+                        return;
+                      }
+                      form.setValue('tenantId', t.id);
+                      form.setValue('tenantName', t.name);
+                      if (t.propertyId) form.setValue('propertyId', t.propertyId);
+                      if (t.rent) form.setValue('rent', t.rent);
+                      if (t.deposit) form.setValue('depositPaid', t.deposit);
+                      if (t.leaseEnd) form.setValue('leaseEnd', t.leaseEnd);
+                    }}
+                  />
+                </div>
+              )}
+
+              <FormInput label="Resident Full Name" required id="tenantName" value={form.values.tenantName} onChange={(e) => form.setValue('tenantName', e.target.value)} error={form.errors.tenantName} />
+              <div className="space-y-1.5">
+                <Label>Property / Hostel</Label>
+                <SearchableSelect
+                  options={(properties ?? []).map((p: Property) => ({
+                    value: p.id,
+                    label: p.name,
+                    sublabel: p.city || p.code || 'Property',
+                    badge: p.type || 'PG',
+                  }))}
+                  value={form.values.propertyId}
+                  onChange={(v) => {
+                    form.setValue('propertyId', v);
+                    form.setValue('roomNumber', '');
+                    form.setValue('bedNumber', '');
+                    setSelectedRoomId('');
+                  }}
+                  placeholder="Search & select property..."
+                  searchPlaceholder="Search properties..."
+                />
+                {form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}
+              </div>
+
+              {/* Room & Bed Allocation with interactive bed cards */}
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Room &amp; Bed Assignment</Label>
+                <RoomSelect
+                  rooms={roomOptions}
+                  beds={bedsForRoom}
+                  selectedRoomNumber={form.values.roomNumber || selectedRoomId}
+                  selectedBedNumber={form.values.bedNumber}
+                  onSelectRoom={(rNum, rId, rentVal) => {
+                    form.setValue('roomNumber', rNum);
+                    setSelectedRoomId(rId || rNum);
+                    if (rId) {
+                      queryClient.invalidateQueries({ queryKey: ['checkins-beds', rId] });
+                    }
+                    if (rentVal && rentVal > 0) {
+                      form.setValue('rent', rentVal);
+                    }
+                    form.setValue('bedNumber', '');
+                  }}
+                  onSelectBed={(bNum) => form.setValue('bedNumber', bNum)}
+                />
+              </div>
+
+              <FormInput
+                label="Monthly Rent (₹)"
+                type="number"
+                id="rent"
+                value={String(form.values.rent)}
+                readOnly
+                hint="Auto-calculated from selected room rate"
+                className="bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed text-slate-700 dark:text-slate-300 font-mono font-medium"
+              />
+              <FormInput
+                label="Security Deposit (₹)"
+                type="number"
+                id="depositPaid"
+                value={String(form.values.depositPaid)}
+                readOnly
+                hint="Auto-configured by property billing policy"
+                className="bg-slate-100 dark:bg-slate-900/80 cursor-not-allowed text-slate-700 dark:text-slate-300 font-mono font-medium"
               />
             </div>
-          )}
-
-          <FormInput label="Tenant Name" required id="tenantName" value={form.values.tenantName} onChange={(e) => form.setValue('tenantName', e.target.value)} error={form.errors.tenantName} />
-          <div className="space-y-1.5">
-            <Label>Property</Label>
-            <SearchableSelect
-              options={(properties ?? []).map((p: Property) => ({
-                value: p.id,
-                label: p.name,
-                sublabel: p.city || p.code || 'Property',
-                badge: p.type || 'PG',
-              }))}
-              value={form.values.propertyId}
-              onChange={(v) => {
-                form.setValue('propertyId', v);
-                form.setValue('roomNumber', '');
-                form.setValue('bedNumber', '');
-                setSelectedRoomId('');
-              }}
-              placeholder="Search & select property..."
-              searchPlaceholder="Search properties..."
-            />
-            {form.errors.propertyId && <p className="text-xs text-destructive">{form.errors.propertyId}</p>}
           </div>
 
-          {/* Room & Bed Allocation with interactive bed cards */}
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Room &amp; Bed Allocation</Label>
-            <RoomSelect
-              rooms={roomOptions}
-              beds={bedsForRoom}
-              selectedRoomNumber={form.values.roomNumber || selectedRoomId}
-              selectedBedNumber={form.values.bedNumber}
-              onSelectRoom={(rNum, rId, rentVal) => {
-                form.setValue('roomNumber', rNum);
-                setSelectedRoomId(rId || rNum);
-                if (rId) {
-                  queryClient.invalidateQueries({ queryKey: ['checkins-beds', rId] });
-                }
-                if (rentVal && rentVal > 0) {
-                  form.setValue('rent', rentVal);
-                }
-                form.setValue('bedNumber', '');
-              }}
-              onSelectBed={(bNum) => form.setValue('bedNumber', bNum)}
-            />
+          {/* Section 2: Move-in Schedule & KYC */}
+          <div className="space-y-3 pt-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-b pb-1.5">
+              <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              2. Move-in Schedule & KYC
+            </h4>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormInput label="Move-in / Check-in Date" required type="date" id="checkInDate" value={form.values.checkInDate} onChange={(e) => form.setValue('checkInDate', e.target.value)} />
+              <FormInput label="Lease End Date (Optional)" type="date" id="leaseEnd" value={form.values.leaseEnd} onChange={(e) => form.setValue('leaseEnd', e.target.value)} />
+              <div className="space-y-1.5">
+                <Label>Move-in Execution Mode</Label>
+                <Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as CheckIn['status'])}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <Checkbox id="idVerified" checked={form.values.idVerified} onCheckedChange={(v) => form.setValue('idVerified', v === true)} />
+                <Label htmlFor="idVerified" className="text-xs font-semibold cursor-pointer">ID document verified at desk</Label>
+              </div>
+            </div>
           </div>
 
-          <FormInput label="Check-in Date" type="date" id="checkInDate" value={form.values.checkInDate} onChange={(e) => form.setValue('checkInDate', e.target.value)} />
-          <FormInput label="Lease End Date" type="date" id="leaseEnd" value={form.values.leaseEnd} onChange={(e) => form.setValue('leaseEnd', e.target.value)} />
-          <FormInput label="Monthly Rent (₹)" type="number" id="rent" value={String(form.values.rent)} onChange={(e) => form.setValue('rent', Number(e.target.value))} />
-          <FormInput label="Deposit Paid (₹)" type="number" id="depositPaid" value={String(form.values.depositPaid)} onChange={(e) => form.setValue('depositPaid', Number(e.target.value))} />
-          <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as CheckIn['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
-          <div className="flex items-center gap-2 pt-6"><Checkbox id="idVerified" checked={form.values.idVerified} onCheckedChange={(v) => form.setValue('idVerified', v === true)} /><Label htmlFor="idVerified">ID document verified</Label></div>
+          {/* Section 3: Physical Move-in Checklist & Keys */}
+          <div className="space-y-3 pt-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5 border-b pb-1.5">
+              <KeyRound className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              3. Physical Handover Checklist
+            </h4>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <FormInput
+                label="Room Key / Tag ID"
+                id="keyTagNumber"
+                placeholder="e.g. Key #104-A or RFID #801"
+                value={form.values.keyTagNumber || ''}
+                onChange={(e) => form.setValue('keyTagNumber', e.target.value)}
+              />
+              <FormInput
+                label="Baseline Electricity Meter (kWh)"
+                type="number"
+                id="initialMeterReading"
+                placeholder="e.g. 1420.5"
+                value={form.values.initialMeterReading !== undefined && form.values.initialMeterReading !== null ? String(form.values.initialMeterReading) : ''}
+                onChange={(e) => form.setValue('initialMeterReading', e.target.value ? Number(e.target.value) : undefined)}
+              />
+              <FormInput
+                label="Vehicle / Parking No."
+                id="vehicleNumber"
+                placeholder="e.g. KA-01-AB-1234"
+                value={form.values.vehicleNumber || ''}
+                onChange={(e) => form.setValue('vehicleNumber', e.target.value)}
+              />
+              <div className="sm:col-span-3 flex items-center gap-2 pt-1 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                <Checkbox
+                  id="welcomeKitHandedOver"
+                  checked={form.values.welcomeKitHandedOver}
+                  onCheckedChange={(v) => form.setValue('welcomeKitHandedOver', v === true)}
+                />
+                <Label htmlFor="welcomeKitHandedOver" className="text-xs font-medium cursor-pointer">
+                  Room keys, mattress, wardrobe key, and AC remote handed over in good working condition.
+                </Label>
+              </div>
+            </div>
+          </div>
         </div>
       </FormDialog>
 

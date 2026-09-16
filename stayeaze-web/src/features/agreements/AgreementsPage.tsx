@@ -49,7 +49,7 @@ export default function AgreementsPage() {
       if (selectedPropertyId && selectedPropertyId !== 'ALL') {
         params.propertyId = selectedPropertyId;
       }
-      return api.get('/tenants', { params }).then((r) => {
+      return api.get('/tenants/minimal', { params }).then((r) => {
         const payload = r.data as any;
         if (Array.isArray(payload)) return payload;
         if (payload && Array.isArray(payload.data)) return payload.data;

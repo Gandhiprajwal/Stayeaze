@@ -10,13 +10,14 @@ export interface TelemetryPayload {
   timestamp?: string;
 }
 
+const MAX_QUEUE_SIZE = 200;
 const errorQueue: TelemetryPayload[] = [];
 let dispatchTimer: ReturnType<typeof setTimeout> | null = null;
+let isTelemetryInitialized = false;
 
 function flushQueue() {
   if (errorQueue.length === 0) return;
-  const batch = [...errorQueue];
-  errorQueue.length = 0;
+  const batch = errorQueue.splice(0, 50);
 
   // Dispatch batch to backend telemetry
   api.post('/super-admin/user-tracking/telemetry', { events: batch })
@@ -31,6 +32,15 @@ function scheduleFlush() {
     dispatchTimer = null;
     flushQueue();
   }, 2000);
+}
+
+function pushToQueue(payload: TelemetryPayload) {
+  if (errorQueue.length >= MAX_QUEUE_SIZE) {
+    // Drop oldest entries to maintain fixed memory ceiling
+    errorQueue.splice(0, errorQueue.length - MAX_QUEUE_SIZE + 1);
+  }
+  errorQueue.push(payload);
+  scheduleFlush();
 }
 
 export function reportFrontendError(error: Error | string, context?: Record<string, unknown>) {
@@ -52,24 +62,23 @@ export function reportFrontendError(error: Error | string, context?: Record<stri
     timestamp: new Date().toISOString(),
   };
 
-  errorQueue.push(payload);
-  scheduleFlush();
+  pushToQueue(payload);
 }
 
 export function reportTelemetryEvent(eventName: string, data?: Record<string, unknown>) {
   const path = typeof window !== 'undefined' ? window.location.pathname : '';
-  errorQueue.push({
+  pushToQueue({
     eventName,
     category: 'USER_ACTION',
     path,
     metadata: data,
     timestamp: new Date().toISOString(),
   });
-  scheduleFlush();
 }
 
 export function initFrontendTelemetry() {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || isTelemetryInitialized) return;
+  isTelemetryInitialized = true;
 
   // Uncaught exceptions
   window.addEventListener('error', (event) => {

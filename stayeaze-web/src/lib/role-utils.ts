@@ -33,8 +33,9 @@ export const rolePermissions: Record<UserRole, string[]> = {
   OWNER: ['*'],
   PROPERTY_MANAGER: [
     'dashboard', 'properties', 'buildings', 'floors', 'rooms', 'beds',
-    'tenants', 'bookings', 'checkins', 'check-ins', 'checkouts', 'check-outs',
-    'billing', 'payments', 'complaints', 'maintenance', 'visitors', 'reports',
+    'tenants', 'agreements', 'bookings', 'checkins', 'check-ins', 'checkouts', 'check-outs',
+    'billing', 'utilities', 'payments', 'complaints', 'maintenance', 'visitors', 'parcels',
+    'analytics', 'reports', 'accountant-dashboard', 'ledger', 'gst-reports', 'security-deposits',
     'users', 'roles', 'audit', 'audit-logs', 'settings'
   ],
   SUPPORT: ['support-dashboard', 'subscribers', 'leads', 'inquiries', 'complaints', 'system-logs', 'api-metrics', 'settings'],

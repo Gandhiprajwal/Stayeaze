@@ -45,12 +45,6 @@ public class UtilityBillingServiceTest {
     private TenantRepository tenantRepository;
 
     @Autowired
-    private MeterReadingRepository meterReadingRepository;
-
-    @Autowired
-    private CheckinChecklistRepository checklistRepository;
-
-    @Autowired
     private InvoiceRepository invoiceRepository;
 
     private Organization testOrg;
@@ -142,7 +136,7 @@ public class UtilityBillingServiceTest {
     @Test
     @DisplayName("S2: Mid-cycle onboarded tenant should ONLY be billed from their starter meter reading")
     void testMidCycleOnboardingStarterReadingIsolation() {
-        Tenant existingTenant = createTenant("Rahul", "Sharma", testRoom3Bed, LocalDate.of(2026, 8, 1), BigDecimal.valueOf(8000));
+        createTenant("Rahul", "Sharma", testRoom3Bed, LocalDate.of(2026, 8, 1), BigDecimal.valueOf(8000));
         Tenant newTenant = createTenant("Priya", "Nair", testRoom3Bed, LocalDate.of(2026, 8, 18), BigDecimal.valueOf(8000));
 
         Map<String, Object> req = new HashMap<>();
@@ -168,7 +162,7 @@ public class UtilityBillingServiceTest {
     @Test
     @DisplayName("S4a: Partial occupancy in Fair Mode should charge tenant only their 1/N capacity share (Owner absorbs remainder)")
     void testPartialOccupancyFairMode() {
-        Tenant soleOccupant = createTenant("Vikram", "Mehta", testRoom3Bed, LocalDate.of(2026, 8, 1), BigDecimal.valueOf(8000));
+        createTenant("Vikram", "Mehta", testRoom3Bed, LocalDate.of(2026, 8, 1), BigDecimal.valueOf(8000));
 
         // 3-bed room with ONLY 1 tenant. Room uses 150 units @ Rs 10 = Rs 1500
         Map<String, Object> req = new HashMap<>();
@@ -193,7 +187,7 @@ public class UtilityBillingServiceTest {
     @Test
     @DisplayName("S4b: Partial occupancy with Owner Override (Full Burden) should divide 100% of bill among active occupants")
     void testPartialOccupancyFullBurdenOverride() {
-        Tenant soleOccupant = createTenant("Vikram", "Mehta", testRoom3Bed, LocalDate.of(2026, 8, 1), BigDecimal.valueOf(8000));
+        createTenant("Vikram", "Mehta", testRoom3Bed, LocalDate.of(2026, 8, 1), BigDecimal.valueOf(8000));
 
         Map<String, Object> req = new HashMap<>();
         req.put("roomId", testRoom3Bed.getId());

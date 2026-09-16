@@ -13,8 +13,8 @@ public class PanValidator implements ConstraintValidator<ValidPan, String> {
 
     @Override
     public boolean isValid(String value, ConstraintValidatorContext context) {
-        if (value == null || value.isBlank()) {
-            return true; // Use @NotBlank separately if field is mandatory
+        if (value == null || value.trim().isEmpty()) {
+            return false; // PAN is strictly mandatory (NOT NULL)
         }
 
         String cleanPan = value.trim().toUpperCase();
@@ -26,7 +26,7 @@ public class PanValidator implements ConstraintValidator<ValidPan, String> {
             return false;
         }
 
-        // 4th character entity type check
+        // 4th character entity type check: P, C, H, F, A, T, B, L, J, G
         char entityCode = cleanPan.charAt(3);
         return VALID_ENTITY_CODES.contains(entityCode);
     }

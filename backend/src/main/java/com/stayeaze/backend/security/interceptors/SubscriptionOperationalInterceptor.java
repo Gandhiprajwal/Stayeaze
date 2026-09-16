@@ -3,7 +3,6 @@ package com.stayeaze.backend.security.interceptors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.models.User;
-import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.UserRepository;
 import com.stayeaze.backend.security.services.UserDetailsImpl;

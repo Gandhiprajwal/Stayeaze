@@ -64,8 +64,7 @@ public class SecurityUtils {
             return organizationRepository.findById(userDetails.getOrgId()).orElse(null);
         }
 
-        // Fallback for root administration
-        return organizationRepository.findAll().stream().findFirst().orElse(null);
+        return null;
     }
 
     /**

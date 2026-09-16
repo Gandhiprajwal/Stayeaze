@@ -183,6 +183,10 @@ export const authService = {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem('stayeaze_refresh_token');
     localStorage.removeItem('stayeaze-auth');
+    try {
+      document.cookie = 'stayeaze_refresh_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      document.cookie = 'refreshToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    } catch (ignored) {}
   },
 
   // keep import used

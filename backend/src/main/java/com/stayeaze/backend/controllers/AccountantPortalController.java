@@ -2,12 +2,10 @@ package com.stayeaze.backend.controllers;
 
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.repository.*;
-import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -23,9 +21,6 @@ public class AccountantPortalController {
 
     @Autowired
     private OrganizationRepository organizationRepository;
-
-    @Autowired
-    private UserRepository userRepository;
 
     @Autowired
     private PaymentRepository paymentRepository;
@@ -47,10 +42,6 @@ public class AccountantPortalController {
 
     @Autowired
     private com.stayeaze.backend.security.SecurityUtils securityUtils;
-
-    private boolean isSuperAdminUser() {
-        return securityUtils.isSuperAdmin();
-    }
 
     private Organization getLoggedUserOrg() {
         Organization org = securityUtils.getCurrentOrganization();

@@ -46,20 +46,32 @@ public class AgreementController {
     }
 
     private Tenant getAuthorizedTenant(UUID tenantId) {
-        Organization organization = null;
-        try {
-            organization = getLoggedUserOrg();
-        } catch (Exception ignored) {}
+        if (tenantId == null) {
+            throw new IllegalArgumentException("Tenant ID is required");
+        }
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("Tenant profile not found"));
 
-        Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
-        if (tenant != null) {
-            if (organization == null) return tenant;
-            if (tenant.getOrganization() == null || organization.getId().equals(tenant.getOrganization().getId()) || (tenant.getOrgId() != null && organization.getId().equals(tenant.getOrgId()))) {
+        if (securityUtils.isSuperAdmin()) {
+            return tenant;
+        }
+
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl userDetails) {
+            boolean isTenant = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_TENANT"));
+            if (isTenant) {
+                if (userDetails.getEmail() == null || tenant.getEmail() == null || !tenant.getEmail().equalsIgnoreCase(userDetails.getEmail())) {
+                    throw new IllegalArgumentException("Unauthorized access to tenant agreement");
+                }
                 return tenant;
             }
         }
-        return tenantRepository.findByIdAndOrganization(tenantId, organization)
-                .orElseThrow(() -> new IllegalArgumentException("Tenant profile not found or unauthorized"));
+
+        Organization organization = getLoggedUserOrg();
+        if (organization != null && tenant.getOrganization() != null && !organization.getId().equals(tenant.getOrganization().getId())) {
+            throw new IllegalArgumentException("Tenant profile belongs to another organization");
+        }
+        return tenant;
     }
 
     @PostMapping
@@ -82,6 +94,7 @@ public class AgreementController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'PROPERTY_MANAGER', 'RECEPTIONIST', 'ACCOUNTANT', 'SUPER_ADMIN', 'TENANT', 'ADMIN')")
     public ResponseEntity<?> getAllAgreements(@PathVariable UUID tenantId) {
         Tenant tenant;
         try {
@@ -95,7 +108,7 @@ public class AgreementController {
     }
 
     @PutMapping("/{id}/sign")
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('TENANT') or hasRole('SUPER_ADMIN')")
     public ResponseEntity<?> signAgreement(
             @PathVariable UUID tenantId,
             @PathVariable UUID id,
@@ -110,6 +123,10 @@ public class AgreementController {
         Agreement agreement = agreementRepository.findByIdAndTenant(id, tenant).orElse(null);
         if (agreement == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Agreement document not found."));
+        }
+
+        if ("SIGNED".equalsIgnoreCase(agreement.getStatus()) || agreement.getSignedAt() != null) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Agreement document is already signed and legally immutable."));
         }
 
         OffsetDateTime now = OffsetDateTime.now();

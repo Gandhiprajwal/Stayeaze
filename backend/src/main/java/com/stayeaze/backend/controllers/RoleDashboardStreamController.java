@@ -2,20 +2,17 @@ package com.stayeaze.backend.controllers;
 
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.repository.*;
-import com.stayeaze.backend.security.services.UserDetailsImpl;
 import com.stayeaze.backend.services.PropertyService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -35,14 +32,14 @@ public class RoleDashboardStreamController {
         final String userEmail;
         final String role;
         final UUID userId;
-        final Organization organization;
+        final UUID orgId;
 
-        ClientStreamSession(SseEmitter emitter, String userEmail, String role, UUID userId, Organization organization) {
+        ClientStreamSession(SseEmitter emitter, String userEmail, String role, UUID userId, UUID orgId) {
             this.emitter = emitter;
             this.userEmail = userEmail;
             this.role = role;
             this.userId = userId;
-            this.organization = organization;
+            this.orgId = orgId;
         }
     }
 
@@ -56,9 +53,6 @@ public class RoleDashboardStreamController {
     private PropertyRepository propertyRepository;
 
     @Autowired
-    private BuildingRepository buildingRepository;
-
-    @Autowired
     private BedRepository bedRepository;
 
     @Autowired
@@ -66,9 +60,6 @@ public class RoleDashboardStreamController {
 
     @Autowired
     private InvoiceRepository invoiceRepository;
-
-    @Autowired
-    private PaymentRepository paymentRepository;
 
     @Autowired
     private ComplaintRepository complaintRepository;
@@ -110,24 +101,28 @@ public class RoleDashboardStreamController {
         String email = null;
         String role = "TENANT";
         UUID userId = null;
-        Organization organization = null;
-
+        UUID orgId = null;
         try {
             User user = securityUtils.getCurrentUser();
             if (user != null) {
                 userId = user.getId();
                 email = user.getEmail();
-                organization = user.getOrganization();
+                if (user.getOrganization() != null) {
+                    orgId = user.getOrganization().getId();
+                }
                 if (user.getRoles() != null && !user.getRoles().isEmpty()) {
                     role = user.getRoles().iterator().next().getName().replace("ROLE_", "").toUpperCase();
                 }
             }
-            if (organization == null) {
-                organization = securityUtils.getCurrentOrganization();
+            if (orgId == null) {
+                Organization organization = securityUtils.getCurrentOrganization();
+                if (organization != null) {
+                    orgId = organization.getId();
+                }
             }
         } catch (Exception ignored) {}
 
-        ClientStreamSession dummySession = new ClientStreamSession(null, email, role, userId, organization);
+        ClientStreamSession dummySession = new ClientStreamSession(null, email, role, userId, orgId);
         Map<String, Object> payload = buildPayloadForRole(dummySession);
         return ResponseEntity.ok(payload);
     }
@@ -137,25 +132,30 @@ public class RoleDashboardStreamController {
         String email = null;
         String role = "TENANT";
         UUID userId = null;
-        Organization organization = null;
+        UUID orgId = null;
 
         try {
             User user = securityUtils.getCurrentUser();
             if (user != null) {
                 userId = user.getId();
                 email = user.getEmail();
-                organization = user.getOrganization();
+                if (user.getOrganization() != null) {
+                    orgId = user.getOrganization().getId();
+                }
                 if (user.getRoles() != null && !user.getRoles().isEmpty()) {
                     role = user.getRoles().iterator().next().getName().replace("ROLE_", "").toUpperCase();
                 }
             }
-            if (organization == null) {
-                organization = securityUtils.getCurrentOrganization();
+            if (orgId == null) {
+                Organization organization = securityUtils.getCurrentOrganization();
+                if (organization != null) {
+                    orgId = organization.getId();
+                }
             }
         } catch (Exception ignored) {}
 
         SseEmitter emitter = new SseEmitter(1800000L); // 30 minutes timeout
-        ClientStreamSession session = new ClientStreamSession(emitter, email, role, userId, organization);
+        ClientStreamSession session = new ClientStreamSession(emitter, email, role, userId, orgId);
         sessions.add(session);
 
         emitter.onCompletion(() -> sessions.remove(session));
@@ -194,7 +194,7 @@ public class RoleDashboardStreamController {
         payload.put("timestamp", System.currentTimeMillis());
 
         String role = session.role != null ? session.role : "TENANT";
-        UUID orgId = session.organization != null ? session.organization.getId() : null;
+        UUID orgId = session.orgId;
 
         try {
             switch (role) {
@@ -345,10 +345,12 @@ public class RoleDashboardStreamController {
                     break;
 
                 case "STAFF":
-                    List<Tenant> activeTenants = tenantRepository.findAll().stream()
-                            .filter(t -> t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()))
-                            .toList();
-                    payload.put("activeTenantsCount", activeTenants.size());
+                    long activeStaffTenants = orgId != null 
+                            ? tenantRepository.findByOrganizationIdNative(orgId).stream()
+                                    .filter(t -> t.getStatus() == null || "ACTIVE".equalsIgnoreCase(t.getStatus()) || "CHECKED_IN".equalsIgnoreCase(t.getStatus()))
+                                    .count()
+                            : 0L;
+                    payload.put("activeTenantsCount", activeStaffTenants);
                     break;
 
                 case "TENANT":

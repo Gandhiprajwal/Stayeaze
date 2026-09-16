@@ -276,9 +276,12 @@ export function RoomSelect({
 
             <div className="max-h-[300px] overflow-y-auto p-2 divide-y divide-border/40">
               {Object.keys(groupedRooms).length === 0 ? (
-                <div className="p-6 text-center text-xs text-muted-foreground">
+                <div className="p-6 text-center text-xs text-muted-foreground space-y-1">
                   <Home className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  No rooms matching your search criteria.
+                  <p className="font-semibold text-foreground">No rooms available</p>
+                  <p className="text-[11px]">
+                    {search ? 'Try a different search query or uncheck "Only Vacant Rooms".' : 'No active rooms found for the selected property.'}
+                  </p>
                 </div>
               ) : (
                 Object.entries(groupedRooms).map(([groupKey, group]) => (

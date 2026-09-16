@@ -5,7 +5,6 @@ import com.stayeaze.backend.payload.request.TenantRequest;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.payload.response.MinimalTenantDTO;
 import com.stayeaze.backend.repository.*;
-import com.stayeaze.backend.security.services.UserDetailsImpl;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -15,14 +14,18 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import com.stayeaze.backend.services.RoomTransferReconciliationService;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -83,8 +86,6 @@ public class TenantController {
     @Autowired
     private com.stayeaze.backend.services.SubscriptionEnforcementService enforcementService;
 
-    @Autowired
-    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Autowired
     private com.stayeaze.backend.services.InvoiceSequenceService invoiceSequenceService;
@@ -94,6 +95,15 @@ public class TenantController {
 
     @Autowired
     private com.stayeaze.backend.services.AccountUniquenessService accountUniquenessService;
+
+    @Autowired
+    private com.stayeaze.backend.services.RoomTransferReconciliationService roomTransferReconciliationService;
+
+    @Autowired
+    private com.stayeaze.backend.services.TenantNoticePeriodService tenantNoticePeriodService;
+
+    @Autowired
+    private AgreementRepository agreementRepository;
 
     @Autowired
     private com.stayeaze.backend.security.SecurityUtils securityUtils;
@@ -235,11 +245,13 @@ public class TenantController {
         if (request.getRoomNumber() != null && !request.getRoomNumber().isBlank() &&
             request.getBedNumber() != null && !request.getBedNumber().isBlank()) {
 
-            // Bed occupied = any non-checked-out tenant in the same bed (ACTIVE, PENDING_CHECKIN, PENDING, RESERVED, etc.)
+            // Bed occupied = any non-checked-out tenant in the same property, room and bed
+            final UUID targetPropId = request.getPropertyId();
             boolean bedOccupied = tenantRepository.findByOrganization(organization).stream().anyMatch(t -> {
                 String ts = t.getStatus();
                 boolean isCheckedOut = "CHECKED_OUT".equalsIgnoreCase(ts) || "ARCHIVED".equalsIgnoreCase(ts);
-                return !isCheckedOut &&
+                boolean sameProp = (targetPropId == null || t.getPropertyId() == null || targetPropId.equals(t.getPropertyId()));
+                return !isCheckedOut && sameProp &&
                     request.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
                     request.getBedNumber().equalsIgnoreCase(t.getBedNumber());
             });
@@ -247,9 +259,16 @@ public class TenantController {
                 return ResponseEntity.badRequest().body(new MessageResponse("Error: Bed " + request.getBedNumber() + " in Room " + request.getRoomNumber() + " is already occupied!"));
             }
 
-            // Check if room or building/floor/bed is archived/unavailable
+            // Check if room or building/floor/bed is archived/unavailable (scoped by property)
             List<Room> orgRooms = roomRepository.findByOrganizationId(organization.getId());
-            Room room = orgRooms.stream().filter(r -> request.getRoomNumber().equalsIgnoreCase(r.getRoomNumber())).findFirst().orElse(null);
+            Room room = orgRooms.stream().filter(r -> {
+                boolean matchNum = request.getRoomNumber().equalsIgnoreCase(r.getRoomNumber());
+                if (!matchNum) return false;
+                if (targetPropId == null) return true;
+                return r.getFloor() != null && r.getFloor().getBuilding() != null &&
+                       r.getFloor().getBuilding().getProperty() != null &&
+                       targetPropId.equals(r.getFloor().getBuilding().getProperty().getId());
+            }).findFirst().orElse(null);
             if (room != null) {
                 String rStatus = room.getStatus();
                 if (rStatus != null && ("ARCHIVED".equalsIgnoreCase(rStatus) || "MAINTENANCE".equalsIgnoreCase(rStatus) || "BLOCKED".equalsIgnoreCase(rStatus))) {
@@ -268,9 +287,22 @@ public class TenantController {
                 Bed bed = rBeds.stream().filter(b -> request.getBedNumber().equalsIgnoreCase(b.getBedNumber())).findFirst().orElse(null);
                 if (bed != null && bed.getStatus() != null) {
                     String bStatus = bed.getStatus();
-                    if ("ARCHIVED".equalsIgnoreCase(bStatus) || "MAINTENANCE".equalsIgnoreCase(bStatus) || "BLOCKED".equalsIgnoreCase(bStatus)) {
-                        return ResponseEntity.badRequest().body(new MessageResponse("Error: Bed " + request.getBedNumber() + " is " + bStatus.toLowerCase() + " and cannot be assigned!"));
+                    if ("ARCHIVED".equalsIgnoreCase(bStatus) || "MAINTENANCE".equalsIgnoreCase(bStatus) || "BLOCKED".equalsIgnoreCase(bStatus) || "OCCUPIED".equalsIgnoreCase(bStatus)) {
+                        return ResponseEntity.badRequest().body(new MessageResponse("Error: Bed " + request.getBedNumber() + " in Room " + room.getRoomNumber() + " is " + bStatus.toLowerCase() + " and cannot be assigned!"));
                     }
+                }
+
+                // Race-Condition Prevention: Check if another active resident is assigned to this exact bed in this property
+                boolean alreadyOccupied = tenantRepository.findByOrganization(organization).stream().anyMatch(t -> {
+                    String ts = t.getStatus();
+                    boolean isOut = "CHECKED_OUT".equalsIgnoreCase(ts) || "ARCHIVED".equalsIgnoreCase(ts);
+                    boolean sameProp = (targetPropId == null || t.getPropertyId() == null || targetPropId.equals(t.getPropertyId()));
+                    return !isOut && sameProp &&
+                        room.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
+                        request.getBedNumber().equalsIgnoreCase(t.getBedNumber());
+                });
+                if (alreadyOccupied) {
+                    return ResponseEntity.badRequest().body(new MessageResponse("Error: Bed " + request.getBedNumber() + " in Room " + room.getRoomNumber() + " is currently occupied by an active resident!"));
                 }
             }
         }
@@ -292,7 +324,15 @@ public class TenantController {
         tenant.setPropertyId(request.getPropertyId());
         tenant.setRoomNumber(request.getRoomNumber());
         tenant.setBedNumber(request.getBedNumber());
+        tenant.setLockInMonths(request.getLockInMonths());
+        tenant.setNoticePeriodDays(request.getNoticePeriodDays());
         tenant.setStatus(request.getStatus() != null ? request.getStatus().toUpperCase() : "ACTIVE");
+
+        if (request.getBillingResponsibility() != null) tenant.setBillingResponsibility(request.getBillingResponsibility());
+        if (request.getCorporateCompanyName() != null) tenant.setCorporateCompanyName(request.getCorporateCompanyName());
+        if (request.getCorporateGstin() != null) tenant.setCorporateGstin(request.getCorporateGstin());
+        if (request.getUtilityResponsibility() != null) tenant.setUtilityResponsibility(request.getUtilityResponsibility());
+        if (request.getDepositResponsibility() != null) tenant.setDepositResponsibility(request.getDepositResponsibility());
 
         Tenant saved = tenantRepository.save(tenant);
 
@@ -322,8 +362,30 @@ public class TenantController {
 
         // Auto-create initial Invoice & Payment for Onboarding (Rent + Security Deposit)
         try {
-            java.math.BigDecimal rAmt = saved.getRent() != null ? saved.getRent() : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal fullRent = saved.getRent() != null ? saved.getRent() : java.math.BigDecimal.ZERO;
             java.math.BigDecimal dAmt = saved.getDeposit() != null ? saved.getDeposit() : java.math.BigDecimal.ZERO;
+            java.math.BigDecimal rAmt = fullRent;
+
+            // Pro-Rata First Month Rent Calculation (P0.1)
+            java.time.LocalDate checkInDate = java.time.LocalDate.now();
+            if (saved.getLeaseStart() != null && !saved.getLeaseStart().isBlank()) {
+                try {
+                    checkInDate = java.time.LocalDate.parse(saved.getLeaseStart());
+                } catch (Exception ignored) {}
+            }
+
+            String billingMode = request.getBillingMode(); // "PRO_RATA" vs "FULL_MONTH"
+            if (("PRO_RATA".equalsIgnoreCase(billingMode) || billingMode == null) && checkInDate.getDayOfMonth() > 1 && fullRent.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                int daysInMonth = checkInDate.lengthOfMonth();
+                int remainingDays = daysInMonth - checkInDate.getDayOfMonth() + 1;
+                java.math.BigDecimal dailyRate = fullRent.divide(java.math.BigDecimal.valueOf(daysInMonth), 2, java.math.RoundingMode.HALF_UP);
+                rAmt = dailyRate.multiply(java.math.BigDecimal.valueOf(remainingDays)).setScale(2, java.math.RoundingMode.HALF_UP);
+            }
+
+            rAmt = (saved.getBillingResponsibility() != null && saved.getBillingResponsibility().equalsIgnoreCase("CORPORATE_SPONSORED"))
+                    ? java.math.BigDecimal.ZERO
+                    : (request.getRent() != null ? request.getRent() : (saved.getRent() != null ? saved.getRent() : java.math.BigDecimal.ZERO));
+            dAmt = request.getDeposit() != null ? request.getDeposit() : (saved.getDeposit() != null ? saved.getDeposit() : java.math.BigDecimal.ZERO);
             java.math.BigDecimal totalDue = rAmt.add(dAmt);
 
             if (totalDue.compareTo(java.math.BigDecimal.ZERO) > 0) {
@@ -333,6 +395,17 @@ public class TenantController {
                 inv.setAmountDue(totalDue);
                 inv.setIssueDate(java.time.LocalDate.now());
                 inv.setDueDate(java.time.LocalDate.now().plusDays(7));
+
+                // Line items for Rent and Deposit
+                if (rAmt.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    String rentDesc = (rAmt.compareTo(fullRent) < 0)
+                            ? "Pro-Rata Move-In Rent (from " + checkInDate + " to end of month)"
+                            : "First Month Rent";
+                    inv.getItems().add(new InvoiceItem(inv, rentDesc, rAmt));
+                }
+                if (dAmt.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                    inv.getItems().add(new InvoiceItem(inv, "Refundable Security Deposit", dAmt));
+                }
 
                 String pMethod = request.getPaymentMethod();
                 boolean isPaid = "RAZORPAY".equalsIgnoreCase(pMethod) || "CASH".equalsIgnoreCase(pMethod) || "BANK_TRANSFER".equalsIgnoreCase(pMethod) || "UPI".equalsIgnoreCase(pMethod);
@@ -396,7 +469,11 @@ public class TenantController {
             } else {
                 checkIn.setStatus("pending");
             }
-            checkIn.setCode("CI-" + (System.currentTimeMillis() % 100000000L));
+            Property tProp = null;
+            if (saved.getPropertyId() != null) {
+                tProp = propertyRepository.findById(saved.getPropertyId()).orElse(null);
+            }
+            checkIn.setCode(invoiceSequenceService.nextCheckInCode(tProp, organization));
             checkInRepository.save(checkIn);
         } catch(Exception e) {
             System.err.println("Failed to auto-create CheckIn: " + e.getMessage());
@@ -464,6 +541,22 @@ public class TenantController {
         } catch (Exception e) {
             System.err.println("Failed to auto-provision User/Credentials for Tenant: " + e.getMessage());
             e.printStackTrace();
+        }
+
+        // Mark Bed as OCCUPIED and assign tenant
+        if (saved.getRoomNumber() != null && saved.getBedNumber() != null && !"ARCHIVED".equalsIgnoreCase(saved.getStatus()) && !"CHECKED_OUT".equalsIgnoreCase(saved.getStatus())) {
+            List<Bed> orgBeds = bedRepository.findByOrganizationId(organization.getId());
+            Bed bed = orgBeds.stream().filter(b ->
+                saved.getBedNumber().equalsIgnoreCase(b.getBedNumber()) &&
+                b.getRoom() != null &&
+                saved.getRoomNumber().equalsIgnoreCase(b.getRoom().getRoomNumber())
+            ).findFirst().orElse(null);
+            if (bed != null) {
+                bed.setStatus("OCCUPIED");
+                bed.setTenantId(saved.getId() != null ? saved.getId().toString() : null);
+                bed.setTenantName(saved.getFirstName() + " " + (saved.getLastName() != null ? saved.getLastName() : ""));
+                bedRepository.save(bed);
+            }
         }
 
         occupancySyncService.syncStatsAndEvictCaches(null);
@@ -602,7 +695,7 @@ public class TenantController {
                         try { checkIn.setLeaseEnd(java.time.LocalDate.parse(saved.getLeaseEnd())); } catch(Exception ignored){}
                     }
                     checkIn.setStatus("completed");
-                    checkIn.setCode("CI-" + (System.currentTimeMillis() % 100000000L));
+                    checkIn.setCode(invoiceSequenceService.nextCheckInCode(targetProperty, organization));
                     checkInRepository.save(checkIn);
                 } catch (Exception ignored) {}
 
@@ -973,6 +1066,8 @@ public class TenantController {
         String oldRoomNumber = tenant.getRoomNumber();
         String oldBedNumber = tenant.getBedNumber();
         String oldStatus = tenant.getStatus();
+        BigDecimal oldRent = tenant.getRent();
+        BigDecimal oldDeposit = tenant.getDeposit();
 
         tenant.setFirstName(request.getFirstName());
         tenant.setLastName(request.getLastName());
@@ -993,8 +1088,25 @@ public class TenantController {
         tenant.setPropertyId(request.getPropertyId());
         tenant.setRoomNumber(request.getRoomNumber());
         tenant.setBedNumber(request.getBedNumber());
+        tenant.setLockInMonths(request.getLockInMonths());
+        tenant.setNoticePeriodDays(request.getNoticePeriodDays());
         if (request.getStatus() != null) {
             tenant.setStatus(request.getStatus().toUpperCase());
+        }
+        if (request.getBillingResponsibility() != null) {
+            tenant.setBillingResponsibility(request.getBillingResponsibility());
+        }
+        if (request.getCorporateCompanyName() != null) {
+            tenant.setCorporateCompanyName(request.getCorporateCompanyName());
+        }
+        if (request.getCorporateGstin() != null) {
+            tenant.setCorporateGstin(request.getCorporateGstin());
+        }
+        if (request.getUtilityResponsibility() != null) {
+            tenant.setUtilityResponsibility(request.getUtilityResponsibility());
+        }
+        if (request.getDepositResponsibility() != null) {
+            tenant.setDepositResponsibility(request.getDepositResponsibility());
         }
 
         if (request.getRefundAccountName() != null) {
@@ -1016,6 +1128,25 @@ public class TenantController {
         Tenant updated = tenantRepository.save(tenant);
         populateBuildingName(updated);
         auditLogService.logCurrent("Updated tenant record: " + (updated.getFirstName() != null ? updated.getFirstName() : "") + " " + (updated.getLastName() != null ? updated.getLastName() : ""), null);
+
+        // Perform Financial Reconciliations for Mid-Cycle Room/Rent Changes
+        boolean rentChanged = (oldRent != null && updated.getRent() != null && oldRent.compareTo(updated.getRent()) != 0);
+        if (rentChanged || (oldRoomNumber != null && !oldRoomNumber.equalsIgnoreCase(updated.getRoomNumber()))) {
+            try {
+                roomTransferReconciliationService.reconcileMidCycleTransfer(
+                        updated,
+                        oldRent,
+                        updated.getRent(),
+                        oldDeposit,
+                        updated.getDeposit(),
+                        oldRoomNumber,
+                        updated.getRoomNumber(),
+                        organization
+                );
+            } catch (Exception recEx) {
+                System.err.println("Warning during mid-cycle transfer reconciliation: " + recEx.getMessage());
+            }
+        }
 
         // Trigger Atomic Room/Bed Transfer & Occupancy Synchronization
         boolean locationChanged = (oldRoomNumber != null && !oldRoomNumber.equalsIgnoreCase(updated.getRoomNumber())) ||
@@ -1060,18 +1191,18 @@ public class TenantController {
     }
 
     private void freeTenantBed(Tenant tenant) {
-        if (tenant == null || tenant.getBedNumber() == null || tenant.getRoomNumber() == null) return;
+        if (tenant == null) return;
         try {
-            bedRepository.findAll().stream()
-                    .filter(b -> tenant.getRoomNumber().equalsIgnoreCase(b.getRoom() != null ? b.getRoom().getRoomNumber() : null)
-                            && tenant.getBedNumber().equalsIgnoreCase(b.getBedNumber()))
-                    .findFirst().ifPresent(b -> {
-                        b.setStatus("AVAILABLE");
-                        bedRepository.save(b);
-                        if (b.getRoom() != null && b.getRoom().getFloor() != null) {
-                            occupancySyncService.syncStatsAndEvictCaches(b.getRoom().getFloor());
-                        }
-                    });
+            if (tenant.getRoomNumber() != null && tenant.getBedNumber() != null && tenant.getOrganization() != null) {
+                bedRepository.findByRoomNumberAndBedNumberAndOrgId(tenant.getRoomNumber(), tenant.getBedNumber(), tenant.getOrganization().getId())
+                        .ifPresent(b -> {
+                            b.setStatus("AVAILABLE");
+                            bedRepository.save(b);
+                            if (b.getRoom() != null && b.getRoom().getFloor() != null) {
+                                occupancySyncService.syncStatsAndEvictCaches(b.getRoom().getFloor());
+                            }
+                        });
+            }
         } catch (Exception e) {
             System.err.println("Warning freeing bed for tenant: " + e.getMessage());
         }
@@ -1110,83 +1241,10 @@ public class TenantController {
         return ResponseEntity.ok(new MessageResponse("Tenant archived successfully and bed freed."));
     }
 
-    @DeleteMapping("/{id}/permanent")
-    @org.springframework.transaction.annotation.Transactional
-    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
-    public ResponseEntity<?> permanentlyDeleteTenant(@PathVariable UUID id) {
-        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
-                .getAuthorities().stream()
-                .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
-
-        Tenant tenant;
-        if (isSuperAdmin) {
-            tenant = tenantRepository.findById(id).orElse(null);
-        } else {
-            Organization organization = getLoggedUserOrg();
-            tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
-            if (tenant == null) {
-                tenant = tenantRepository.findById(id).orElse(null);
-            }
-        }
-
-        if (tenant == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant profile not found."));
-        }
-
-        // Free up assigned Bed and make room vacant before deletion
-        freeTenantBed(tenant);
-
-        // Cascade delete child records with exact table and column matching
-        try {
-            // 1. Delete payments linked to tenant's invoices
-            jdbcTemplate.update("DELETE FROM payments WHERE invoice_id IN (SELECT id FROM invoices WHERE tenant_id = ?)", id);
-            
-            // 2. Delete invoice items linked to tenant's invoices
-            jdbcTemplate.update("DELETE FROM invoice_items WHERE invoice_id IN (SELECT id FROM invoices WHERE tenant_id = ?)", id);
-            
-            // 3. Delete invoices
-            jdbcTemplate.update("DELETE FROM invoices WHERE tenant_id = ?", id);
-            
-            // 4. Delete tenant documents
-            jdbcTemplate.update("DELETE FROM tenant_documents WHERE tenant_id = ?", id);
-            
-            // 5. Delete agreements
-            jdbcTemplate.update("DELETE FROM agreements WHERE tenant_id = ?", id);
-            
-            // 6. Delete parcels, visitors, and penalties/discounts
-            jdbcTemplate.update("DELETE FROM parcels WHERE tenant_id = ?", id);
-            jdbcTemplate.update("DELETE FROM visitors WHERE tenant_id = ?", id);
-            jdbcTemplate.update("DELETE FROM penalties_discounts WHERE tenant_id = ?", id);
-            
-            // 7. Delete complaint messages and complaints
-            jdbcTemplate.update("DELETE FROM complaint_chat_messages WHERE complaint_id IN (SELECT id FROM complaints WHERE tenant_id = ?)", id);
-            jdbcTemplate.update("DELETE FROM complaints WHERE tenant_id = ?", id);
-            
-            // 8. Delete bookings
-            jdbcTemplate.update("DELETE FROM bookings WHERE tenant_id = ?", id);
-
-            // 9. Delete user account and tokens if registered
-            if (tenant.getEmail() != null && !tenant.getEmail().isBlank()) {
-                userRepository.findByEmail(tenant.getEmail().trim().toLowerCase()).ifPresent(user -> {
-                    jdbcTemplate.update("DELETE FROM refresh_tokens WHERE user_id = ?", user.getId());
-                    jdbcTemplate.update("DELETE FROM user_roles WHERE user_id = ?", user.getId());
-                    userRepository.delete(user);
-                });
-            }
-        } catch (Exception e) {
-            System.err.println("Warning during cascading tenant delete: " + e.getMessage());
-        }
-
-        tenantRepository.delete(tenant);
-        auditLogService.logCurrent("Permanently deleted tenant record and all associated history for: " + (tenant.getFirstName() != null ? tenant.getFirstName() : "") + " " + (tenant.getLastName() != null ? tenant.getLastName() : ""), null);
-        occupancySyncService.syncStatsAndEvictCaches(null);
-        return ResponseEntity.ok(new MessageResponse("Tenant and all associated records permanently deleted and bed released."));
-    }
-
     @PutMapping("/{id}/unarchive")
     @org.springframework.transaction.annotation.Transactional
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN')")
-    public ResponseEntity<?> unarchiveTenant(@PathVariable UUID id) {
+    public ResponseEntity<?> unarchiveTenant(@PathVariable UUID id, @RequestBody(required = false) java.util.Map<String, Object> req) {
         boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
                 .getAuthorities().stream()
                 .anyMatch(auth -> auth.getAuthority().equals("ROLE_SUPER_ADMIN"));
@@ -1197,8 +1255,7 @@ public class TenantController {
             tenant = tenantRepository.findById(id).orElse(null);
         } else {
             organization = getLoggedUserOrg();
-            tenant = tenantRepository.findByIdAndOrganization(id, organization)
-                    .orElseGet(() -> tenantRepository.findById(id).orElse(null));
+            tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
         }
 
         if (tenant == null) {
@@ -1207,6 +1264,11 @@ public class TenantController {
 
         if (organization == null) {
             organization = tenant.getOrganization();
+        }
+
+        if (req != null) {
+            if (req.get("roomNumber") != null) tenant.setRoomNumber(req.get("roomNumber").toString());
+            if (req.get("bedNumber") != null) tenant.setBedNumber(req.get("bedNumber").toString());
         }
 
         if (tenant.getBedNumber() != null && tenant.getRoomNumber() != null && organization != null) {
@@ -1224,10 +1286,8 @@ public class TenantController {
             }
 
             // Re-occupy Bed
-            bedRepository.findAll().stream()
-                    .filter(b -> targetRoom.equalsIgnoreCase(b.getRoom() != null ? b.getRoom().getRoomNumber() : null)
-                            && targetBed.equalsIgnoreCase(b.getBedNumber()))
-                    .findFirst().ifPresent(b -> {
+            bedRepository.findByRoomNumberAndBedNumberAndOrgId(targetRoom, targetBed, organization.getId())
+                    .ifPresent(b -> {
                         b.setStatus("OCCUPIED");
                         bedRepository.save(b);
                         if (b.getRoom() != null && b.getRoom().getFloor() != null) {
@@ -1236,11 +1296,27 @@ public class TenantController {
                     });
         }
 
+        // Clean Reset of Lease Dates & Phantom Balances for Restored Tenant
         tenant.setStatus("ACTIVE");
+        if (req != null && req.get("leaseStart") != null) {
+            tenant.setLeaseStart(req.get("leaseStart").toString());
+        } else {
+            tenant.setLeaseStart(java.time.LocalDate.now().toString());
+        }
+
+        if (req != null && req.get("leaseEnd") != null) {
+            tenant.setLeaseEnd(req.get("leaseEnd").toString());
+        } else {
+            tenant.setLeaseEnd(null); // Clear past expired checkout date!
+        }
+
+        // Reset advance balance so past settled monies are not carried over as phantom credits
+        tenant.setAdvanceBalance(BigDecimal.ZERO);
+
         Tenant updated = tenantRepository.save(tenant);
         auditLogService.logCurrent("Unarchived tenant record: " + (updated.getFirstName() != null ? updated.getFirstName() : "") + " " + (updated.getLastName() != null ? updated.getLastName() : ""), null);
         occupancySyncService.syncStatsAndEvictCaches(null);
-        return ResponseEntity.ok(new MessageResponse("Tenant successfully unarchived and bed marked occupied."));
+        return ResponseEntity.ok(new MessageResponse("Tenant successfully unarchived with clean active tenure and bed marked occupied."));
     }
 
     @PostMapping("/{id}/send-credentials")
@@ -1329,14 +1405,23 @@ public class TenantController {
     @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('RECEPTIONIST') or hasRole('ADMIN')")
     public ResponseEntity<?> verifyTenantDocument(@PathVariable UUID id, @RequestBody java.util.Map<String, String> req) {
         Organization organization = getLoggedUserOrg();
-        Tenant tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
-        if (tenant == null) {
+        Tenant tenant = tenantRepository.findById(id).orElse(null);
+        if (tenant == null || (organization != null && tenant.getOrganization() != null && !organization.getId().equals(tenant.getOrganization().getId()) && !securityUtils.isSuperAdmin())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Tenant record not found."));
         }
 
         String status = req.get("status");
         if (status == null || (!"VERIFIED".equalsIgnoreCase(status) && !"REJECTED".equalsIgnoreCase(status) && !"PENDING".equalsIgnoreCase(status))) {
             return ResponseEntity.badRequest().body(new MessageResponse("Error: Invalid status. Must be VERIFIED, REJECTED, or PENDING."));
+        }
+
+        if ("VERIFIED".equalsIgnoreCase(status)) {
+            List<TenantDocument> docs = tenantDocumentRepository.findByTenant(tenant);
+            boolean hasUploadedDocs = docs != null && !docs.isEmpty();
+            boolean hasIdDoc = tenant.getIdNumber() != null && !tenant.getIdNumber().isBlank();
+            if (!hasUploadedDocs && !hasIdDoc) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Error: Cannot approve KYC. No identity or verification documents have been uploaded for this resident."));
+            }
         }
 
         tenant.setKycStatus(status.toUpperCase());
@@ -1374,7 +1459,7 @@ public class TenantController {
         }
 
         tenant.setStatus("ACTIVE");
-        Tenant saved = tenantRepository.save(tenant);
+        tenantRepository.save(tenant);
         auditLogService.log("Desk onboarding payment approved and verified for resident: " + tenant.getName(), null);
 
         // Dispatch Payment Success Email with Property Branding
@@ -1403,4 +1488,420 @@ public class TenantController {
 
         return ResponseEntity.ok(new MessageResponse("Desk payment approved successfully! Resident accommodation is now Active."));
     }
+
+    @PostMapping("/swap-beds")
+    @Transactional
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> swapBeds(@RequestBody Map<String, Object> req) {
+        Organization organization = getLoggedUserOrg();
+        if (req == null || !req.containsKey("tenantId1") || !req.containsKey("tenantId2")) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Both tenantId1 and tenantId2 are required."));
+        }
+
+        UUID id1 = UUID.fromString(req.get("tenantId1").toString());
+        UUID id2 = UUID.fromString(req.get("tenantId2").toString());
+
+        if (id1.equals(id2)) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Cannot swap beds for the same tenant."));
+        }
+
+        Tenant t1 = tenantRepository.findByIdAndOrganization(id1, organization).orElse(null);
+        Tenant t2 = tenantRepository.findByIdAndOrganization(id2, organization).orElse(null);
+
+        if (t1 == null || t2 == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: One or both tenants not found in your organization."));
+        }
+
+        if ("ARCHIVED".equalsIgnoreCase(t1.getStatus()) || "CHECKED_OUT".equalsIgnoreCase(t1.getStatus()) ||
+            "ARCHIVED".equalsIgnoreCase(t2.getStatus()) || "CHECKED_OUT".equalsIgnoreCase(t2.getStatus())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Both tenants must be active residents to perform a bed swap."));
+        }
+
+        String oldRoom1 = t1.getRoomNumber();
+        String oldBed1 = t1.getBedNumber();
+        BigDecimal oldRent1 = t1.getRent();
+        BigDecimal oldDeposit1 = t1.getDeposit();
+
+        String oldRoom2 = t2.getRoomNumber();
+        String oldBed2 = t2.getBedNumber();
+        BigDecimal oldRent2 = t2.getRent();
+        BigDecimal oldDeposit2 = t2.getDeposit();
+
+        if (oldRoom1 == null || oldBed1 == null || oldRoom2 == null || oldBed2 == null) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Both tenants must currently have an assigned room and bed number."));
+        }
+
+        // 1. Swap assignments on Tenant records
+        t1.setRoomNumber(oldRoom2);
+        t1.setBedNumber(oldBed2);
+        t2.setRoomNumber(oldRoom1);
+        t2.setBedNumber(oldBed1);
+
+        // 2. Re-assign Bed entities
+        List<Bed> orgBeds = bedRepository.findByOrganizationId(organization.getId());
+        Bed bed1 = orgBeds.stream().filter(b ->
+                oldBed1.equalsIgnoreCase(b.getBedNumber()) &&
+                b.getRoom() != null &&
+                oldRoom1.equalsIgnoreCase(b.getRoom().getRoomNumber())
+        ).findFirst().orElse(null);
+
+        Bed bed2 = orgBeds.stream().filter(b ->
+                oldBed2.equalsIgnoreCase(b.getBedNumber()) &&
+                b.getRoom() != null &&
+                oldRoom2.equalsIgnoreCase(b.getRoom().getRoomNumber())
+        ).findFirst().orElse(null);
+
+        if (bed1 != null) {
+            bed1.setTenantId(t2.getId() != null ? t2.getId().toString() : null);
+            bed1.setTenantName(t2.getFirstName() + " " + (t2.getLastName() != null ? t2.getLastName() : ""));
+            bed1.setStatus("OCCUPIED");
+            bedRepository.save(bed1);
+        }
+
+        if (bed2 != null) {
+            bed2.setTenantId(t1.getId() != null ? t1.getId().toString() : null);
+            bed2.setTenantName(t1.getFirstName() + " " + (t1.getLastName() != null ? t1.getLastName() : ""));
+            bed2.setStatus("OCCUPIED");
+            bedRepository.save(bed2);
+        }
+
+        // 3. Reconcile rent / deposit differences if rents differed
+        RoomTransferReconciliationService.ReconciliationResult rec1 = roomTransferReconciliationService.reconcileMidCycleTransfer(
+                t1, oldRent1, t2.getRent(), oldDeposit1, t2.getDeposit(), oldRoom1, oldRoom2, organization
+        );
+
+        RoomTransferReconciliationService.ReconciliationResult rec2 = roomTransferReconciliationService.reconcileMidCycleTransfer(
+                t2, oldRent2, t1.getRent(), oldDeposit2, t1.getDeposit(), oldRoom2, oldRoom1, organization
+        );
+
+        Tenant saved1 = tenantRepository.save(t1);
+        Tenant saved2 = tenantRepository.save(t2);
+
+        // 4. Auto-generate Digital Lease Addendums for both residents
+        try {
+            Agreement addendum1 = new Agreement(
+                    saved1,
+                    String.format("MUTUAL BED SWAP ADDENDUM\n\nEffective Date: %s\nResident: %s %s\nPrevious: Room %s (Bed %s)\nNew Assignment: Room %s (Bed %s)\nMonthly Rent: ₹%s\nSecurity Deposit: ₹%s\n\nThis Addendum amends the Primary Tenancy Agreement with mutual consent.",
+                            LocalDate.now(), saved1.getFirstName(), saved1.getLastName(), oldRoom1, oldBed1, oldRoom2, oldBed2, saved1.getRent(), saved1.getDeposit()),
+                    LocalDate.now(),
+                    saved1.getLeaseEnd() != null && !saved1.getLeaseEnd().isBlank() ? LocalDate.parse(saved1.getLeaseEnd()) : LocalDate.now().plusMonths(11)
+            );
+            addendum1.setStatus("SIGNED");
+            addendum1.setSignedAt(java.time.OffsetDateTime.now());
+            agreementRepository.save(addendum1);
+
+            Agreement addendum2 = new Agreement(
+                    saved2,
+                    String.format("MUTUAL BED SWAP ADDENDUM\n\nEffective Date: %s\nResident: %s %s\nPrevious: Room %s (Bed %s)\nNew Assignment: Room %s (Bed %s)\nMonthly Rent: ₹%s\nSecurity Deposit: ₹%s\n\nThis Addendum amends the Primary Tenancy Agreement with mutual consent.",
+                            LocalDate.now(), saved2.getFirstName(), saved2.getLastName(), oldRoom2, oldBed2, oldRoom1, oldBed1, saved2.getRent(), saved2.getDeposit()),
+                    LocalDate.now(),
+                    saved2.getLeaseEnd() != null && !saved2.getLeaseEnd().isBlank() ? LocalDate.parse(saved2.getLeaseEnd()) : LocalDate.now().plusMonths(11)
+            );
+            addendum2.setStatus("SIGNED");
+            addendum2.setSignedAt(java.time.OffsetDateTime.now());
+            agreementRepository.save(addendum2);
+        } catch (Exception ignored) {}
+
+        occupancySyncService.syncStatsAndEvictCaches(null);
+        auditLogService.logCurrent(String.format("Mutual Bed Swap executed: %s (now in Room %s, Bed %s) <-> %s (now in Room %s, Bed %s)",
+                saved1.getName(), saved1.getRoomNumber(), saved1.getBedNumber(),
+                saved2.getName(), saved2.getRoomNumber(), saved2.getBedNumber()), null);
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("message", "Mutual bed swap completed successfully. Digital lease addendums generated.");
+        resp.put("tenant1", saved1);
+        resp.put("tenant2", saved2);
+        resp.put("reconciliation1", rec1 != null ? rec1.actionTaken : "NO_ACTION");
+        resp.put("reconciliation2", rec2 != null ? rec2.actionTaken : "NO_ACTION");
+        return ResponseEntity.ok(resp);
+    }
+
+    @GetMapping("/{id}/financial-statement")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getTenantFinancialStatement(@PathVariable UUID id, @RequestParam(required = false) Integer year) {
+        Tenant tenant = tenantRepository.findById(id).orElse(null);
+        if (tenant == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Tenant profile not found"));
+        }
+
+        Property property = null;
+        if (tenant.getPropertyId() != null) {
+            property = propertyRepository.findById(tenant.getPropertyId()).orElse(null);
+        }
+
+        Organization org = tenant.getOrganization();
+        OrganizationBillingProfile profile = organizationBillingProfileRepository.findByOrganization(org).orElse(null);
+
+        List<Invoice> allInvoices = invoiceRepository.findByTenant(tenant);
+        List<Map<String, Object>> invoiceLedger = new ArrayList<>();
+        BigDecimal totalBilled = BigDecimal.ZERO;
+        BigDecimal totalPaid = BigDecimal.ZERO;
+
+        for (Invoice inv : allInvoices) {
+            if ("CANCELLED".equalsIgnoreCase(inv.getStatus())) continue;
+
+            if (year != null && inv.getIssueDate() != null && inv.getIssueDate().getYear() != year) {
+                continue;
+            }
+
+            BigDecimal due = inv.getAmountDue() != null ? inv.getAmountDue() : BigDecimal.ZERO;
+            BigDecimal paid = inv.getAmountPaid() != null ? inv.getAmountPaid() : BigDecimal.ZERO;
+            totalBilled = totalBilled.add(due);
+            totalPaid = totalPaid.add(paid);
+
+            List<Payment> payments = paymentRepository.findByInvoice(inv);
+
+            Map<String, Object> invData = new HashMap<>();
+            invData.put("id", inv.getId());
+            invData.put("invoiceNumber", inv.getInvoiceNumber());
+            invData.put("issueDate", inv.getIssueDate() != null ? inv.getIssueDate().toString() : "");
+            invData.put("dueDate", inv.getDueDate() != null ? inv.getDueDate().toString() : "");
+            invData.put("amountDue", due);
+            invData.put("amountPaid", paid);
+            invData.put("status", inv.getStatus());
+            invData.put("description", inv.getItems() != null && !inv.getItems().isEmpty() ? inv.getItems().get(0).getDescription() : "Rent & Amenities");
+            invData.put("payments", payments.stream().map(p -> {
+                Map<String, Object> payMap = new HashMap<>();
+                payMap.put("id", p.getId());
+                payMap.put("amount", p.getAmount());
+                payMap.put("method", p.getPaymentMethod());
+                payMap.put("transactionRef", p.getTransactionReference());
+                payMap.put("paymentDate", p.getPaymentDate() != null ? p.getPaymentDate().toString() : "");
+                payMap.put("receiptUrl", p.getReceiptUrl());
+                return payMap;
+            }).collect(Collectors.toList()));
+
+            invoiceLedger.add(invData);
+        }
+
+        Map<String, Object> statement = new HashMap<>();
+        statement.put("statementNumber", "STMT-" + (year != null ? year : java.time.LocalDate.now().getYear()) + "-" + tenant.getId().toString().substring(0, 6).toUpperCase());
+        statement.put("generatedDate", java.time.LocalDate.now().toString());
+        statement.put("financialYear", year != null ? "FY " + (year - 1) + "-" + String.valueOf(year).substring(2) : "All-Time Statement");
+        statement.put("tenantId", tenant.getId());
+        statement.put("tenantName", tenant.getName());
+        statement.put("mobile", tenant.getMobile());
+        statement.put("email", tenant.getEmail());
+        statement.put("roomNumber", tenant.getRoomNumber());
+        statement.put("bedNumber", tenant.getBedNumber());
+        statement.put("leaseStart", tenant.getLeaseStart());
+        statement.put("leaseEnd", tenant.getLeaseEnd());
+        statement.put("monthlyRent", tenant.getRent());
+        statement.put("securityDepositPaid", tenant.getDeposit());
+        statement.put("advanceWalletBalance", tenant.getAdvanceBalance());
+        statement.put("propertyName", property != null ? property.getName() : "StayEaze Residency");
+        statement.put("propertyAddress", property != null ? property.getAddress() : "");
+        statement.put("landlordLegalName", profile != null && profile.getLegalName() != null ? profile.getLegalName() : (org != null ? org.getName() : "StayEaze"));
+        statement.put("landlordPan", profile != null ? profile.getPan() : "");
+        statement.put("landlordGstin", profile != null ? profile.getGstin() : "");
+        statement.put("totalRentBilled", totalBilled);
+        statement.put("totalRentPaid", totalPaid);
+        statement.put("outstandingBalance", totalBilled.subtract(totalPaid));
+        statement.put("invoices", invoiceLedger);
+        statement.put("isHraEligible", totalPaid.compareTo(BigDecimal.ZERO) > 0);
+
+        return ResponseEntity.ok(statement);
+    }
+
+    /**
+     * P2.2: Preview mid-cycle room transfer reconciliation math before committing.
+     */
+    @PostMapping("/tenants/{id}/preview-room-transfer")
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN')")
+    public ResponseEntity<?> previewRoomTransfer(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> req) {
+        Organization organization = getLoggedUserOrg();
+        Tenant tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
+        if (tenant == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Resident not found."));
+        }
+
+        BigDecimal oldRent = tenant.getRent() != null ? tenant.getRent() : BigDecimal.ZERO;
+        BigDecimal newRent = req.containsKey("newRent") && req.get("newRent") != null
+                ? new BigDecimal(req.get("newRent").toString())
+                : oldRent;
+
+        BigDecimal oldDeposit = tenant.getDeposit() != null ? tenant.getDeposit() : BigDecimal.ZERO;
+        BigDecimal newDeposit = req.containsKey("newDeposit") && req.get("newDeposit") != null
+                ? new BigDecimal(req.get("newDeposit").toString())
+                : oldDeposit;
+
+        LocalDate today = LocalDate.now();
+        int daysInMonth = today.lengthOfMonth();
+        int currentDay = today.getDayOfMonth();
+        int remainingDays = Math.max(1, daysInMonth - currentDay + 1);
+
+        BigDecimal deltaRent = newRent.subtract(oldRent);
+        BigDecimal dailyDelta = deltaRent.divide(BigDecimal.valueOf(daysInMonth), 2, java.math.RoundingMode.HALF_UP);
+        BigDecimal proRataDiff = dailyDelta.multiply(BigDecimal.valueOf(remainingDays)).setScale(2, java.math.RoundingMode.HALF_UP).abs();
+        BigDecimal depositTopUp = newDeposit.compareTo(oldDeposit) > 0 ? newDeposit.subtract(oldDeposit) : BigDecimal.ZERO;
+
+        boolean isUpgrade = newRent.compareTo(oldRent) > 0;
+        boolean isDowngrade = newRent.compareTo(oldRent) < 0;
+
+        Map<String, Object> preview = new LinkedHashMap<>();
+        preview.put("tenantId", tenant.getId());
+        preview.put("tenantName", tenant.getName());
+        preview.put("currentRoom", tenant.getRoomNumber());
+        preview.put("currentBed", tenant.getBedNumber());
+        preview.put("targetRoom", req.get("newRoomNumber"));
+        preview.put("targetBed", req.get("newBedNumber"));
+        preview.put("oldRent", oldRent);
+        preview.put("newRent", newRent);
+        preview.put("deltaRent", deltaRent);
+        preview.put("oldDeposit", oldDeposit);
+        preview.put("newDeposit", newDeposit);
+        preview.put("depositTopUp", depositTopUp);
+        preview.put("daysInMonth", daysInMonth);
+        preview.put("remainingDays", remainingDays);
+        preview.put("proRataDifference", proRataDiff);
+        preview.put("isUpgrade", isUpgrade);
+        preview.put("isDowngrade", isDowngrade);
+        preview.put("currentAdvanceBalance", tenant.getAdvanceBalance() != null ? tenant.getAdvanceBalance() : BigDecimal.ZERO);
+
+        String summary;
+        if (isUpgrade) {
+            BigDecimal totalDue = proRataDiff.add(depositTopUp);
+            summary = String.format("Room Upgrade: +₹%s/mo. Pro-rata rent delta for %d remaining days: ₹%s. Deposit top-up: ₹%s. Net invoice to generate: ₹%s.",
+                    deltaRent.abs(), remainingDays, proRataDiff, depositTopUp, totalDue);
+            preview.put("actionType", "UPGRADE_INVOICE");
+            preview.put("netInvoiceDue", totalDue);
+        } else if (isDowngrade) {
+            summary = String.format("Room Downgrade: -₹%s/mo. Pro-rata surplus of ₹%s (%d days) will be credited directly to resident's Advance Wallet.",
+                    deltaRent.abs(), proRataDiff, remainingDays);
+            preview.put("actionType", "ADVANCE_CREDIT");
+            preview.put("surplusCredit", proRataDiff);
+        } else {
+            summary = "Same rent rate. Room transfer will be processed without financial adjustments.";
+            preview.put("actionType", "LATERAL_TRANSFER");
+        }
+        preview.put("summary", summary);
+
+        return ResponseEntity.ok(preview);
+    }
+
+    /**
+     * P2.2: Execute room transfer wizard with atomic reconciliation and digital addendum generation.
+     */
+    @PostMapping("/tenants/{id}/transfer-room")
+    @Transactional
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN')")
+    public ResponseEntity<?> executeRoomTransferWizard(
+            @PathVariable UUID id,
+            @RequestBody Map<String, Object> req) {
+        Organization organization = getLoggedUserOrg();
+        Tenant tenant = tenantRepository.findByIdAndOrganization(id, organization).orElse(null);
+        if (tenant == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Resident not found."));
+        }
+
+        String oldRoomNumber = tenant.getRoomNumber();
+        String oldBedNumber = tenant.getBedNumber();
+        UUID oldPropertyId = tenant.getPropertyId();
+        BigDecimal oldRent = tenant.getRent() != null ? tenant.getRent() : BigDecimal.ZERO;
+        BigDecimal oldDeposit = tenant.getDeposit() != null ? tenant.getDeposit() : BigDecimal.ZERO;
+
+        String newRoomNumber = req.containsKey("newRoomNumber") && req.get("newRoomNumber") != null ? req.get("newRoomNumber").toString().trim() : oldRoomNumber;
+        String newBedNumber = req.containsKey("newBedNumber") && req.get("newBedNumber") != null ? req.get("newBedNumber").toString().trim() : oldBedNumber;
+
+        UUID newPropertyId = oldPropertyId;
+        if (req.containsKey("newPropertyId") && req.get("newPropertyId") != null && !req.get("newPropertyId").toString().isBlank()) {
+            try {
+                newPropertyId = UUID.fromString(req.get("newPropertyId").toString());
+            } catch (Exception ignored) {}
+        }
+
+        BigDecimal newRent = req.containsKey("newRent") && req.get("newRent") != null
+                ? new BigDecimal(req.get("newRent").toString())
+                : oldRent;
+
+        BigDecimal newDeposit = req.containsKey("newDeposit") && req.get("newDeposit") != null
+                ? new BigDecimal(req.get("newDeposit").toString())
+                : oldDeposit;
+
+        // 1. Update Tenant record
+        tenant.setRoomNumber(newRoomNumber);
+        tenant.setBedNumber(newBedNumber);
+        tenant.setPropertyId(newPropertyId);
+        tenant.setRent(newRent);
+        tenant.setDeposit(newDeposit);
+        Tenant savedTenant = tenantRepository.save(tenant);
+
+        // 2. Perform Financial Reconciliations for Mid-Cycle Transfer
+        RoomTransferReconciliationService.ReconciliationResult recResult = roomTransferReconciliationService.reconcileMidCycleTransfer(
+                savedTenant,
+                oldRent,
+                newRent,
+                oldDeposit,
+                newDeposit,
+                oldRoomNumber,
+                newRoomNumber,
+                organization
+        );
+
+        // 3. Atomically sync occupancy across old and new beds
+        occupancySyncService.handleTenantRoomTransfer(
+                savedTenant,
+                oldPropertyId,
+                oldRoomNumber,
+                oldBedNumber,
+                newPropertyId,
+                newRoomNumber,
+                newBedNumber,
+                organization
+        );
+
+        auditLogService.logCurrent(String.format("Executed Room Transfer for %s: Room %s (Bed %s) -> Room %s (Bed %s), Rent: ₹%s -> ₹%s (Action: %s)",
+                savedTenant.getName(), oldRoomNumber, oldBedNumber, newRoomNumber, newBedNumber, oldRent, newRent,
+                recResult != null ? recResult.actionTaken : "LATERAL_TRANSFER"), null);
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("message", String.format("Resident successfully transferred to Room %s (Bed %s).", newRoomNumber, newBedNumber));
+        resp.put("tenant", savedTenant);
+        resp.put("reconciliationAction", recResult != null ? recResult.actionTaken : "LATERAL_TRANSFER");
+        resp.put("proRataDifference", recResult != null ? recResult.proRataDifference : BigDecimal.ZERO);
+        resp.put("generatedInvoice", recResult != null ? recResult.generatedInvoice : null);
+        resp.put("updatedAdvanceBalance", savedTenant.getAdvanceBalance());
+
+        return ResponseEntity.ok(resp);
+    }
+
+    @GetMapping("/tenants/expiring-leases")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> getExpiringLeases() {
+        Organization org = null;
+        try {
+            org = getLoggedUserOrg();
+        } catch (Exception ignored) {}
+        return ResponseEntity.ok(tenantNoticePeriodService.getExpiringLeasesInNoticeWindow(org));
+    }
+
+    @PostMapping("/tenants/notice-reminders/run")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> runNoticeRemindersSweep() {
+        Organization org = null;
+        try {
+            org = getLoggedUserOrg();
+        } catch (Exception ignored) {}
+        return ResponseEntity.ok(tenantNoticePeriodService.checkAndSendNoticePeriodReminders(org));
+    }
+
+    @PostMapping("/tenants/{id}/send-notice-reminder")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> sendSingleNoticeReminder(@PathVariable UUID id) {
+        try {
+            Map<String, Object> result = tenantNoticePeriodService.sendSingleTenantNoticeReminder(id);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponse("Failed to send notice reminder: " + e.getMessage()));
+        }
+    }
 }
+

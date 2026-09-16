@@ -32,6 +32,7 @@ export default function TenantDocumentsPage() {
   const [signingLease, setSigningLease] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('documents');
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -66,11 +67,19 @@ export default function TenantDocumentsPage() {
       }] : []);
 
   function handleFileSelect(file: File) {
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('File size exceeds 5MB limit. Please choose a smaller file.');
+    if (file.size > 3 * 1024 * 1024) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      setFileError(`Selected file is too large (${sizeMb} MB). Maximum allowed size is 3MB.`);
+      toast.error(`File size exceeds 3MB limit (${sizeMb} MB). Please choose a smaller file.`);
+      setSelectedFile(null);
+      setFilePreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       return;
     }
 
+    setFileError(null);
     setSelectedFile(file);
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -90,6 +99,7 @@ export default function TenantDocumentsPage() {
   function clearSelectedFile() {
     setSelectedFile(null);
     setFilePreview(null);
+    setFileError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -242,7 +252,7 @@ export default function TenantDocumentsPage() {
                       >
                         <Upload className="h-6 w-6 mx-auto text-indigo-500 mb-1.5 group-hover:scale-110 transition-transform" />
                         <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">Click or drag file to upload</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">Supports PDF, PNG, JPG up to 5MB</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">Supports PDF, PNG, JPG (Max: 3MB)</div>
                       </div>
                     ) : (
                       <div className="p-3 rounded-xl border border-indigo-200 dark:border-indigo-900/80 bg-indigo-50/40 dark:bg-indigo-950/40 space-y-2">
@@ -271,6 +281,12 @@ export default function TenantDocumentsPage() {
                           </Button>
                         </div>
                       </div>
+                    )}
+                    {fileError && (
+                      <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mt-1.5 flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg border border-rose-200 dark:border-rose-900">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                        {fileError}
+                      </p>
                     )}
                   </div>
 

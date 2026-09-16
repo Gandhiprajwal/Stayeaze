@@ -22,6 +22,8 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { validateEmail, validateMobile } from '@/lib/validation';
+import { usePlanFeatures } from '@/hooks/usePlanFeatures';
+import { FeatureUpgradeDialog } from '@/components/subscription/FeatureUpgradeDialog';
 
 const ENDPOINT = '/users';
 const statuses = [{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'suspended', label: 'Suspended' }];
@@ -32,11 +34,14 @@ const emptyForm = {
 
 export default function UsersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const planFeatures = usePlanFeatures();
 
   const currentUser = useAuthStore((s) => s.user);
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+  const isPropertyManager = currentUser?.role === 'PROPERTY_MANAGER';
 
   const { data: dbRoles } = useQuery({
     queryKey: ['roles-list-dropdown'],
@@ -50,7 +55,7 @@ export default function UsersPage() {
 
   const { data: subscribersData } = useQuery({
     queryKey: ['subscribers-dropdown-users'],
-    queryFn: () => api.get<any>('/super-admin/subscribers', { params: { pageSize: 100 } }).then((r) => r.data?.data || []),
+    queryFn: () => api.get<any[]>('/super-admin/subscribers/minimal').then((r) => Array.isArray(r.data) ? r.data : (r.data as any)?.data || []),
     enabled: isSuperAdmin,
   });
 
@@ -64,15 +69,20 @@ export default function UsersPage() {
     label: s.name,
   }));
 
-  const roleOptionsMap = new Map<UserRole, string>([
-    ['OWNER', 'Admin (Owner)'],
-    ['PROPERTY_MANAGER', 'Property Manager'],
-    ['RECEPTIONIST', 'Receptionist'],
-    ['ACCOUNTANT', 'Accountant'],
-    ['SECURITY_GUARD', 'Security Guard'],
-    ['STAFF', 'Maintenance Staff'],
-    ['TENANT', 'Tenant / Resident'],
-  ]);
+  const roleOptionsMap = new Map<UserRole, string>();
+
+  // Only Owners/Admins/SuperAdmins can assign Admin (Owner) role
+  if (!isPropertyManager) {
+    roleOptionsMap.set('OWNER', 'Admin (Owner)');
+  }
+
+  // Hierarchy roles available to Property Manager and above
+  roleOptionsMap.set('PROPERTY_MANAGER', 'Property Manager');
+  roleOptionsMap.set('RECEPTIONIST', 'Receptionist');
+  roleOptionsMap.set('ACCOUNTANT', 'Accountant');
+  roleOptionsMap.set('SECURITY_GUARD', 'Security Guard');
+  roleOptionsMap.set('STAFF', 'Maintenance Staff');
+  roleOptionsMap.set('TENANT', 'Tenant / Resident');
 
   if (isSuperAdmin) {
     roleOptionsMap.set('SUPPORT', 'Platform Support (Application)');
@@ -87,7 +97,16 @@ export default function UsersPage() {
   const deleteMut = useDelete(ENDPOINT, 'User');
   const form = useForm(emptyForm);
 
-  function openCreate() { setEditing(null); form.reset(emptyForm); setDialogOpen(true); }
+  function openCreate() {
+    if (!isSuperAdmin && !planFeatures.canAddStaff()) {
+      setUpgradeDialogOpen(true);
+      return;
+    }
+    setEditing(null);
+    const initialRole: UserRole = isPropertyManager ? 'RECEPTIONIST' : 'PROPERTY_MANAGER';
+    form.reset({ ...emptyForm, role: initialRole });
+    setDialogOpen(true);
+  }
   function openEdit(row: User & { orgId?: string }) {
     setEditing(row);
     const mappedRole: UserRole = (row.role === ('ADMIN' as any) || row.role === 'OWNER') ? 'OWNER' : row.role;
@@ -214,12 +233,18 @@ export default function UsersPage() {
           { key: 'propertyId', label: 'Property', options: propertyFilterOptions },
           { key: 'status', label: 'Status', options: statuses }
         ]}
-        rowActions={(row) => (
-          <RowActions items={[
-            { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
-            { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
-          ]} />
-        )} />
+        rowActions={(row) => {
+          const isTargetAdmin = row.role === 'OWNER' || row.role === ('ADMIN' as any) || row.role === 'SUPER_ADMIN';
+          if (isPropertyManager && isTargetAdmin) {
+            return null; // Property Managers cannot modify or delete Admin / Owner accounts
+          }
+          return (
+            <RowActions items={[
+              { label: 'Edit', icon: Pencil, onSelect: () => openEdit(row) },
+              { label: 'Delete', icon: Trash2, variant: 'destructive', onSelect: () => setDeleteTarget(row) },
+            ]} />
+          );
+        }} />
       <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} title={editing ? 'Edit User' : 'Add User'} onSubmit={submit}
         loading={createMut.isPending || updateMut.isPending} submitLabel={editing ? 'Save' : 'Create'} size="lg">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -244,7 +269,7 @@ export default function UsersPage() {
           <div className="space-y-1.5"><Label>Status</Label><Select value={form.values.status} onValueChange={(v) => form.setValue('status', v as User['status'])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{statuses.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Assigned Properties</Label>
-            <div className="grid grid-cols-2 gap-2 rounded-md border p-3 max-h-[120px] overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-md border p-3 max-h-[120px] overflow-y-auto">
               {(dbProperties ?? []).map((p) => {
                 const checked = form.values.propertyIds?.includes(p.id) ?? false;
                 return (
@@ -274,6 +299,14 @@ export default function UsersPage() {
       </FormDialog>
       <ConfirmDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)} title="Delete User" variant="destructive"
         description={`Delete user "${deleteTarget?.name}"? They will lose access immediately.`} confirmLabel="Delete" onConfirm={confirmDelete} loading={deleteMut.isPending} />
+
+      <FeatureUpgradeDialog
+        open={upgradeDialogOpen}
+        onOpenChange={setUpgradeDialogOpen}
+        featureTitle="Staff Accounts Limit Reached"
+        featureDescription={`Your current plan (${planFeatures.planName}) allows up to ${planFeatures.maxStaffUsers} staff user accounts. Upgrade to add more managers, accountants, and staff.`}
+        requiredTier={planFeatures.isStarter ? 'GROWTH' : 'ENTERPRISE'}
+      />
     </div>
   );
 }

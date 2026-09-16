@@ -22,6 +22,8 @@ import { occupancyRate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 import { useAuthStore } from '@/lib/stores/auth-store';
 import { StateCityPincodeSelector } from '@/components/common/StateCityPincodeSelector';
+import { usePlanFeatures } from '@/hooks/usePlanFeatures';
+import { FeatureUpgradeDialog } from '@/components/subscription/FeatureUpgradeDialog';
 
 const ENDPOINT = '/properties';
 
@@ -40,6 +42,10 @@ const emptyForm = {
   name: '', code: '', type: 'PG' as Property['type'], address: '', city: '', state: '', pincode: '',
   manager: '', phone: '', email: '', status: 'active' as Property['status'],
   securityDeposit: 0,
+  minimumLockInMonths: 3,
+  noticePeriodDays: 30,
+  defaultExitCleaningFee: 500,
+  defaultElectricityRatePerUnit: 10.0,
   razorpayKeyId: '', razorpayKeySecret: '',
   orgName: '', orgSubdomain: '', ownerEmail: '', ownerPhone: '', ownerPassword: '',
 };
@@ -47,10 +53,13 @@ const emptyForm = {
 export default function PropertiesPage() {
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Property | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Property | null>(null);
+  const planFeatures = usePlanFeatures();
   const currentUser = useAuthStore((s) => s.user);
-  const canManage = currentUser?.role === 'OWNER' || currentUser?.role === 'ADMIN' || currentUser?.role === 'PROPERTY_MANAGER';
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN' || (currentUser?.role as string) === 'ROLE_SUPER_ADMIN';
+  const canManage = isSuperAdmin || currentUser?.role === 'OWNER' || currentUser?.role === 'ADMIN';
 
   const { data: subDetails } = useQuery({
     queryKey: ['my-subscription-details'],
@@ -66,11 +75,26 @@ export default function PropertiesPage() {
   const updateMut = useUpdate<Property>(ENDPOINT, 'Property');
   const deleteMut = useDelete(ENDPOINT, 'Property');
 
+  const { data: orgProfile } = useQuery({
+    queryKey: ['org-billing-profile'],
+    queryFn: () => api.get('/organization-billing-profile').then((r) => r.data).catch(() => null),
+  });
+
   const form = useForm(emptyForm);
 
   function openCreate() {
+    if (isPropertyLimitReached && !isSuperAdmin) {
+      setUpgradeDialogOpen(true);
+      return;
+    }
     setEditing(null);
-    form.reset(emptyForm);
+    form.reset({
+      ...emptyForm,
+      minimumLockInMonths: orgProfile?.minimumLockInMonths ?? 3,
+      noticePeriodDays: orgProfile?.noticePeriodDays ?? 30,
+      defaultExitCleaningFee: orgProfile?.defaultExitCleaningFee ?? 500,
+      defaultElectricityRatePerUnit: orgProfile?.defaultElectricityRatePerUnit ?? 10.0,
+    });
     setDialogOpen(true);
   }
   function openEdit(row: Property) {
@@ -80,6 +104,10 @@ export default function PropertiesPage() {
       state: row.state, pincode: row.pincode, manager: row.manager, phone: row.phone,
       email: row.email, status: row.status,
       securityDeposit: row.securityDeposit ?? 0,
+      minimumLockInMonths: (row as any).minimumLockInMonths ?? orgProfile?.minimumLockInMonths ?? 3,
+      noticePeriodDays: (row as any).noticePeriodDays ?? orgProfile?.noticePeriodDays ?? 30,
+      defaultExitCleaningFee: (row as any).defaultExitCleaningFee ?? orgProfile?.defaultExitCleaningFee ?? 500,
+      defaultElectricityRatePerUnit: (row as any).defaultElectricityRatePerUnit ?? orgProfile?.defaultElectricityRatePerUnit ?? 10.0,
       razorpayKeyId: row.razorpayKeyId ?? '',
       razorpayKeySecret: row.razorpayKeySecret ?? '',
       orgName: '', orgSubdomain: '', ownerEmail: '', ownerPhone: '', ownerPassword: '',
@@ -277,6 +305,51 @@ export default function PropertiesPage() {
             />
           </div>
 
+          {/* Lease Terms & Operational Settlement Policy (P3.3) */}
+          <div className="sm:col-span-2 mt-2 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-indigo-500" />
+              <h4 className="text-sm font-bold">Lease Terms &amp; Settlement Policies</h4>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Define the default contractual terms, lock-in duration, notice period, exit deep cleaning fees, and electricity tariff for this property.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormInput
+                label="Minimum Lock-In Period (Months)"
+                id="minimumLockInMonths"
+                type="number"
+                value={form.values.minimumLockInMonths}
+                onChange={(e) => form.setValue('minimumLockInMonths', Math.max(0, parseInt(e.target.value) || 0))}
+                placeholder="e.g. 3 (0 for monthly rolling)"
+              />
+              <FormInput
+                label="Required Notice Period (Days)"
+                id="noticePeriodDays"
+                type="number"
+                value={form.values.noticePeriodDays}
+                onChange={(e) => form.setValue('noticePeriodDays', Math.max(0, parseInt(e.target.value) || 0))}
+                placeholder="e.g. 30"
+              />
+              <FormInput
+                label="Default Exit Cleaning Fee (₹)"
+                id="defaultExitCleaningFee"
+                type="number"
+                value={form.values.defaultExitCleaningFee}
+                onChange={(e) => form.setValue('defaultExitCleaningFee', Math.max(0, parseFloat(e.target.value) || 0))}
+                placeholder="e.g. 500"
+              />
+              <FormInput
+                label="Default Electricity Tariff (₹/Unit)"
+                id="defaultElectricityRatePerUnit"
+                type="number"
+                value={form.values.defaultElectricityRatePerUnit}
+                onChange={(e) => form.setValue('defaultElectricityRatePerUnit', Math.max(0, parseFloat(e.target.value) || 0))}
+                placeholder="e.g. 10.0"
+              />
+            </div>
+          </div>
+
           {/* Payment gateway settings */}
           <div className="sm:col-span-2 mt-2 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
             <div className="flex items-center gap-2">
@@ -306,6 +379,14 @@ export default function PropertiesPage() {
         typeToConfirm={deleteTarget?.name || ''}
         confirmLabel="Delete Property"
         loading={deleteMut.isPending}
+      />
+
+      <FeatureUpgradeDialog
+        open={upgradeDialogOpen}
+        onOpenChange={setUpgradeDialogOpen}
+        featureTitle="Property Portfolio Limit Reached"
+        featureDescription={`Your current plan (${planName}) allows up to ${maxProperties} property workspace(s). Upgrade your subscription to add more properties and campuses.`}
+        requiredTier={planFeatures.isStarter ? 'GROWTH' : 'ENTERPRISE'}
       />
     </div>
   );

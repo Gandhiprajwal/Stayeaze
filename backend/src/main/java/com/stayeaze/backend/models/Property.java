@@ -105,6 +105,36 @@ public class Property {
     @Column(name = "security_deposit", precision = 12, scale = 2)
     private java.math.BigDecimal securityDeposit = new java.math.BigDecimal("0");
 
+    @Column(name = "minimum_lock_in_months")
+    private Integer minimumLockInMonths = 3;
+
+    @Column(name = "notice_period_days")
+    private Integer noticePeriodDays = 30;
+
+    @Column(name = "default_exit_cleaning_fee", precision = 12, scale = 2)
+    private java.math.BigDecimal defaultExitCleaningFee = new java.math.BigDecimal("500.00");
+
+    @Column(name = "default_electricity_rate_per_unit", precision = 12, scale = 2)
+    private java.math.BigDecimal defaultElectricityRatePerUnit = new java.math.BigDecimal("10.00");
+
+    @Column(name = "emergency_hospital_phone", length = 50)
+    private String emergencyHospitalPhone = "108";
+
+    @Column(name = "emergency_police_phone", length = 50)
+    private String emergencyPolicePhone = "112";
+
+    @Column(name = "emergency_electrician_phone", length = 50)
+    private String emergencyElectricianPhone = "+91 98450 99881";
+
+    @Column(name = "emergency_plumber_phone", length = 50)
+    private String emergencyPlumberPhone = "+91 98450 99882";
+
+    @Column(name = "curfew_time", length = 50)
+    private String curfewTime = "10:30 PM";
+
+    @Column(name = "lost_key_penalty_fee", precision = 10, scale = 2)
+    private java.math.BigDecimal lostKeyPenaltyFee = new java.math.BigDecimal("200.00");
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "property_amenities", joinColumns = @JoinColumn(name = "property_id"))
     @Column(name = "amenity")
@@ -394,12 +424,18 @@ public class Property {
         this.razorpayKeyId = razorpayKeyId;
     }
 
+    @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
     public String getRazorpayKeySecret() {
         return razorpayKeySecret;
     }
 
     public void setRazorpayKeySecret(String razorpayKeySecret) {
         this.razorpayKeySecret = razorpayKeySecret;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("hasRazorpaySecret")
+    public boolean hasRazorpaySecret() {
+        return razorpayKeySecret != null && !razorpayKeySecret.isBlank();
     }
 
     public Integer getTotalBuildings() {
@@ -449,4 +485,54 @@ public class Property {
     public void setWifiNetworksJson(String wifiNetworksJson) {
         this.wifiNetworksJson = wifiNetworksJson;
     }
+
+    public Integer getMinimumLockInMonths() {
+        return minimumLockInMonths != null ? minimumLockInMonths : 3;
+    }
+
+    public void setMinimumLockInMonths(Integer minimumLockInMonths) {
+        this.minimumLockInMonths = minimumLockInMonths;
+    }
+
+    public Integer getNoticePeriodDays() {
+        return noticePeriodDays != null ? noticePeriodDays : 30;
+    }
+
+    public void setNoticePeriodDays(Integer noticePeriodDays) {
+        this.noticePeriodDays = noticePeriodDays;
+    }
+
+    public java.math.BigDecimal getDefaultExitCleaningFee() {
+        return defaultExitCleaningFee != null ? defaultExitCleaningFee : new java.math.BigDecimal("500.00");
+    }
+
+    public void setDefaultExitCleaningFee(java.math.BigDecimal defaultExitCleaningFee) {
+        this.defaultExitCleaningFee = defaultExitCleaningFee;
+    }
+
+    public java.math.BigDecimal getDefaultElectricityRatePerUnit() {
+        return defaultElectricityRatePerUnit != null ? defaultElectricityRatePerUnit : new java.math.BigDecimal("10.00");
+    }
+
+    public void setDefaultElectricityRatePerUnit(java.math.BigDecimal defaultElectricityRatePerUnit) {
+        this.defaultElectricityRatePerUnit = defaultElectricityRatePerUnit;
+    }
+
+    public String getEmergencyHospitalPhone() { return emergencyHospitalPhone != null ? emergencyHospitalPhone : "108"; }
+    public void setEmergencyHospitalPhone(String emergencyHospitalPhone) { this.emergencyHospitalPhone = emergencyHospitalPhone; }
+
+    public String getEmergencyPolicePhone() { return emergencyPolicePhone != null ? emergencyPolicePhone : "112"; }
+    public void setEmergencyPolicePhone(String emergencyPolicePhone) { this.emergencyPolicePhone = emergencyPolicePhone; }
+
+    public String getEmergencyElectricianPhone() { return emergencyElectricianPhone != null ? emergencyElectricianPhone : "+91 98450 99881"; }
+    public void setEmergencyElectricianPhone(String emergencyElectricianPhone) { this.emergencyElectricianPhone = emergencyElectricianPhone; }
+
+    public String getEmergencyPlumberPhone() { return emergencyPlumberPhone != null ? emergencyPlumberPhone : "+91 98450 99882"; }
+    public void setEmergencyPlumberPhone(String emergencyPlumberPhone) { this.emergencyPlumberPhone = emergencyPlumberPhone; }
+
+    public String getCurfewTime() { return curfewTime != null ? curfewTime : "10:30 PM"; }
+    public void setCurfewTime(String curfewTime) { this.curfewTime = curfewTime; }
+
+    public java.math.BigDecimal getLostKeyPenaltyFee() { return lostKeyPenaltyFee != null ? lostKeyPenaltyFee : new java.math.BigDecimal("200.00"); }
+    public void setLostKeyPenaltyFee(java.math.BigDecimal lostKeyPenaltyFee) { this.lostKeyPenaltyFee = lostKeyPenaltyFee; }
 }

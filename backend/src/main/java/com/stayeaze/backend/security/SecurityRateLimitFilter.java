@@ -8,19 +8,24 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+
 import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 public class SecurityRateLimitFilter extends OncePerRequestFilter {
 
     private static final int AUTH_MAX_ATTEMPTS_PER_MINUTE = 15;
-    private final Map<String, RateTracker> rateLimitMap = new ConcurrentHashMap<>();
+    private final Cache<String, RateTracker> rateLimitCache = Caffeine.newBuilder()
+            .maximumSize(50_000)
+            .expireAfterWrite(2, TimeUnit.MINUTES)
+            .build();
 
     public void clearRateLimits() {
-        rateLimitMap.clear();
+        rateLimitCache.invalidateAll();
     }
 
     private static class RateTracker {
@@ -74,15 +79,14 @@ public class SecurityRateLimitFilter extends OncePerRequestFilter {
             final String finalIp = clientIp;
             long now = System.currentTimeMillis();
 
-            rateLimitMap.compute(finalIp, (key, tracker) -> {
-                if (tracker == null || now > tracker.resetTime) {
+            RateTracker tracker = rateLimitCache.asMap().compute(finalIp, (key, existing) -> {
+                if (existing == null || now > existing.resetTime) {
                     return new RateTracker(now + 60000); // 1 minute window
                 }
-                tracker.count.incrementAndGet();
-                return tracker;
+                existing.count.incrementAndGet();
+                return existing;
             });
 
-            RateTracker tracker = rateLimitMap.get(finalIp);
             if (tracker != null && tracker.count.get() > AUTH_MAX_ATTEMPTS_PER_MINUTE) {
                 long remainingSeconds = Math.max(1, (tracker.resetTime - now) / 1000);
                 response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());

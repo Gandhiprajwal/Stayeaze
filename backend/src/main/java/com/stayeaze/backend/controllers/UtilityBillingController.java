@@ -23,6 +23,7 @@ public class UtilityBillingController {
 
     @GetMapping("/properties/{propertyId}/stats")
     @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('SUPER_ADMIN') or hasRole('PROPERTY_MANAGER') or hasRole('ACCOUNTANT')")
+    @org.springframework.cache.annotation.Cacheable(value = "utility_stats", key = "#propertyId.toString() + '_' + (#buildingId != null ? #buildingId.toString() : 'all') + '_' + (#month != null ? #month : 'm') + '_' + (#year != null ? #year : 'y')")
     public ResponseEntity<?> getPropertyUtilityStats(
             @PathVariable UUID propertyId,
             @RequestParam(required = false) UUID buildingId,
@@ -71,6 +72,7 @@ public class UtilityBillingController {
 
     @PostMapping("/properties/{propertyId}/bulk-record-readings")
     @PreAuthorize("hasRole('ADMIN') or hasRole('OWNER') or hasRole('SUPER_ADMIN') or hasRole('PROPERTY_MANAGER') or hasRole('ACCOUNTANT')")
+    @org.springframework.cache.annotation.CacheEvict(value = "utility_stats", allEntries = true)
     public ResponseEntity<?> bulkRecordReadings(
             @PathVariable UUID propertyId,
             @RequestBody Map<String, Object> payload) {

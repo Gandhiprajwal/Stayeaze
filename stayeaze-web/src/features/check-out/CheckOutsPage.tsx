@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogOut, Plus, Trash2, BadgeCheck, DollarSign, Calendar, CreditCard, Wallet, Building2, CheckCircle2, Clock, Copy, Check, AlertTriangle } from 'lucide-react';
+import { LogOut, Plus, Trash2, BadgeCheck, DollarSign, Calendar, CreditCard, Wallet, Building2, CheckCircle2, Clock, Copy, Check, AlertTriangle, ShieldCheck, Undo2, RotateCcw } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -17,13 +17,14 @@ import {
 } from '@/components/ui/select';
 import api from '@/lib/api';
 import type { CheckOut, Property, Room, Bed, Tenant } from '@/lib/types';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, getTodayIsoDate } from '@/lib/format';
 import { useCreate, useDelete, useUpdate, useForm } from '@/lib/hooks/use-crud';
 import { useAuthStore } from '@/lib/stores/auth-store';
 
 import { TenantSelect } from '@/components/common/TenantSelect';
 import { SearchableSelect } from '@/components/common/SearchableSelect';
 import { RoomSelect } from '@/components/common/RoomSelect';
+import NoDuesCertificateModal from './NoDuesCertificateModal';
 
 const ENDPOINT = '/check-outs';
 const statuses = [{ value: 'notice_period', label: 'Notice Period' }, { value: 'pending', label: 'Pending' }, { value: 'completed', label: 'Completed' }];
@@ -31,7 +32,7 @@ const reasons = ['Relocating', 'Lease ended', 'Personal', 'Job change', 'Upgrade
 
 const emptyForm = {
   tenantName: '', propertyId: '', roomNumber: '', bedNumber: 'B1',
-  checkOutDate: new Date().toISOString().slice(0, 10), noticeDate: new Date().toISOString().slice(0, 10),
+  checkOutDate: getTodayIsoDate(), noticeDate: getTodayIsoDate(),
   depositRefund: 0, deductions: 0, reason: 'Lease ended', status: 'notice_period' as CheckOut['status'],
   beneficiaryUpi: '', beneficiaryAccount: '', beneficiaryIfsc: '', beneficiaryBank: '',
 };
@@ -57,11 +58,48 @@ export default function CheckOutsPage() {
   const [beneficiaryBank, setBeneficiaryBank] = useState('');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [approvingRefund, setApprovingRefund] = useState(false);
-  const [effectiveCheckOutDate, setEffectiveCheckOutDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [effectiveCheckOutDate, setEffectiveCheckOutDate] = useState<string>(getTodayIsoDate());
   const [completing, setCompleting] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [selectedTenantId, setSelectedTenantId] = useState('');
   const [tenantSearch, setTenantSearch] = useState('');
+  const [viewCertCheckOutId, setViewCertCheckOutId] = useState<string | null>(null);
+
+  const [retractNoticeTarget, setRetractNoticeTarget] = useState<CheckOut | null>(null);
+  const [isRetractingNotice, setIsRetractingNotice] = useState(false);
+
+  const [undoCheckOutTarget, setUndoCheckOutTarget] = useState<CheckOut | null>(null);
+  const [isUndoingCheckOut, setIsUndoingCheckOut] = useState(false);
+
+  async function handleRetractNotice() {
+    if (!retractNoticeTarget) return;
+    setIsRetractingNotice(true);
+    try {
+      await api.post(`/check-outs/${retractNoticeTarget.id}/retract-notice`);
+      toast.success(`Move-out notice retracted for ${retractNoticeTarget.tenantName}. Lease restored to active.`);
+      queryClient.invalidateQueries();
+      setRetractNoticeTarget(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to retract notice.');
+    } finally {
+      setIsRetractingNotice(false);
+    }
+  }
+
+  async function handleUndoCheckOut() {
+    if (!undoCheckOutTarget) return;
+    setIsUndoingCheckOut(true);
+    try {
+      const res = await api.post(`/check-outs/${undoCheckOutTarget.id}/undo-checkout`);
+      toast.success(res?.data?.message || `Check-out rolled back for ${undoCheckOutTarget.tenantName}. Resident restored to active.`);
+      queryClient.invalidateQueries();
+      setUndoCheckOutTarget(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to rollback check-out.');
+    } finally {
+      setIsUndoingCheckOut(false);
+    }
+  }
 
   const { data: properties } = useQuery({
     queryKey: ['checkouts-properties-minimal'],
@@ -151,7 +189,7 @@ export default function CheckOutsPage() {
   function openCompleteModal(row: CheckOut) {
     if (!canChangeStatus) return;
     setCompleteTarget(row);
-    setEffectiveCheckOutDate(row.checkOutDate || new Date().toISOString().slice(0, 10));
+    setEffectiveCheckOutDate(row.checkOutDate || getTodayIsoDate());
   }
 
   async function handleCompleteCheckOut() {
@@ -341,6 +379,15 @@ export default function CheckOutsPage() {
           <RowActions items={[
             ...(row.status !== 'completed' && canChangeStatus ? [{
               label: 'Mark Checked Out (Archive)', icon: LogOut, onSelect: () => openCompleteModal(row)
+            }] : []),
+            ...(row.status !== 'completed' ? [{
+              label: 'Retract Notice (Extend Lease)', icon: Undo2, onSelect: () => setRetractNoticeTarget(row)
+            }] : []),
+            ...(row.status === 'completed' ? [{
+              label: 'View No-Dues Certificate (NOC)', icon: ShieldCheck, onSelect: () => setViewCertCheckOutId(row.id)
+            }] : []),
+            ...(row.status === 'completed' && row.refundStatus !== 'REFUNDED' ? [{
+              label: 'Undo Check-Out (Rollback)', icon: RotateCcw, onSelect: () => setUndoCheckOutTarget(row)
             }] : []),
             ...(row.status === 'completed' && row.refundStatus !== 'REFUNDED' && canApproveRefund ? [{
               label: 'Approve & Settle Refund', icon: DollarSign, onSelect: () => openRefundModal(row)
@@ -733,6 +780,36 @@ export default function CheckOutsPage() {
 
       <ConfirmDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)} title="Delete Check-out" variant="destructive"
         description={`Delete check-out record "${deleteTarget?.code}"?`} confirmLabel="Delete" onConfirm={confirmDelete} loading={deleteMut.isPending} />
+
+      {/* Retract Move-Out Notice Dialog (P1.2) */}
+      <ConfirmDialog
+        open={!!retractNoticeTarget}
+        onOpenChange={(o) => !o && setRetractNoticeTarget(null)}
+        title="Retract Move-Out Notice (Extend Lease)"
+        description={`Are you sure you want to retract the move-out notice for "${retractNoticeTarget?.tenantName}"? This will cancel the scheduled checkout, clear the lease end date, and keep the resident active.`}
+        confirmLabel="Retract Notice & Keep Resident"
+        onConfirm={handleRetractNotice}
+        loading={isRetractingNotice}
+      />
+
+      {/* Undo Accidental Check-Out Rollback Dialog (P1.3) */}
+      <ConfirmDialog
+        open={!!undoCheckOutTarget}
+        onOpenChange={(o) => !o && setUndoCheckOutTarget(null)}
+        title="Undo Check-Out (Rollback Move-Out)"
+        description={`Are you sure you want to rollback the checkout for "${undoCheckOutTarget?.tenantName}"? This will restore the resident to ACTIVE status and re-occupy Room ${undoCheckOutTarget?.roomNumber || '-'}, Bed ${undoCheckOutTarget?.bedNumber || '-'} if available.`}
+        confirmLabel="Undo Check-Out & Restore Resident"
+        onConfirm={handleUndoCheckOut}
+        loading={isUndoingCheckOut}
+      />
+
+      {viewCertCheckOutId && (
+        <NoDuesCertificateModal
+          isOpen={!!viewCertCheckOutId}
+          checkOutId={viewCertCheckOutId}
+          onClose={() => setViewCertCheckOutId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -26,7 +26,11 @@ public class IdempotencyFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(IdempotencyFilter.class);
 
     // Thread-safe TTL cache for in-flight and recently completed idempotency keys
-    private static final Map<String, Long> keyTimestampMap = new ConcurrentHashMap<>();
+    private static final com.github.benmanes.caffeine.cache.Cache<String, Long> keyTimestampCache = 
+            com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+                    .maximumSize(20_000)
+                    .expireAfterWrite(2, java.util.concurrent.TimeUnit.MINUTES)
+                    .build();
     private static final long EXPIRATION_WINDOW_MS = 120_000L; // 2 minutes
 
     @Override
@@ -47,12 +51,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
                 String cleanKey = uri + ":" + idempotencyKey.trim();
                 long now = System.currentTimeMillis();
 
-                // Clean up expired keys periodically
-                if (keyTimestampMap.size() > 5000) {
-                    keyTimestampMap.entrySet().removeIf(entry -> (now - entry.getValue()) > EXPIRATION_WINDOW_MS);
-                }
-
-                Long previousTimestamp = keyTimestampMap.putIfAbsent(cleanKey, now);
+                Long previousTimestamp = keyTimestampCache.asMap().putIfAbsent(cleanKey, now);
                 if (previousTimestamp != null) {
                     long elapsed = now - previousTimestamp;
                     if (elapsed < EXPIRATION_WINDOW_MS) {
@@ -69,7 +68,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
                         return;
                     } else {
                         // Key expired; refresh timestamp
-                        keyTimestampMap.put(cleanKey, now);
+                        keyTimestampCache.put(cleanKey, now);
                     }
                 }
             }

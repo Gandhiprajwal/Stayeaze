@@ -54,10 +54,14 @@ export default function PropertyDetailPage() {
   const [restoring, setRestoring] = useState(false);
   const updateMut = useUpdate<Property>('/properties', 'Property');
   const deleteMut = useDelete('/properties', 'Property');
-  const canManage = isSuperAdmin || (user?.role as string) === 'OWNER' || (user?.role as string) === 'ADMIN' || (user?.role as string) === 'PROPERTY_MANAGER';
+  const canManage = isSuperAdmin || (user?.role as string) === 'OWNER' || (user?.role as string) === 'ADMIN';
   const form = useForm({
     name: '', code: '', type: 'PG' as Property['type'], address: '', city: '', state: '', pincode: '',
     manager: '', phone: '', email: '', status: 'active' as Property['status'],
+    minimumLockInMonths: 3,
+    noticePeriodDays: 30,
+    defaultExitCleaningFee: 500,
+    defaultElectricityRatePerUnit: 10.0,
     razorpayKeyId: '', razorpayKeySecret: ''
   });
 
@@ -65,6 +69,11 @@ export default function PropertyDetailPage() {
     queryKey: ['/properties', id],
     queryFn: () => api.get<Property>(`/properties/${id}`).then((r) => r.data),
     enabled: !!id,
+  });
+
+  const { data: orgProfile } = useQuery({
+    queryKey: ['org-billing-profile'],
+    queryFn: () => api.get('/organization-billing-profile').then((r) => r.data).catch(() => null),
   });
 
   async function handleRestore() {
@@ -210,6 +219,10 @@ export default function PropertyDetailPage() {
       name: property.name, code: property.code, type: property.type, address: property.address,
       city: property.city, state: property.state, pincode: property.pincode, manager: property.manager,
       phone: property.phone, email: property.email, status: property.status,
+      minimumLockInMonths: (property as any).minimumLockInMonths ?? orgProfile?.minimumLockInMonths ?? 3,
+      noticePeriodDays: (property as any).noticePeriodDays ?? orgProfile?.noticePeriodDays ?? 30,
+      defaultExitCleaningFee: (property as any).defaultExitCleaningFee ?? orgProfile?.defaultExitCleaningFee ?? 500,
+      defaultElectricityRatePerUnit: (property as any).defaultElectricityRatePerUnit ?? orgProfile?.defaultElectricityRatePerUnit ?? 10.0,
       razorpayKeyId: property.razorpayKeyId ?? '',
       razorpayKeySecret: property.razorpayKeySecret ?? ''
     });
@@ -326,6 +339,32 @@ export default function PropertyDetailPage() {
               </div>
               <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
                 <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${occRate}%` }} />
+              </div>
+            </div>
+            <Separator />
+            {/* Lease & Settlement Policies Card */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Lease &amp; Settlement Policies</h4>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2 rounded-lg bg-muted/50 border border-border/50">
+                  <p className="text-[10px] text-muted-foreground">Lock-In Period</p>
+                  <p className="font-semibold">{Number(((property as any).minimumLockInMonths ?? orgProfile?.minimumLockInMonths ?? 3)) > 0 ? `${(property as any).minimumLockInMonths ?? orgProfile?.minimumLockInMonths ?? 3} Months` : 'Monthly Rolling'}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-muted/50 border border-border/50">
+                  <p className="text-[10px] text-muted-foreground">Notice Period</p>
+                  <p className="font-semibold">{(property as any).noticePeriodDays ?? orgProfile?.noticePeriodDays ?? 30} Days</p>
+                </div>
+                <div className="p-2 rounded-lg bg-muted/50 border border-border/50">
+                  <p className="text-[10px] text-muted-foreground">Exit Cleaning Fee</p>
+                  <p className="font-semibold">₹{(property as any).defaultExitCleaningFee ?? orgProfile?.defaultExitCleaningFee ?? 500}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-muted/50 border border-border/50">
+                  <p className="text-[10px] text-muted-foreground">Electricity Tariff</p>
+                  <p className="font-semibold">₹{(property as any).defaultElectricityRatePerUnit ?? orgProfile?.defaultElectricityRatePerUnit ?? 10.0}/unit</p>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -542,6 +581,51 @@ export default function PropertyDetailPage() {
           <FormInput label="Manager" id="manager" value={form.values.manager} onChange={(e) => form.setValue('manager', e.target.value)} />
           <FormInput label="Phone" id="phone" value={form.values.phone} onChange={(e) => form.setValue('phone', e.target.value)} />
           <FormInput label="Email" type="email" id="email" value={form.values.email} onChange={(e) => form.setValue('email', e.target.value)} />
+
+          {/* Lease Terms & Operational Settlement Policy (P3.3) */}
+          <div className="sm:col-span-2 mt-2 pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-indigo-500" />
+              <h4 className="text-sm font-bold">Lease Terms &amp; Settlement Policies</h4>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Configure contractual lock-in duration, notice period, exit cleaning fees, and electricity tariff for this property.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormInput
+                label="Minimum Lock-In Period (Months)"
+                id="minimumLockInMonths"
+                type="number"
+                value={form.values.minimumLockInMonths}
+                onChange={(e) => form.setValue('minimumLockInMonths', Math.max(0, parseInt(e.target.value) || 0))}
+                placeholder="e.g. 3 (0 for monthly rolling)"
+              />
+              <FormInput
+                label="Required Notice Period (Days)"
+                id="noticePeriodDays"
+                type="number"
+                value={form.values.noticePeriodDays}
+                onChange={(e) => form.setValue('noticePeriodDays', Math.max(0, parseInt(e.target.value) || 0))}
+                placeholder="e.g. 30"
+              />
+              <FormInput
+                label="Default Exit Cleaning Fee (₹)"
+                id="defaultExitCleaningFee"
+                type="number"
+                value={form.values.defaultExitCleaningFee}
+                onChange={(e) => form.setValue('defaultExitCleaningFee', Math.max(0, parseFloat(e.target.value) || 0))}
+                placeholder="e.g. 500"
+              />
+              <FormInput
+                label="Default Electricity Tariff (₹/Unit)"
+                id="defaultElectricityRatePerUnit"
+                type="number"
+                value={form.values.defaultElectricityRatePerUnit}
+                onChange={(e) => form.setValue('defaultElectricityRatePerUnit', Math.max(0, parseFloat(e.target.value) || 0))}
+                placeholder="e.g. 10.0"
+              />
+            </div>
+          </div>
           {!isSuperAdmin ? (
             <>
               <div className="sm:col-span-2 border-t pt-3 mt-1">

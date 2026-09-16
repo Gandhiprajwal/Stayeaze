@@ -3,6 +3,7 @@ package com.stayeaze.backend.controllers;
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.payload.response.JwtResponse;
 import com.stayeaze.backend.payload.response.MessageResponse;
+import com.stayeaze.backend.payload.response.MinimalSubscriberDTO;
 import com.stayeaze.backend.payload.response.PageResponse;
 import com.stayeaze.backend.repository.*;
 import com.stayeaze.backend.security.jwt.JwtUtils;
@@ -69,6 +70,7 @@ public class SuperAdminSubscriberController {
 
     @GetMapping("/stats")
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    @org.springframework.cache.annotation.Cacheable(value = "superadmin_subscriber_stats", key = "'global'")
     public ResponseEntity<?> getSubscriberStats() {
         Map<String, Long> statusCounts = new HashMap<>();
         long total = 0;
@@ -114,6 +116,18 @@ public class SuperAdminSubscriberController {
         return ResponseEntity.ok(stats);
     }
 
+
+    @GetMapping("/minimal")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('SUPPORT') or hasRole('ADMIN')")
+    @org.springframework.cache.annotation.Cacheable(value = "superadmin_subscribers_minimal", key = "'global'")
+    public ResponseEntity<List<MinimalSubscriberDTO>> getMinimalSubscribers() {
+        List<Organization> orgs = organizationRepository.findAll();
+        List<MinimalSubscriberDTO> dtos = orgs.stream()
+                .filter(Objects::nonNull)
+                .map(MinimalSubscriberDTO::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
+    }
 
     @GetMapping
     public ResponseEntity<?> getAllSubscribers(
@@ -261,8 +275,8 @@ public class SuperAdminSubscriberController {
                 String billingCycle = "MONTHLY";
                 String orgStatus = org.getStatus() != null ? org.getStatus() : "ACTIVE";
                 String paymentId = null;
-                String orderId = null;
-                String gstin = null;
+                // String orderId = null;
+                // String gstin = null;
 
                 if (profile != null) {
                     if (profile.getSubscriptionPlanName() != null && !profile.getSubscriptionPlanName().isBlank()) {
@@ -285,8 +299,8 @@ public class SuperAdminSubscriberController {
                         orgStatus = "EXPIRED";
                     }
                     paymentId = profile.getSubscriptionPaymentId();
-                    orderId = profile.getSubscriptionOrderId();
-                    gstin = profile.getGstin();
+                    // orderId = profile.getSubscriptionOrderId();
+                    // gstin = profile.getGstin();
                 }
 
                 item.put("planName", planName);
@@ -391,6 +405,9 @@ public class SuperAdminSubscriberController {
     @Autowired
     private AuditLogRepository auditLogRepository;
 
+    @Autowired
+    private com.stayeaze.backend.services.PropertyService propertyService;
+
     @GetMapping("/{orgId}/overview")
     public ResponseEntity<?> getSubscriberOverview(@PathVariable UUID orgId) {
         Organization org = organizationRepository.findById(orgId)
@@ -399,9 +416,10 @@ public class SuperAdminSubscriberController {
         OrganizationBillingProfile bp = organizationBillingProfileRepository.findByOrganization(org)
                 .orElseGet(() -> new OrganizationBillingProfile(org));
 
-        // 1. Fetch Properties under this Organization via Native query
+        // 1. Fetch Properties under this Organization via Native query & dynamically populate space stats
         List<Property> properties = propertyRepository.findByOrganizationIdNative(org.getId());
         if (properties == null) properties = Collections.emptyList();
+        properties = propertyService.populatePropertiesStats(properties);
 
         List<Map<String, Object>> propertiesList = new ArrayList<>();
         int totalOrgRooms = 0;

@@ -34,6 +34,9 @@ public class Payment {
     @Column(length = 50)
     private String status = "COMPLETED"; // COMPLETED, FAILED, REFUNDED
 
+    @Column(name = "receipt_number", length = 50)
+    private String receiptNumber;
+
     @Column(name = "receipt_url", length = 255)
     private String receiptUrl;
 
@@ -108,5 +111,27 @@ public class Payment {
 
     public void setReceiptUrl(String receiptUrl) {
         this.receiptUrl = receiptUrl;
+    }
+
+    public String getReceiptNumber() {
+        return receiptNumber;
+    }
+
+    public void setReceiptNumber(String receiptNumber) {
+        this.receiptNumber = receiptNumber;
+    }
+
+    public String getRazorpayPaymentId() {
+        if (this.transactionReference != null && (this.transactionReference.startsWith("pay_") || "RAZORPAY".equalsIgnoreCase(this.paymentMethod))) {
+            return this.transactionReference;
+        }
+        if (this.invoice != null && this.invoice.getRazorpayPaymentId() != null) {
+            return this.invoice.getRazorpayPaymentId();
+        }
+        return null;
+    }
+
+    public void setRazorpayPaymentId(String razorpayPaymentId) {
+        this.transactionReference = razorpayPaymentId;
     }
 }

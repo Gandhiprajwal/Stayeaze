@@ -1,6 +1,5 @@
 package com.stayeaze.backend.controllers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.repository.*;
 import com.stayeaze.backend.security.services.UserDetailsImpl;

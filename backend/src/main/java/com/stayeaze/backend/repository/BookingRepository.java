@@ -30,5 +30,10 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("SELECT DISTINCT b.tenant FROM Booking b WHERE b.bed.room.id = :roomId AND (b.status = 'CONFIRMED' OR b.status = 'CHECKED_IN' OR b.status = 'ACTIVE') AND (b.tenant.status IS NULL OR UPPER(b.tenant.status) = 'ACTIVE')")
     List<Tenant> findActiveTenantsByRoomId(@Param("roomId") UUID roomId);
 
+    @Query("SELECT COUNT(b) FROM Booking b WHERE b.tenant.organization.id = :orgId")
+    long countByOrganizationId(@Param("orgId") UUID orgId);
+
+    boolean existsByBookingCode(String bookingCode);
+
     Page<Booking> findAll(Pageable pageable);
 }

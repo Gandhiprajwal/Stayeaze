@@ -26,6 +26,11 @@ public class CheckInDTO {
     private String paymentMethod;
     private String razorpayPaymentId;
     private String razorpayOrderId;
+    private String keyTagNumber;
+    private BigDecimal initialMeterReading;
+    private String vehicleNumber;
+    private Boolean welcomeKitHandedOver;
+    private String checkedInBy;
     private OffsetDateTime createdAt;
 
     public CheckInDTO() {}
@@ -51,6 +56,11 @@ public class CheckInDTO {
         dto.setTenantPhone(c.getTenantPhone());
         dto.setPaymentMethod(c.getPaymentMethod());
         dto.setRazorpayPaymentId(c.getRazorpayPaymentId());
+        dto.setKeyTagNumber(c.getKeyTagNumber());
+        dto.setInitialMeterReading(c.getInitialMeterReading());
+        dto.setVehicleNumber(c.getVehicleNumber());
+        dto.setWelcomeKitHandedOver(c.getWelcomeKitHandedOver() != null ? c.getWelcomeKitHandedOver() : true);
+        dto.setCheckedInBy(c.getCheckedInBy());
         dto.setCreatedAt(c.getCreatedAt());
         return dto;
     }
@@ -111,6 +121,21 @@ public class CheckInDTO {
 
     public String getRazorpayOrderId() { return razorpayOrderId; }
     public void setRazorpayOrderId(String razorpayOrderId) { this.razorpayOrderId = razorpayOrderId; }
+
+    public String getKeyTagNumber() { return keyTagNumber; }
+    public void setKeyTagNumber(String keyTagNumber) { this.keyTagNumber = keyTagNumber; }
+
+    public BigDecimal getInitialMeterReading() { return initialMeterReading; }
+    public void setInitialMeterReading(BigDecimal initialMeterReading) { this.initialMeterReading = initialMeterReading; }
+
+    public String getVehicleNumber() { return vehicleNumber; }
+    public void setVehicleNumber(String vehicleNumber) { this.vehicleNumber = vehicleNumber; }
+
+    public Boolean getWelcomeKitHandedOver() { return welcomeKitHandedOver; }
+    public void setWelcomeKitHandedOver(Boolean welcomeKitHandedOver) { this.welcomeKitHandedOver = welcomeKitHandedOver; }
+
+    public String getCheckedInBy() { return checkedInBy; }
+    public void setCheckedInBy(String checkedInBy) { this.checkedInBy = checkedInBy; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }

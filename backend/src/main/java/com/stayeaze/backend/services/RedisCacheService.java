@@ -7,11 +7,12 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 
-import java.util.Arrays;
 import java.util.Collection;
 
+import com.stayeaze.backend.services.interfaces.IRedisCacheService;
+
 @Service
-public class RedisCacheService {
+public class RedisCacheService implements IRedisCacheService {
 
     private static final Logger logger = LoggerFactory.getLogger(RedisCacheService.class);
 

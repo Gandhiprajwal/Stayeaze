@@ -164,7 +164,7 @@ public class FiftyOrgMultiTenantConcurrentLoadTest {
         Role ownerRole = roleRepository.findByName("OWNER")
                 .orElseGet(() -> roleRepository.saveAndFlush(new Role("OWNER", "{}")));
 
-        SaaSPlan plan = saasPlanRepository.findByPlanKey("ENTERPRISE").orElseGet(() -> {
+        saasPlanRepository.findByPlanKey("ENTERPRISE").orElseGet(() -> {
             SaaSPlan p = new SaaSPlan("ENTERPRISE", "Enterprise Plan", BigDecimal.valueOf(9999),
                     BigDecimal.valueOf(99999), 50, 5000, 10, true, true, "MONTHLY");
             return saasPlanRepository.saveAndFlush(p);

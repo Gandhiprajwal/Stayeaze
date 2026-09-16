@@ -5,6 +5,7 @@ import com.stayeaze.backend.models.Organization;
 import com.stayeaze.backend.models.Property;
 import com.stayeaze.backend.payload.request.BuildingRequest;
 import com.stayeaze.backend.payload.response.BuildingDTO;
+import com.stayeaze.backend.payload.response.MinimalBuildingDTO;
 import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.repository.BuildingRepository;
 import com.stayeaze.backend.repository.OrganizationRepository;
@@ -215,6 +216,31 @@ public class BuildingController {
             buildings.forEach(this::populateBuildingStats);
         }
         List<BuildingDTO> dtos = buildings.stream().map(BuildingDTO::fromEntity).collect(Collectors.toList());
+        return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/buildings/minimal")
+    public ResponseEntity<List<MinimalBuildingDTO>> getMinimalBuildings(@RequestParam(required = false) UUID propertyId) {
+        boolean isSuperAdmin = securityUtils.isSuperAdmin();
+        Organization organization = !isSuperAdmin ? getLoggedUserOrg() : null;
+        Set<UUID> assignedProps = securityUtils.getAssignedPropertyIds();
+
+        List<Building> buildings;
+        if (propertyId != null) {
+            buildings = buildingRepository.findByPropertyId(propertyId);
+        } else if (isSuperAdmin || organization == null) {
+            buildings = buildingRepository.findAll();
+        } else {
+            buildings = buildingRepository.findByOrganizationId(organization.getId());
+        }
+
+        List<MinimalBuildingDTO> dtos = buildings.stream()
+                .filter(b -> b.getProperty() != null)
+                .filter(b -> assignedProps == null || assignedProps.contains(b.getProperty().getId()))
+                .filter(b -> propertyId == null || propertyId.equals(b.getProperty().getId()))
+                .map(MinimalBuildingDTO::fromEntity)
+                .collect(Collectors.toList());
+
         return ResponseEntity.ok(dtos);
     }
 

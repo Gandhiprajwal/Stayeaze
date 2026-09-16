@@ -106,11 +106,30 @@ public class OrganizationBillingProfileController {
         profile.setSupportEmail(request.getSupportEmail());
         profile.setSupportPhone(request.getSupportPhone());
         profile.setGstin(request.getGstin());
-        profile.setPan(request.getPan());
+        if (request.getPan() != null && !request.getPan().trim().isEmpty()) {
+            profile.setPan(request.getPan());
+        } else if (request.getGstin() != null && request.getGstin().trim().length() == 15) {
+            profile.setPan(request.getGstin().trim().substring(2, 12).toUpperCase());
+        }
         profile.setRegistrationNumber(request.getRegistrationNumber());
         profile.setInvoicePrefix(request.getInvoicePrefix() == null || request.getInvoicePrefix().isBlank() ? "INV" : request.getInvoicePrefix().trim().toUpperCase());
         profile.setPaymentDueDays(request.getPaymentDueDays() == null || request.getPaymentDueDays() < 0 ? 7 : request.getPaymentDueDays());
         profile.setDefaultSecurityDeposit(request.getDefaultSecurityDeposit() != null && request.getDefaultSecurityDeposit().compareTo(java.math.BigDecimal.ZERO) >= 0 ? request.getDefaultSecurityDeposit() : java.math.BigDecimal.ZERO);
+        if (request.getOnboardingBillingPolicy() != null && !request.getOnboardingBillingPolicy().isBlank()) {
+            profile.setOnboardingBillingPolicy(request.getOnboardingBillingPolicy().trim().toUpperCase());
+        }
+        if (request.getMinimumLockInMonths() != null) {
+            profile.setMinimumLockInMonths(request.getMinimumLockInMonths());
+        }
+        if (request.getNoticePeriodDays() != null) {
+            profile.setNoticePeriodDays(request.getNoticePeriodDays());
+        }
+        if (request.getDefaultExitCleaningFee() != null) {
+            profile.setDefaultExitCleaningFee(request.getDefaultExitCleaningFee());
+        }
+        if (request.getDefaultElectricityRatePerUnit() != null) {
+            profile.setDefaultElectricityRatePerUnit(request.getDefaultElectricityRatePerUnit());
+        }
         profile.setLateFeeNote(request.getLateFeeNote());
         profile.setBankAccountName(request.getBankAccountName());
         profile.setBankName(request.getBankName());

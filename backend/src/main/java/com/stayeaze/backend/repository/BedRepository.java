@@ -38,6 +38,9 @@ public interface BedRepository extends JpaRepository<Bed, UUID> {
            countQuery = "SELECT count(b) FROM Bed b WHERE b.room.floor.building.property.organization.id = :orgId")
     Page<Bed> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
+    @Query("SELECT b FROM Bed b LEFT JOIN FETCH b.room r LEFT JOIN FETCH r.floor f WHERE LOWER(r.roomNumber) = LOWER(:roomNumber) AND LOWER(b.bedNumber) = LOWER(:bedNumber) AND r.floor.building.property.organization.id = :orgId")
+    Optional<Bed> findByRoomNumberAndBedNumberAndOrgId(@Param("roomNumber") String roomNumber, @Param("bedNumber") String bedNumber, @Param("orgId") UUID orgId);
+
     @Query("SELECT b FROM Bed b LEFT JOIN FETCH b.room r LEFT JOIN FETCH r.floor f LEFT JOIN FETCH f.building bl LEFT JOIN FETCH bl.property p ORDER BY b.bedNumber ASC")
     List<Bed> findAllSuperAdmin();
 

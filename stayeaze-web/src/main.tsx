@@ -14,8 +14,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false, // Prevents redundant background requests on window focus
-      staleTime: 1000 * 60 * 5,    // Serve from cache without refetching for 5 minutes
-      gcTime: 1000 * 60 * 30,       // Retain unused cache entries in memory for 30 minutes
+      staleTime: 1000 * 60 * 2,    // Serve from cache without refetching for 2 minutes
+      gcTime: 1000 * 60 * 5,       // Garbage-collect inactive cache entries after 5 minutes
       retry: 1,
     },
   },

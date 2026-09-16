@@ -22,7 +22,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     @Query("SELECT i FROM Invoice i JOIN FETCH i.tenant t WHERE t.organization.id = :orgId")
     List<Invoice> findByOrganizationId(@Param("orgId") UUID orgId);
 
-    @Query("SELECT i FROM Invoice i JOIN FETCH i.tenant t WHERE t.organization.id = :orgId")
+    @Query(value = "SELECT i FROM Invoice i JOIN FETCH i.tenant t WHERE t.organization.id = :orgId",
+           countQuery = "SELECT count(i) FROM Invoice i WHERE i.tenant.organization.id = :orgId")
     Page<Invoice> findByOrganizationId(@Param("orgId") UUID orgId, Pageable pageable);
 
     @Query("SELECT COUNT(i) FROM Invoice i WHERE i.tenant.propertyId = :propertyId AND i.issueDate >= :startDate AND i.issueDate <= :endDate")

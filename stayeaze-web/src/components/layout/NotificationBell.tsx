@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Bell, AlertTriangle, MessageSquareWarning, CalendarCheck,
   Server, UserPlus, Package, Users, Wrench, CheckCircle2,
-  DollarSign, ShieldAlert, CheckCheck, Clock, LifeBuoy
+  DollarSign, ShieldAlert, CheckCheck, Clock, LifeBuoy, Sparkles
 } from 'lucide-react';
 
 import {
@@ -217,11 +217,19 @@ export function NotificationBell() {
     enabled: isReceptionist || isSecurity,
   });
 
-  // Receptionist Parcels
+  // Parcels for Staff / Reception / Owner / Tenant
   const { data: parcels } = useQuery({
     queryKey: ['notif', 'parcels'],
-    queryFn: () => api.get<any>('/parcels').then((r) => Array.isArray(r.data) ? r.data : []),
-    enabled: isReceptionist,
+    queryFn: () => api.get<any>('/parcels').then((r) => Array.isArray(r.data) ? r.data : []).catch(() => []),
+    enabled: isReceptionist || isOwnerOrAdmin || isPropertyManager || isSecurity || isTenant,
+  });
+
+  // Announcements & Notification Broadcasts
+  const { data: announcementLogs } = useQuery({
+    queryKey: ['notif', 'announcements'],
+    queryFn: () => api.get<any[]>('/notification-logs').then((r) => Array.isArray(r.data) ? r.data : []).catch(() => []),
+    enabled: !!user,
+    refetchInterval: 45000,
   });
 
   // Tenant Invoices & Complaints
@@ -248,6 +256,23 @@ export function NotificationBell() {
   // --- ASSEMBLE ROLE-TAILORED ALERTS ---
   const alerts: AlertItem[] = useMemo(() => {
     const list: AlertItem[] = [];
+
+    // 0. BROADCAST ANNOUNCEMENTS & SYSTEM NOTICES
+    if (Array.isArray(announcementLogs) && announcementLogs.length > 0) {
+      announcementLogs.slice(0, 3).forEach((log: any) => {
+        const isUrgent = (log.messageContent || '').includes('URGENT') || (log.messageContent || '').includes('CRITICAL');
+        const isHigh = (log.messageContent || '').includes('HIGH') || (log.messageContent || '').includes('IMPORTANT');
+        list.push({
+          id: `announcement-${log.id}`,
+          icon: Sparkles,
+          title: log.recipient === 'ALL_USERS' ? '📢 Platform Notice' : `🔔 Alert (${log.type || 'Notice'})`,
+          description: log.messageContent || 'System broadcast notification received.',
+          time: log.sentAt || log.createdAt ? timeAgo(log.sentAt || log.createdAt) : 'Recently',
+          tone: isUrgent ? 'destructive' : isHigh ? 'warning' : 'info',
+          link: isTenant ? '/tenant/dashboard' : '/notification-logs',
+        });
+      });
+    }
 
     // 1. SUPER_ADMIN ALERTS
     if (isSuperAdmin) {
@@ -407,16 +432,17 @@ export function NotificationBell() {
 
     // 5. RECEPTIONIST ALERTS
     if (isReceptionist) {
-      const pendingParcels = (parcels || []).filter((p: any) => p.status === 'ARRIVED' || p.status === 'UNCLAIMED').slice(0, 3);
+      const pendingParcels = (parcels || []).filter((p: any) => p.status === 'RECEIVED' || p.status === 'ARRIVED' || p.status === 'UNCLAIMED').slice(0, 4);
       pendingParcels.forEach((p: any) => {
+        const resName = `${p.tenant?.firstName || ''} ${p.tenant?.lastName || ''}`.trim() || p.tenant?.name || 'Resident';
         list.push({
           id: `pcl-${p.id}`,
           icon: Package,
-          title: `Unclaimed Parcel #${p.pickupOtp || 'Delivery'}`,
-          description: `${p.tenantName || 'Resident'} (${p.courierCompany || 'Courier'})`,
-          time: timeAgo(p.createdAt || new Date()),
+          title: `Parcel Awaiting Pickup: ${p.courierCompany || 'Delivery'}`,
+          description: `${resName} (Room ${p.tenant?.roomNumber || '—'}) • ${p.lockerLocation || 'Desk'}`,
+          time: timeAgo(p.receivedDate || p.createdAt || new Date()),
           tone: 'warning',
-          link: '/receptionist/dashboard',
+          link: '/parcels',
         });
       });
 
@@ -436,6 +462,19 @@ export function NotificationBell() {
 
     // 6. SECURITY GUARD ALERTS
     if (isSecurity) {
+      const pendingParcels = (parcels || []).filter((p: any) => p.status === 'RECEIVED').slice(0, 3);
+      pendingParcels.forEach((p: any) => {
+        list.push({
+          id: `sec-pcl-${p.id}`,
+          icon: Package,
+          title: `Gate Parcel Logged: ${p.courierCompany}`,
+          description: `Room ${p.tenant?.roomNumber || '—'} • ${p.lockerLocation || 'Security Shelf'}`,
+          time: timeAgo(p.receivedDate || new Date()),
+          tone: 'info',
+          link: '/parcels',
+        });
+      });
+
       const activePasses = (visitors || []).filter((v: any) => v.status === 'CHECKED_IN').slice(0, 4);
       activePasses.forEach((v: any) => {
         list.push({
@@ -468,6 +507,20 @@ export function NotificationBell() {
 
     // 8. TENANT ALERTS
     if (isTenant) {
+      // Unclaimed Parcel Alert for Resident
+      const residentParcels = (parcels || []).filter((p: any) => p.status === 'RECEIVED').slice(0, 3);
+      residentParcels.forEach((p: any) => {
+        list.push({
+          id: `tnt-parcel-${p.id}`,
+          icon: Package,
+          title: `📦 Package Arrived: ${p.courierCompany}`,
+          description: `Ready for collection at ${p.lockerLocation || 'Reception Desk'}${p.trackingNumber ? ` (Tracking: ${p.trackingNumber})` : ''}`,
+          time: timeAgo(p.receivedDate || new Date()),
+          tone: 'warning',
+          link: '/tenant/dashboard',
+        });
+      });
+
       (pendingVisitorApprovals || []).forEach((v: any) => {
         list.push({
           id: `tnt-vis-appr-${v.id}`,

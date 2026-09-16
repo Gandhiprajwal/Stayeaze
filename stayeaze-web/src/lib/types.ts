@@ -168,6 +168,9 @@ export interface Tenant {
   refundIfsc?: string;
   refundBankName?: string;
   photo?: string;
+  noticePeriodDays?: number;
+  lastNoticeReminderSentAt?: string;
+  noticeStatus?: string;
   createdAt?: string;
 }
 
@@ -198,6 +201,7 @@ export interface Booking {
   razorpayPaymentId?: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'expired' | 'checked_in';
   source: 'direct' | 'website' | 'agent' | 'referral';
+  notes?: string;
   createdAt: string;
 }
 
@@ -223,6 +227,11 @@ export interface CheckIn {
   idVerified: boolean;
   paymentMethod?: string;
   razorpayPaymentId?: string;
+  keyTagNumber?: string;
+  initialMeterReading?: number;
+  vehicleNumber?: string;
+  welcomeKitHandedOver?: boolean;
+  checkedInBy?: string;
   status: 'completed' | 'pending';
 }
 
@@ -367,6 +376,13 @@ export interface Complaint {
   description: string;
   status: 'open' | 'in_progress' | 'resolved' | 'closed';
   assignedTo?: string;
+  slaDueAt?: string;
+  isEscalated?: boolean;
+  escalatedAt?: string;
+  escalationReason?: string;
+  slaBreached?: boolean;
+  slaStatus?: 'RESOLVED' | 'ESCALATED' | 'BREACHED' | 'DUE_SOON' | 'ON_TRACK' | string;
+  slaMinutesRemaining?: number;
   createdAt: string;
   resolvedAt?: string;
 }

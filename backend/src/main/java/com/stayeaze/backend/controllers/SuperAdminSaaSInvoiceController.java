@@ -6,8 +6,6 @@ import com.stayeaze.backend.payload.response.MessageResponse;
 import com.stayeaze.backend.payload.response.PageResponse;
 import com.stayeaze.backend.repository.OrganizationRepository;
 import com.stayeaze.backend.repository.SaaSInvoiceRepository;
-import com.stayeaze.backend.repository.SaaSPlanRepository;
-import com.stayeaze.backend.repository.SystemIntegrationSettingsRepository;
 import com.stayeaze.backend.services.SaaSInvoiceService;
 import com.stayeaze.backend.services.SaaSSubscriptionCronService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,15 +39,6 @@ public class SuperAdminSaaSInvoiceController {
 
     @Autowired
     private OrganizationRepository organizationRepository;
-
-    @Autowired
-    private SaaSPlanRepository planRepository;
-
-    @Autowired
-    private SystemIntegrationSettingsRepository settingsRepository;
-
-    @Autowired
-    private com.stayeaze.backend.repository.OrganizationBillingProfileRepository profileRepository;
 
     @Autowired
     private SaaSInvoiceService saasInvoiceService;

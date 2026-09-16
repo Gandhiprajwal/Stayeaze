@@ -57,6 +57,9 @@ interface RoomSheetItem {
   freeAllowanceUnits?: number;
   splitMode?: string;
   isRollover?: boolean;
+  meterReplaced?: boolean;
+  oldMeterFinalReading?: number;
+  newMeterInitialReading?: number;
   photoUrl?: string;
   isDirty?: boolean;
   hasSavedDraft?: boolean;
@@ -274,7 +277,10 @@ export default function UtilitiesPage() {
         billingMonth,
         billingYear,
         splitMode: item.splitMode,
-        isRollover: item.isRollover
+        isRollover: item.isRollover,
+        meterReplaced: item.meterReplaced,
+        oldMeterFinalReading: item.oldMeterFinalReading,
+        newMeterInitialReading: item.newMeterInitialReading,
       });
       setSheetItems((prev) =>
         prev.map((r) =>
@@ -306,8 +312,10 @@ export default function UtilitiesPage() {
     const file = e.target.files?.[0];
     if (!file || activePhotoUploadIndex === null) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('Meter photo size must be less than 10MB');
+    if (file.size > 3 * 1024 * 1024) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      toast.error(`Meter photo size (${sizeMb} MB) exceeds the 3MB limit. Please choose a smaller photo.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -356,6 +364,9 @@ export default function UtilitiesPage() {
           billingYear,
           splitMode: item.splitMode || 'FAIR_PROPORTIONAL',
           isRollover: item.isRollover || false,
+          meterReplaced: item.meterReplaced || false,
+          oldMeterFinalReading: item.oldMeterFinalReading,
+          newMeterInitialReading: item.newMeterInitialReading,
           photoUrl: item.photoUrl || ''
         }));
 
@@ -996,6 +1007,76 @@ export default function UtilitiesPage() {
                       <p className="font-mono font-bold text-sm text-amber-700 dark:text-amber-400">{formatCurrency(oAbsorption)}</p>
                     </div>
                   </div>
+                </div>
+
+                {/* Meter Replacement & Rollover Config Card (P2.1) */}
+                <div className="p-3 rounded-lg border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <RotateCcw className="h-4 w-4 text-indigo-600" />
+                      <div>
+                        <p className="font-bold text-xs text-indigo-950 dark:text-indigo-200">Meter Replacement / Swap</p>
+                        <p className="text-[10px] text-muted-foreground">Enable if physical meter was replaced mid-billing cycle</p>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                      <input
+                        type="checkbox"
+                        checked={activePreviewRoom.meterReplaced || false}
+                        onChange={(e) => {
+                          const isReplaced = e.target.checked;
+                          const updatedRoom = { ...activePreviewRoom, meterReplaced: isReplaced, isDirty: true };
+                          setActivePreviewRoom(updatedRoom);
+                          setSheetItems(prev => prev.map(r => r.roomId === updatedRoom.roomId ? updatedRoom : r));
+                          triggerRoomPreview(updatedRoom.roomId, updatedRoom);
+                        }}
+                        className="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <span>Replaced</span>
+                    </label>
+                  </div>
+
+                  {activePreviewRoom.meterReplaced && (
+                    <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-indigo-200/60 dark:border-indigo-900/60 text-xs">
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-indigo-900 dark:text-indigo-200">Old Meter Final Reading</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g. 4850.5"
+                          value={activePreviewRoom.oldMeterFinalReading !== undefined ? activePreviewRoom.oldMeterFinalReading : ''}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? undefined : Number(e.target.value);
+                            const updatedRoom = { ...activePreviewRoom, oldMeterFinalReading: val, isDirty: true };
+                            setActivePreviewRoom(updatedRoom);
+                            setSheetItems(prev => prev.map(r => r.roomId === updatedRoom.roomId ? updatedRoom : r));
+                            triggerRoomPreview(updatedRoom.roomId, updatedRoom);
+                          }}
+                          className="h-8 text-xs font-mono bg-white dark:bg-slate-900"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Reading on old meter before removal</p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-[11px] text-indigo-900 dark:text-indigo-200">New Meter Initial Reading</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g. 0.0"
+                          value={activePreviewRoom.newMeterInitialReading !== undefined ? activePreviewRoom.newMeterInitialReading : ''}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? undefined : Number(e.target.value);
+                            const updatedRoom = { ...activePreviewRoom, newMeterInitialReading: val, isDirty: true };
+                            setActivePreviewRoom(updatedRoom);
+                            setSheetItems(prev => prev.map(r => r.roomId === updatedRoom.roomId ? updatedRoom : r));
+                            triggerRoomPreview(updatedRoom.roomId, updatedRoom);
+                          }}
+                          className="h-8 text-xs font-mono bg-white dark:bg-slate-900"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Starting reading of new meter (often 0)</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Owner Overhead Explanation Note */}

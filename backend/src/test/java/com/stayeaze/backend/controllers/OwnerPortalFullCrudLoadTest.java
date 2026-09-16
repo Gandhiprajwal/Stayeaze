@@ -17,7 +17,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -127,7 +126,7 @@ public class OwnerPortalFullCrudLoadTest {
         settingsRepository.save(settings);
 
         // 1. Setup SaaS Plan & Organization
-        SaaSPlan plan = saasPlanRepository.findByPlanKey("ENTERPRISE").orElseGet(() -> {
+        saasPlanRepository.findByPlanKey("ENTERPRISE").orElseGet(() -> {
             SaaSPlan p = new SaaSPlan("ENTERPRISE", "Enterprise Plan", BigDecimal.valueOf(9999),
                     BigDecimal.valueOf(99999), 50, 5000, 10, true, true, "MONTHLY");
             return saasPlanRepository.save(p);
@@ -458,8 +457,9 @@ public class OwnerPortalFullCrudLoadTest {
                                             .content(objectMapper.writeValueAsString(roomReq)))
                                     .andExpect(status().isCreated())
                                     .andReturn();
-                            Map<String, Object> map = objectMapper.readValue(res.getResponse().getContentAsString(),
-                                    Map.class);
+                            Map<String, Object> map = objectMapper.readValue(
+                                    res.getResponse().getContentAsString(),
+                                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
                             if (map != null && map.containsKey("id"))
                                 createdRoomId[0] = map.get("id").toString();
                         });

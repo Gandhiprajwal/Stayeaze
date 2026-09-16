@@ -18,7 +18,6 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.*;
 
 import static org.hamcrest.Matchers.*;
@@ -52,15 +51,6 @@ public class SpaceBatchGeneratorControllerIntegrationTest {
 
     @Autowired
     private BuildingRepository buildingRepository;
-
-    @Autowired
-    private FloorRepository floorRepository;
-
-    @Autowired
-    private RoomRepository roomRepository;
-
-    @Autowired
-    private BedRepository bedRepository;
 
     private Organization testOrg;
     private User ownerUser;

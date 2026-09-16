@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { useAuthStore } from '@/lib/stores/auth-store';
 
 import { getMasterAgreementTemplate, populateAgreementTemplate } from '@/lib/agreement-policy';
 
@@ -50,6 +51,8 @@ export default function DigitalAgreementModal({
   const [selectedAgreementId, setSelectedAgreementId] = useState<string | null>(null);
   const [termsText, setTermsText] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const user = useAuthStore((s) => s.user);
+  const isTenantUser = (user?.role?.toLowerCase() === 'tenant' || ((user as any)?.roles && (user as any).roles.some((r: string) => r.toLowerCase().includes('tenant')))) || false;
 
   const tenantId = tenant?.id;
 
@@ -472,6 +475,18 @@ export default function DigitalAgreementModal({
                 </p>
               </div>
             </div>
+          ) : !isTenantUser ? (
+            <div className="p-3.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 flex items-start gap-3">
+              <Clock className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="text-xs font-bold text-amber-800 dark:text-amber-300 block">
+                  Pending Resident Digital Signature
+                </span>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
+                  This lease agreement has been drafted and is awaiting electronic acceptance and digital signature by <strong>{tenant?.name || tenant?.firstName}</strong> in their Resident Portal.
+                </p>
+              </div>
+            </div>
           ) : (
             <div className="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 space-y-3">
               <div className="flex items-start gap-2.5">
@@ -522,7 +537,7 @@ export default function DigitalAgreementModal({
               Close
             </Button>
 
-            {!isSigned && (
+            {!isSigned && isTenantUser && (
               <Button
                 type="button"
                 size="sm"

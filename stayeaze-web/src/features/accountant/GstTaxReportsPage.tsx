@@ -13,9 +13,13 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 
 import { useNavigate } from 'react-router-dom';
+import { usePlanFeatures } from '@/hooks/usePlanFeatures';
+import { FeatureUpgradeDialog } from '@/components/subscription/FeatureUpgradeDialog';
 
 export default function GstTaxReportsPage() {
   const navigate = useNavigate();
+  const planFeatures = usePlanFeatures();
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('ALL');
 
   const { data: properties } = useQuery({
@@ -56,9 +60,15 @@ export default function GstTaxReportsPage() {
               </SelectContent>
             </Select>
             <Button
-              onClick={handleExportGstr1}
+              onClick={() => {
+                if (planFeatures.isStarter) {
+                  setUpgradeModalOpen(true);
+                } else {
+                  handleExportGstr1();
+                }
+              }}
               variant="outline"
-              disabled={gstData?.gstEnabled === false}
+              disabled={gstData?.gstEnabled === false && !planFeatures.isStarter}
               className="rounded-xl h-10 text-xs sm:text-sm font-semibold gap-1.5 shrink-0"
             >
               <Download className="h-4 w-4 shrink-0" />
@@ -68,6 +78,33 @@ export default function GstTaxReportsPage() {
           </div>
         }
       />
+
+      {planFeatures.isStarter && (
+        <Card className="rounded-2xl border-indigo-200 dark:border-indigo-800/80 bg-gradient-to-r from-indigo-50/90 via-blue-50/50 to-indigo-50/90 dark:from-indigo-950/30 dark:via-blue-950/20 dark:to-indigo-950/30 overflow-hidden shadow-xs">
+          <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs shrink-0">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-indigo-950 dark:text-indigo-200">
+                  Automated GSTR-1 & Tax Compliance is a Growth Tier Feature
+                </h4>
+                <p className="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed mt-0.5">
+                  Upgrade to the Growth Hostel & PG Plan (₹3,499/mo) to unlock real-time CGST/SGST tax liability breakdowns, SAC 998314 summaries, and one-click GSTR-1 CSV exports.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl h-9.5 text-xs shrink-0 w-full sm:w-auto shadow-xs"
+              onClick={() => setUpgradeModalOpen(true)}
+            >
+              Upgrade to Growth Plan
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {gstData?.gstEnabled === false && (
         <Card className="rounded-2xl border-amber-500/40 bg-amber-500/10 overflow-hidden shadow-xs">
@@ -190,6 +227,14 @@ export default function GstTaxReportsPage() {
           )}
         </CardContent>
       </Card>
+
+      <FeatureUpgradeDialog
+        open={upgradeModalOpen}
+        onOpenChange={setUpgradeModalOpen}
+        featureTitle="GSTR-1 Tax & HRA Compliance Engine"
+        featureDescription="Automated GSTR-1 CSV exports, SAC 998314 CGST/SGST breakdowns, and formal HRA tax rent receipts for tenants are available on the Growth Hostel & PG tier."
+        requiredTier="GROWTH"
+      />
     </div>
   );
 }

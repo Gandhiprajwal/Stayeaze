@@ -55,9 +55,6 @@ public class ComplaintChatControllerIntegrationTest {
     @Autowired
     private ComplaintRepository complaintRepository;
 
-    @Autowired
-    private ComplaintChatMessageRepository chatMessageRepository;
-
     private Organization testOrg;
     private User ownerUser;
     private Property testProperty;

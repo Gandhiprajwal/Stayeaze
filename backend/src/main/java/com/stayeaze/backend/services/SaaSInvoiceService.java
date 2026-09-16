@@ -161,30 +161,8 @@ public class SaaSInvoiceService {
     }
 
     public List<SaaSInvoice> getInvoicesForOrg(Organization org) {
-        List<SaaSInvoice> list = invoiceRepository.findByOrganizationOrderByInvoiceDateDesc(org);
-        if (list.isEmpty()) {
-            generateInvoiceForOrg(org.getId(), null, "PAID", null, "MONTHLY", true, "Initial bootstrap subscription", null);
-            list = invoiceRepository.findByOrganizationOrderByInvoiceDateDesc(org);
-        }
-
-        OrganizationBillingProfile profile = profileRepository.findByOrganization(org).orElse(null);
-        boolean dirty = false;
-        for (SaaSInvoice inv : list) {
-            if ((inv.getTransactionId() == null || inv.getTransactionId().isBlank()) && "PAID".equalsIgnoreCase(inv.getStatus())) {
-                if (profile != null && profile.getSubscriptionPaymentId() != null && !profile.getSubscriptionPaymentId().isBlank()) {
-                    inv.setTransactionId(profile.getSubscriptionPaymentId());
-                } else {
-                    String seed = inv.getInvoiceNumber() != null ? inv.getInvoiceNumber().replaceAll("[^0-9a-zA-Z]", "") : UUID.randomUUID().toString().substring(0, 8);
-                    inv.setTransactionId("pay_" + seed.toLowerCase());
-                }
-                dirty = true;
-            }
-        }
-        if (dirty) {
-            invoiceRepository.saveAll(list);
-        }
-
-        return list;
+        if (org == null) return Collections.emptyList();
+        return invoiceRepository.findByOrganizationOrderByInvoiceDateDesc(org);
     }
 
     /**

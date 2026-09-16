@@ -2,8 +2,6 @@ package com.stayeaze.backend.payload.request;
 
 import com.stayeaze.backend.security.validation.ValidEmail;
 import com.stayeaze.backend.security.validation.ValidMobile;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.UUID;
 
@@ -273,4 +271,39 @@ public class TenantRequest {
 
     public String getRefundUpi() { return refundUpi; }
     public void setRefundUpi(String refundUpi) { this.refundUpi = refundUpi; }
+
+    private String billingMode; // "PRO_RATA" vs "FULL_MONTH"
+
+    public String getBillingMode() { return billingMode; }
+    public void setBillingMode(String billingMode) { this.billingMode = billingMode; }
+
+    private Integer lockInMonths;
+    private Integer noticePeriodDays;
+
+    private String billingResponsibility;
+    private String corporateCompanyName;
+    private String corporateGstin;
+    private String utilityResponsibility;
+    private String depositResponsibility;
+
+    public Integer getLockInMonths() { return lockInMonths; }
+    public void setLockInMonths(Integer lockInMonths) { this.lockInMonths = lockInMonths; }
+
+    public Integer getNoticePeriodDays() { return noticePeriodDays; }
+    public void setNoticePeriodDays(Integer noticePeriodDays) { this.noticePeriodDays = noticePeriodDays; }
+
+    public String getBillingResponsibility() { return billingResponsibility; }
+    public void setBillingResponsibility(String billingResponsibility) { this.billingResponsibility = billingResponsibility; }
+
+    public String getCorporateCompanyName() { return corporateCompanyName; }
+    public void setCorporateCompanyName(String corporateCompanyName) { this.corporateCompanyName = corporateCompanyName; }
+
+    public String getCorporateGstin() { return corporateGstin; }
+    public void setCorporateGstin(String corporateGstin) { this.corporateGstin = corporateGstin; }
+
+    public String getUtilityResponsibility() { return utilityResponsibility; }
+    public void setUtilityResponsibility(String utilityResponsibility) { this.utilityResponsibility = utilityResponsibility; }
+
+    public String getDepositResponsibility() { return depositResponsibility; }
+    public void setDepositResponsibility(String depositResponsibility) { this.depositResponsibility = depositResponsibility; }
 }

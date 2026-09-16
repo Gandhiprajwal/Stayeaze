@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, Palette, Check, Sparkle, ExternalLink, Eye, DoorOpen, BedDouble,
   ShieldAlert, Settings, FileJson, Activity, MapPin, Phone, Mail, UserCheck, LayoutGrid, List,
   Filter, ArrowUpDown, Copy, Layers, CheckCircle, HelpCircle, Shield, X, CheckSquare,
-  Receipt, CreditCard, RotateCcw, Send, AlertCircle, ArrowRight, Zap
+  Receipt, CreditCard, RotateCcw, Send, AlertCircle, ArrowRight, Zap, Bell, Hotel
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -114,6 +114,15 @@ export default function SubscribersPage() {
     billingCycle: 'MONTHLY',
   });
 
+  // Global Announcement Broadcast State
+  const [announcementOpen, setAnnouncementOpen] = useState(false);
+  const [announcementForm, setAnnouncementForm] = useState({
+    title: '',
+    message: '',
+    priority: 'HIGH',
+    targetAudience: 'ALL',
+  });
+
   const { data: pageResponse, isLoading } = useQuery<any>({
     queryKey: ['super-admin-subscribers', debouncedSearch, statusFilter, currentPage, pageSize],
     queryFn: () => api.get('/super-admin/subscribers', {
@@ -134,6 +143,24 @@ export default function SubscribersPage() {
     enabled: Boolean(selectedOrgId && selectedOrgId !== 'null'),
   });
 
+  // Dynamic SaaS Plans query from Backend API
+  const { data: saasPlansData } = useQuery<any[]>({
+    queryKey: ['saas-plans'],
+    queryFn: () => api.get('/super-admin/plans').then((r) => r.data),
+    staleTime: 60_000,
+  });
+
+  const availablePlans = useMemo(() => {
+    if (Array.isArray(saasPlansData) && saasPlansData.length > 0) {
+      return saasPlansData;
+    }
+    return [
+      { id: '1', name: 'Starter PG Plan', planKey: 'STARTER', monthlyPrice: 1499 },
+      { id: '2', name: 'Growth Hostel & PG', planKey: 'PROFESSIONAL', monthlyPrice: 3499 },
+      { id: '3', name: 'Enterprise Living Chain', planKey: 'ENTERPRISE', monthlyPrice: 7999 },
+    ];
+  }, [saasPlansData]);
+
   const safeRefetchOverview = () => {
     if (selectedOrgId && selectedOrgId !== 'null') {
       refetchOverview();
@@ -147,18 +174,23 @@ export default function SubscribersPage() {
       const curStatus = (bp.subscriptionStatus || 'ACTIVE').toUpperCase();
       setStatusForm({ status: curStatus });
 
-      let pName = bp.subscriptionPlanName || 'Starter PG Plan';
-      if (pName.toLowerCase().includes('enterprise')) pName = 'Enterprise Co-Living';
-      else if (pName.toLowerCase().includes('professional')) pName = 'Professional Growth';
-      else pName = 'Starter PG Plan';
+      const rawPlanName = bp.subscriptionPlanName || availablePlans[0]?.name || 'Starter PG Plan';
+      const matched = availablePlans.find((p: any) =>
+        p.name?.toLowerCase() === rawPlanName.toLowerCase() ||
+        p.planKey?.toLowerCase() === rawPlanName.toLowerCase() ||
+        (rawPlanName.toLowerCase().includes('enterprise') && p.planKey === 'ENTERPRISE') ||
+        (rawPlanName.toLowerCase().includes('growth') && p.planKey === 'PROFESSIONAL') ||
+        (rawPlanName.toLowerCase().includes('professional') && p.planKey === 'PROFESSIONAL') ||
+        (rawPlanName.toLowerCase().includes('starter') && p.planKey === 'STARTER')
+      );
 
       setPlanForm({
-        planName: pName,
-        planPrice: bp.subscriptionPlanPrice ? Number(bp.subscriptionPlanPrice) : 1499,
+        planName: matched ? matched.name : rawPlanName,
+        planPrice: bp.subscriptionPlanPrice ? Number(bp.subscriptionPlanPrice) : (matched?.monthlyPrice ? Number(matched.monthlyPrice) : 1499),
         billingCycle: bp.subscriptionBillingCycle || 'MONTHLY',
       });
     }
-  }, [orgOverview]);
+  }, [orgOverview, availablePlans]);
 
   const rawSubscribers: Subscriber[] = Array.isArray(pageResponse?.data)
     ? pageResponse.data
@@ -304,8 +336,8 @@ export default function SubscribersPage() {
 
   // Extend Subscription Mutation
   const extendMut = useMutation({
-    mutationFn: async ({ id, days }: { id: string; days: number }) => {
-      const res = await api.post(`/super-admin/subscribers/${id}/extend`, null, { params: { days } });
+    mutationFn: async ({ id, days, reason }: { id: string; days: number; reason?: string }) => {
+      const res = await api.post(`/super-admin/subscribers/${id}/extend`, { reason }, { params: { days } });
       return res.data;
     },
     onSuccess: (data) => {
@@ -412,6 +444,22 @@ export default function SubscribersPage() {
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.message || 'Failed to override plan');
+    },
+  });
+
+  // Global Announcement Broadcast Mutation
+  const broadcastMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.post('/notification-logs/broadcast-announcement', payload);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || 'Notification broadcasted to all subscriber notification centers!');
+      setAnnouncementOpen(false);
+      setAnnouncementForm({ title: '', message: '', priority: 'HIGH', targetAudience: 'ALL' });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to broadcast announcement');
     },
   });
 
@@ -635,23 +683,33 @@ export default function SubscribersPage() {
     const curStatus = (s.status || 'ACTIVE').toUpperCase();
     setStatusForm({ status: curStatus });
 
-    let pName = s.planName || 'Starter PG Plan';
-    if (pName.toLowerCase().includes('enterprise')) pName = 'Enterprise Co-Living';
-    else if (pName.toLowerCase().includes('professional')) pName = 'Professional Growth';
-    else pName = 'Starter PG Plan';
+    const rawPlanName = s.planName || availablePlans[0]?.name || 'Starter PG Plan';
+    const matched = availablePlans.find((p: any) =>
+      p.name?.toLowerCase() === rawPlanName.toLowerCase() ||
+      p.planKey?.toLowerCase() === rawPlanName.toLowerCase() ||
+      (rawPlanName.toLowerCase().includes('enterprise') && p.planKey === 'ENTERPRISE') ||
+      (rawPlanName.toLowerCase().includes('growth') && p.planKey === 'PROFESSIONAL') ||
+      (rawPlanName.toLowerCase().includes('professional') && p.planKey === 'PROFESSIONAL') ||
+      (rawPlanName.toLowerCase().includes('starter') && p.planKey === 'STARTER')
+    );
 
     setPlanForm({
-      planName: pName,
-      planPrice: s.planPrice || 1499,
+      planName: matched ? matched.name : rawPlanName,
+      planPrice: s.planPrice || (matched?.monthlyPrice ? Number(matched.monthlyPrice) : 1499),
       billingCycle: s.billingCycle || 'MONTHLY',
     });
   };
 
   const openVerificationModal = (s: Subscriber) => {
     setVerifyingOrg(s);
+    const rawPlanName = s.planName || availablePlans[0]?.name || 'Starter PG Plan';
+    const matched = availablePlans.find((p: any) =>
+      p.name?.toLowerCase() === rawPlanName.toLowerCase() ||
+      p.planKey?.toLowerCase() === rawPlanName.toLowerCase()
+    );
     setVerifyForm({
       validityDays: 30,
-      planName: s.planName || 'Starter PG Plan',
+      planName: matched ? matched.name : rawPlanName,
       welcomeNotes: '',
     });
   };
@@ -736,6 +794,14 @@ export default function SubscribersPage() {
         icon={Building2}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAnnouncementOpen(true)}
+              className="shadow-xs font-semibold text-xs h-9 px-3 rounded-xl border-indigo-200 dark:border-indigo-900 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100"
+            >
+              <Bell className="mr-1.5 h-4 w-4 text-indigo-600 dark:text-indigo-400" /> Broadcast Notification
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1129,15 +1195,24 @@ export default function SubscribersPage() {
                     </span>
                   </div>
 
-                  {/* Capacity & Live Occupancy Gauge */}
+                  {/* Capacity & Live Occupancy Gauge with PG Sharing Breakdown */}
                   <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
-                      <span className="font-medium text-muted-foreground">Capacity Occupancy</span>
-                      <span className="font-bold text-slate-900 dark:text-white shrink-0">
+                      <span className="font-medium text-muted-foreground flex items-center gap-1">
+                        <Hotel className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                        <span>Bed Capacity (2 &amp; 3 Sharing)</span>
+                      </span>
+                      <span className="font-bold text-slate-900 dark:text-white shrink-0 font-mono">
                         {s.occupiedBeds || 0} / {s.totalBeds || 0} Beds ({occupancyPct}%)
                       </span>
                     </div>
                     <Progress value={occupancyPct} className="h-2 rounded-full" />
+                    {occupancyPct >= 90 && (
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        <span>High Occupancy ({occupancyPct}%) — Ready for Growth Upgrade</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Properties & Owner Details */}
@@ -1146,7 +1221,7 @@ export default function SubscribersPage() {
                       <Building2 className="h-4 w-4 text-indigo-500 shrink-0" />
                       <div className="min-w-0">
                         <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{s.propertyCount || 1} Property(s)</p>
-                        <p className="text-[10px] text-muted-foreground">Branches</p>
+                        <p className="text-[10px] text-muted-foreground">Buildings &amp; Wings</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/30 border">
@@ -1208,6 +1283,16 @@ export default function SubscribersPage() {
                       <span className="truncate">View Portfolio</span>
                     </Button>
                     <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => extendMut.mutate({ id: s.id, days: 7, reason: '1-Click 7-day grace extension by Super Admin' })}
+                        disabled={extendMut.isPending}
+                        className="h-9 px-2 text-[11px] font-bold rounded-xl border-amber-300 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 hover:bg-amber-100 flex items-center gap-1 shadow-xs"
+                        title="1-Click Instant 7-Day Grace Extension"
+                      >
+                        <Clock className="h-3.5 w-3.5" /> +7d
+                      </Button>
                       <button
                         type="button"
                         onClick={() => openBrandingModal(s)}
@@ -1220,9 +1305,9 @@ export default function SubscribersPage() {
                         type="button"
                         onClick={() => setExtendTarget(s)}
                         className="h-9 w-9 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-center transition-all shadow-xs"
-                        title="Extend Subscription Validity"
+                        title="Custom Subscription Extension"
                       >
-                        <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                       </button>
                       <button
                         type="button"
@@ -2482,30 +2567,74 @@ export default function SubscribersPage() {
                           <div className="flex items-center justify-between">
                             <Label className="text-sm font-bold text-slate-900 dark:text-white">Override SaaS Plan Tier</Label>
                             <Badge variant="outline" className="text-xs font-semibold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                              Current: {orgOverview.billingProfile?.subscriptionPlanName || 'Starter PG Plan'}
+                              Current: {orgOverview.billingProfile?.subscriptionPlanName || 'Starter PG Plan'} ({orgOverview.billingProfile?.subscriptionBillingCycle || 'MONTHLY'})
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Grant custom plan tier and limits directly to this organization.
+                            Grant custom plan tier, billing frequency, and limits directly to this organization.
                           </p>
-                          <Select
-                            value={planForm.planName}
-                            onValueChange={(v) => {
-                              let p = 1499;
-                              if (v.includes('Professional')) p = 2999;
-                              if (v.includes('Enterprise')) p = 5999;
-                              setPlanForm({ ...planForm, planName: v, planPrice: p });
-                            }}
-                          >
-                            <SelectTrigger className="rounded-xl h-10 bg-background text-sm font-medium">
-                              <SelectValue placeholder="Select SaaS Plan" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Starter PG Plan">Starter PG Plan (₹1,499/mo)</SelectItem>
-                              <SelectItem value="Professional Growth">Professional Growth (₹2,999/mo)</SelectItem>
-                              <SelectItem value="Enterprise Co-Living">Enterprise Co-Living (₹5,999/mo)</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold">SaaS Tier Plan</Label>
+                              <Select
+                                value={planForm.planName}
+                                onValueChange={(selectedName) => {
+                                  const matched = availablePlans.find((p: any) => p.name === selectedName || p.planKey === selectedName);
+                                  const isAnnual = planForm.billingCycle === 'ANNUAL';
+                                  let price = 1499;
+                                  if (matched) {
+                                    price = isAnnual 
+                                      ? (matched.annualPrice ? Number(matched.annualPrice) : Number(matched.monthlyPrice || 1499) * 10)
+                                      : Number(matched.monthlyPrice || 1499);
+                                  }
+                                  setPlanForm({ ...planForm, planName: matched ? matched.name : selectedName, planPrice: price });
+                                }}
+                              >
+                                <SelectTrigger className="rounded-xl h-10 bg-background text-sm font-medium">
+                                  <SelectValue placeholder="Select SaaS Plan" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availablePlans.map((plan: any) => {
+                                    const isAnnual = planForm.billingCycle === 'ANNUAL';
+                                    const priceToShow = isAnnual 
+                                      ? (plan.annualPrice ? Number(plan.annualPrice) : Number(plan.monthlyPrice || 0) * 10)
+                                      : Number(plan.monthlyPrice || 0);
+                                    const suffix = isAnnual ? '/yr' : '/mo';
+                                    return (
+                                      <SelectItem key={plan.id || plan.planKey || plan.name} value={plan.name}>
+                                        {plan.name} (₹{priceToShow.toLocaleString('en-IN')}{suffix})
+                                      </SelectItem>
+                                    );
+                                  })}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold">Billing Frequency</Label>
+                              <Select
+                                value={planForm.billingCycle || 'MONTHLY'}
+                                onValueChange={(cycle) => {
+                                  const matched = availablePlans.find((p: any) => p.name === planForm.planName || p.planKey === planForm.planName);
+                                  const isAnnual = cycle === 'ANNUAL';
+                                  let price = 1499;
+                                  if (matched) {
+                                    price = isAnnual 
+                                      ? (matched.annualPrice ? Number(matched.annualPrice) : Number(matched.monthlyPrice || 1499) * 10)
+                                      : Number(matched.monthlyPrice || 1499);
+                                  }
+                                  setPlanForm({ ...planForm, billingCycle: cycle, planPrice: price });
+                                }}
+                              >
+                                <SelectTrigger className="rounded-xl h-10 bg-background text-sm font-medium">
+                                  <SelectValue placeholder="Select Frequency" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="MONTHLY">Monthly Billing (/mo)</SelectItem>
+                                  <SelectItem value="ANNUAL">Annual Billing (/yr - 2 Mo Free)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
                         </div>
                         <Button
                           size="default"
@@ -2766,9 +2895,11 @@ export default function SubscribersPage() {
                 <Select value={verifyForm.planName} onValueChange={(v) => setVerifyForm(p => ({ ...p, planName: v }))}>
                   <SelectTrigger className="rounded-xl h-9 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Starter PG Plan">Starter PG Plan (₹1,499/mo)</SelectItem>
-                    <SelectItem value="Professional Growth">Professional Growth (₹2,999/mo)</SelectItem>
-                    <SelectItem value="Enterprise Co-Living">Enterprise Co-Living (₹5,999/mo)</SelectItem>
+                    {availablePlans.map((plan: any) => (
+                      <SelectItem key={plan.id || plan.planKey || plan.name} value={plan.name}>
+                        {plan.name} (₹{Number(plan.monthlyPrice || 0).toLocaleString('en-IN')}/mo)
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -3045,7 +3176,116 @@ export default function SubscribersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 4. BULK SELECTION FLOATING ACTION BAR */}
+      {/* 4. GLOBAL ANNOUNCEMENT BROADCAST DIALOG */}
+      <Dialog open={announcementOpen} onOpenChange={setAnnouncementOpen}>
+        <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden border">
+          <DialogHeader className="p-5 pb-3 border-b bg-gradient-to-r from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/20 dark:to-purple-950/20">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <Bell className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold">Broadcast Global Notification</DialogTitle>
+                <DialogDescription className="text-xs">
+                  Dispatch an in-app alert directly into the notification center of active subscriber organizations.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="p-5 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Notification Title</Label>
+              <Input
+                value={announcementForm.title}
+                onChange={(e) => setAnnouncementForm({ ...announcementForm, title: e.target.value })}
+                placeholder="e.g. Scheduled System Maintenance at 2:00 AM"
+                className="h-9 text-xs rounded-xl"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Alert Priority</Label>
+                <Select
+                  value={announcementForm.priority}
+                  onValueChange={(val) => setAnnouncementForm({ ...announcementForm, priority: val })}
+                >
+                  <SelectTrigger className="h-9 text-xs rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="HIGH">🚨 High Priority</SelectItem>
+                    <SelectItem value="URGENT">⚡ Urgent Maintenance</SelectItem>
+                    <SelectItem value="INFO">ℹ️ General Info / Update</SelectItem>
+                    <SelectItem value="FEATURE">✨ New Feature Launch</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Target Audience</Label>
+                <Select
+                  value={announcementForm.targetAudience}
+                  onValueChange={(val) => setAnnouncementForm({ ...announcementForm, targetAudience: val })}
+                >
+                  <SelectTrigger className="h-9 text-xs rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">👥 All Active Subscribers</SelectItem>
+                    <SelectItem value="OWNERS">👑 Property Owners Only</SelectItem>
+                    <SelectItem value="STAFF">🏢 Staff &amp; Managers Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Notification Message Content</Label>
+              <Textarea
+                rows={3}
+                value={announcementForm.message}
+                onChange={(e) => setAnnouncementForm({ ...announcementForm, message: e.target.value })}
+                placeholder="Write the full announcement message that will appear in their notification drawer..."
+                className="text-xs rounded-xl resize-none"
+              />
+            </div>
+
+            <div className="p-3 bg-muted/40 rounded-xl border text-[11px] text-muted-foreground flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              <span>Broadcasts immediately to all targeted subscriber notification centers &amp; displays an instant toast upon their next login.</span>
+            </div>
+          </div>
+
+          <DialogFooter className="p-4 bg-muted/20 border-t flex items-center justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAnnouncementOpen(false)}
+              className="text-xs rounded-xl h-9"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={broadcastMutation.isPending || !announcementForm.title.trim() || !announcementForm.message.trim()}
+              onClick={() => broadcastMutation.mutate(announcementForm)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9 px-4 rounded-xl shadow-xs"
+            >
+              {broadcastMutation.isPending ? 'Broadcasting...' : (
+                <span className="flex items-center gap-1.5">
+                  <Send className="h-3.5 w-3.5" /> Dispatch Notification
+                </span>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 5. BULK SELECTION FLOATING ACTION BAR */}
       {selectedOrgIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white dark:bg-slate-900/95 border border-slate-700/80 shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-4 backdrop-blur-md animate-in slide-in-from-bottom-4">
           <div className="flex items-center gap-2 text-xs font-bold">

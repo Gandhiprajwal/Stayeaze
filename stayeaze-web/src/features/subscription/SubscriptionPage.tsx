@@ -388,45 +388,48 @@ export default function SubscriptionPage() {
           name: 'Starter PG Plan',
           badge: 'Starter Tier',
           monthlyPrice: 1499,
-          annualPrice: 14990,
-          description: 'Perfect for single PG owners & startup properties up to 25 beds.',
+          annualPrice: 14390,
+          description: 'Ideal for Single-Building Standalone PGs (Up to 15 Rooms / 35 Beds in 2 & 3 sharing, 2 Staff logins).',
           features: [
-            'Up to 25 Beds Management',
-            'Single Property Workspace',
+            'Up to 35 Beds Capacity',
+            '1 Property Workspace',
+            'Up to 2 Staff Account Logins',
             'Automated Monthly Rent Invoices',
             'Razorpay Online Payment Links',
-            'Basic Complaints & Maintenance',
+            'Complaints & Maintenance Hub',
           ],
         },
         {
           id: 'professional',
-          name: 'Professional Hostel',
+          name: 'Growth Hostel & PG',
           badge: 'Most Popular',
           popular: true,
-          monthlyPrice: 2999,
-          annualPrice: 29990,
-          description: 'Designed for growing multi-property hostel & PG chains up to 150 beds.',
+          monthlyPrice: 3499,
+          annualPrice: 33590,
+          description: 'For Multi-Wing Hostels & 2-Branch PGs (Up to 4 Buildings, 50 Rooms / 120 Beds with Meter Engine & Digital Agreements).',
           features: [
-            'Up to 150 Beds & Multi-Property',
-            'SMS & WhatsApp Automated Alerts',
-            'Per-Property Razorpay Gateway Support',
-            'Staff Roles & Audit Controls',
-            'Custom Business Branding & GST Invoices',
+            'Up to 120 Beds Capacity',
+            'Up to 2 Property Workspaces',
+            'Up to 6 Staff Account Logins',
+            'Automated WhatsApp Notices & Alerts',
+            'Sub-Meter Utility Engine & GST Receipts',
+            'Digital KYC & Rental Agreements',
           ],
         },
         {
           id: 'enterprise',
-          name: 'Enterprise Co-Living',
+          name: 'Enterprise Living Chain',
           badge: 'Enterprise Tier',
-          monthlyPrice: 5999,
-          annualPrice: 59990,
-          description: 'For large co-living brands with up to 1,000 beds and multi-branch management.',
+          monthlyPrice: 7999,
+          annualPrice: 76790,
+          description: 'For Multi-City Co-Living Chains (Unlimited Buildings, 500+ Beds, Bulk Rent Runs, Custom Subdomain & Priority SLA).',
           features: [
-            'Up to 1,000 Beds Capacity',
+            'Up to 500 Beds Capacity (Scalable)',
             'Up to 10 Property Workspaces',
-            'Dedicated Account & Onboarding Manager',
-            'Custom SMS & WhatsApp Gateway Integrations',
-            'Multi-Branch Financial Audits & Exports',
+            'Up to 25 Staff Account Logins',
+            'White-Label Custom Branding & Portal Domain',
+            '1-Click Bulk Monthly Rent Runs',
+            'Dedicated Account Manager & Priority SLA',
           ],
         },
       ];
@@ -435,7 +438,7 @@ export default function SubscriptionPage() {
   const usage = (subDetails as any)?.usage;
   const totalBeds = subDetails?.totalBeds ?? usage?.currentBeds ?? usage?.totalBeds ?? 0;
   const occupiedBeds = subDetails?.occupiedBeds ?? usage?.occupiedBeds ?? 0;
-  const maxBeds = subDetails?.maxBeds ?? usage?.maxBeds ?? (currentPlanName.includes('Enterprise') ? 500 : currentPlanName.includes('Professional') ? 100 : 30);
+  const maxBeds = subDetails?.maxBeds ?? usage?.maxBeds ?? (currentPlanName.toLowerCase().includes('enterprise') ? 500 : (currentPlanName.toLowerCase().includes('pro') || currentPlanName.toLowerCase().includes('growth')) ? 120 : 35);
   const isUnlimitedBeds = maxBeds >= 99999;
   const bedUsagePercent = isUnlimitedBeds ? 15 : Math.min(100, Math.round((totalBeds / maxBeds) * 100));
 

@@ -41,6 +41,16 @@ public class MinimalTenantDTO implements Serializable {
     private String emergencyContact;
     private Boolean isAgreementAccepted;
     private String agreementAcceptedAt;
+    private Integer noticePeriodDays;
+    private String lastNoticeReminderSentAt;
+    private String noticeStatus;
+    private Long daysUntilLeaseExpiry;
+    private Boolean isUnderNoticeWindow;
+    private String billingResponsibility;
+    private String corporateCompanyName;
+    private String corporateGstin;
+    private String utilityResponsibility;
+    private String depositResponsibility;
 
     public MinimalTenantDTO() {
     }
@@ -75,6 +85,31 @@ public class MinimalTenantDTO implements Serializable {
         dto.setEmergencyContact(t.getEmergencyContactMobile());
         dto.setIsAgreementAccepted(t.getIsAgreementAccepted());
         dto.setAgreementAcceptedAt(t.getAgreementAcceptedAt() != null ? t.getAgreementAcceptedAt().toString() : null);
+        dto.setBillingResponsibility(t.getBillingResponsibility());
+        dto.setCorporateCompanyName(t.getCorporateCompanyName());
+        dto.setCorporateGstin(t.getCorporateGstin());
+        dto.setUtilityResponsibility(t.getUtilityResponsibility());
+        dto.setDepositResponsibility(t.getDepositResponsibility());
+
+        // Notice period calculations
+        int noticeDays = t.getNoticePeriodDays() != null && t.getNoticePeriodDays() > 0 ? t.getNoticePeriodDays() : 30;
+        dto.setNoticePeriodDays(noticeDays);
+        dto.setLastNoticeReminderSentAt(t.getLastNoticeReminderSentAt() != null ? t.getLastNoticeReminderSentAt().toString() : null);
+        dto.setNoticeStatus(t.getNoticeStatus());
+
+        if (t.getLeaseEnd() != null && !t.getLeaseEnd().isBlank()) {
+            try {
+                java.time.LocalDate end = java.time.LocalDate.parse(t.getLeaseEnd().trim());
+                long daysLeft = java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.now(), end);
+                dto.setDaysUntilLeaseExpiry(daysLeft);
+                dto.setIsUnderNoticeWindow(daysLeft >= 0 && daysLeft <= noticeDays && "ACTIVE".equalsIgnoreCase(t.getStatus()));
+            } catch (Exception ignored) {
+                dto.setIsUnderNoticeWindow(false);
+            }
+        } else {
+            dto.setIsUnderNoticeWindow(false);
+        }
+
         return dto;
     }
 
@@ -158,4 +193,34 @@ public class MinimalTenantDTO implements Serializable {
 
     public String getAgreementAcceptedAt() { return agreementAcceptedAt; }
     public void setAgreementAcceptedAt(String agreementAcceptedAt) { this.agreementAcceptedAt = agreementAcceptedAt; }
+
+    public Integer getNoticePeriodDays() { return noticePeriodDays; }
+    public void setNoticePeriodDays(Integer noticePeriodDays) { this.noticePeriodDays = noticePeriodDays; }
+
+    public String getLastNoticeReminderSentAt() { return lastNoticeReminderSentAt; }
+    public void setLastNoticeReminderSentAt(String lastNoticeReminderSentAt) { this.lastNoticeReminderSentAt = lastNoticeReminderSentAt; }
+
+    public String getNoticeStatus() { return noticeStatus; }
+    public void setNoticeStatus(String noticeStatus) { this.noticeStatus = noticeStatus; }
+
+    public Long getDaysUntilLeaseExpiry() { return daysUntilLeaseExpiry; }
+    public void setDaysUntilLeaseExpiry(Long daysUntilLeaseExpiry) { this.daysUntilLeaseExpiry = daysUntilLeaseExpiry; }
+
+    public Boolean getIsUnderNoticeWindow() { return isUnderNoticeWindow; }
+    public void setIsUnderNoticeWindow(Boolean isUnderNoticeWindow) { this.isUnderNoticeWindow = isUnderNoticeWindow; }
+
+    public String getBillingResponsibility() { return billingResponsibility; }
+    public void setBillingResponsibility(String billingResponsibility) { this.billingResponsibility = billingResponsibility; }
+
+    public String getCorporateCompanyName() { return corporateCompanyName; }
+    public void setCorporateCompanyName(String corporateCompanyName) { this.corporateCompanyName = corporateCompanyName; }
+
+    public String getCorporateGstin() { return corporateGstin; }
+    public void setCorporateGstin(String corporateGstin) { this.corporateGstin = corporateGstin; }
+
+    public String getUtilityResponsibility() { return utilityResponsibility; }
+    public void setUtilityResponsibility(String utilityResponsibility) { this.utilityResponsibility = utilityResponsibility; }
+
+    public String getDepositResponsibility() { return depositResponsibility; }
+    public void setDepositResponsibility(String depositResponsibility) { this.depositResponsibility = depositResponsibility; }
 }

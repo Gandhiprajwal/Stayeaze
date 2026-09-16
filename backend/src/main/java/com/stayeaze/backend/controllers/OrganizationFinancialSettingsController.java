@@ -25,24 +25,31 @@ public class OrganizationFinancialSettingsController {
     @Autowired
     private OrganizationRepository organizationRepository;
 
-    private Organization getLoggedUserOrg() {
-        try {
-            Object principal = SecurityContextHolder.getContext().getAuthentication() != null
-                    ? SecurityContextHolder.getContext().getAuthentication().getPrincipal()
-                    : null;
+    @Autowired
+    private com.stayeaze.backend.repository.UserRepository userRepository;
 
-            if (principal instanceof UserDetailsImpl userDetails) {
-                if (userDetails.getOrgId() != null) {
-                    Organization org = organizationRepository.findById(userDetails.getOrgId()).orElse(null);
-                    if (org != null) return org;
-                }
+    @Autowired
+    private com.stayeaze.backend.security.SecurityUtils securityUtils;
+
+    private Organization getLoggedUserOrg() {
+        Organization org = securityUtils.getCurrentOrganization();
+        if (org != null) return org;
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl u) {
+            var user = userRepository.findByEmail(u.getEmail() != null ? u.getEmail() : u.getUsername()).orElse(null);
+            if (user != null && user.getOrganization() != null) {
+                return user.getOrganization();
             }
-        } catch (Exception ignored) {}
-        return organizationRepository.findAll().stream().findFirst().orElse(null);
+        }
+        if (securityUtils.isSuperAdmin()) {
+            return organizationRepository.findAll().stream().findFirst().orElse(null);
+        }
+        return null;
     }
 
     @GetMapping
     @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('ACCOUNTANT') or hasRole('SUPER_ADMIN')")
+    @org.springframework.cache.annotation.Cacheable(value = "org_financial_settings", key = "(T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication() != null ? T(org.springframework.security.core.context.SecurityContextHolder).getContext().getAuthentication().getName() : 'anon')")
     public ResponseEntity<?> getFinancialSettings() {
         Organization org = getLoggedUserOrg();
         if (org == null) {
@@ -61,6 +68,7 @@ public class OrganizationFinancialSettingsController {
 
     @PutMapping
     @PreAuthorize("hasRole('OWNER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
+    @org.springframework.cache.annotation.CacheEvict(value = "org_financial_settings", allEntries = true)
     public ResponseEntity<?> updateFinancialSettings(@RequestBody Map<String, Object> payload) {
         Organization org = getLoggedUserOrg();
         if (org == null) {

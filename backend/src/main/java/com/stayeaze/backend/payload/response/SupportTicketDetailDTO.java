@@ -2,14 +2,13 @@ package com.stayeaze.backend.payload.response;
 
 import com.stayeaze.backend.models.SupportTicket;
 
-import java.io.Serializable;
 import java.time.OffsetDateTime;
 
 /**
  * Detailed SupportTicket payload for single-ticket detail views.
  * Includes text descriptions, resolution notes, and escalation history while removing raw entity relations.
  */
-public class SupportTicketDetailDTO extends SupportTicketSummaryDTO implements Serializable {
+public class SupportTicketDetailDTO extends SupportTicketSummaryDTO {
     private static final long serialVersionUID = 1L;
 
     private String description;

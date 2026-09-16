@@ -44,6 +44,10 @@ public class PropertyRequest {
     private String razorpayKeyId;
     private String razorpayKeySecret;
     private java.math.BigDecimal securityDeposit;
+    private Integer minimumLockInMonths;
+    private Integer noticePeriodDays;
+    private java.math.BigDecimal defaultExitCleaningFee;
+    private java.math.BigDecimal defaultElectricityRatePerUnit;
 
     public PropertyRequest() {
     }
@@ -286,5 +290,37 @@ public class PropertyRequest {
 
     public void setGstin(String gstin) {
         this.gstin = gstin;
+    }
+
+    public Integer getMinimumLockInMonths() {
+        return minimumLockInMonths;
+    }
+
+    public void setMinimumLockInMonths(Integer minimumLockInMonths) {
+        this.minimumLockInMonths = minimumLockInMonths;
+    }
+
+    public Integer getNoticePeriodDays() {
+        return noticePeriodDays;
+    }
+
+    public void setNoticePeriodDays(Integer noticePeriodDays) {
+        this.noticePeriodDays = noticePeriodDays;
+    }
+
+    public java.math.BigDecimal getDefaultExitCleaningFee() {
+        return defaultExitCleaningFee;
+    }
+
+    public void setDefaultExitCleaningFee(java.math.BigDecimal defaultExitCleaningFee) {
+        this.defaultExitCleaningFee = defaultExitCleaningFee;
+    }
+
+    public java.math.BigDecimal getDefaultElectricityRatePerUnit() {
+        return defaultElectricityRatePerUnit;
+    }
+
+    public void setDefaultElectricityRatePerUnit(java.math.BigDecimal defaultElectricityRatePerUnit) {
+        this.defaultElectricityRatePerUnit = defaultElectricityRatePerUnit;
     }
 }

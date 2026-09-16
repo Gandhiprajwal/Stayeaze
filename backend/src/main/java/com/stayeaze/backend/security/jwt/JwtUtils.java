@@ -11,7 +11,10 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 @Component
 public class JwtUtils {
@@ -138,6 +141,15 @@ public class JwtUtils {
                 .httpOnly(true)
                 .sameSite("Lax")
                 .build();
+    }
+
+    public List<org.springframework.http.ResponseCookie> getAllCleanRefreshTokenCookies() {
+        List<org.springframework.http.ResponseCookie> list = new ArrayList<>();
+        list.add(org.springframework.http.ResponseCookie.from("stayeaze_refresh_token", "").path("/").maxAge(0).httpOnly(true).sameSite("Lax").build());
+        list.add(org.springframework.http.ResponseCookie.from("stayeaze_refresh_token", "").path("/api/v1/auth").maxAge(0).httpOnly(true).sameSite("Lax").build());
+        list.add(org.springframework.http.ResponseCookie.from("refreshToken", "").path("/").maxAge(0).httpOnly(true).sameSite("Lax").build());
+        list.add(org.springframework.http.ResponseCookie.from("refreshToken", "").path("/api/v1/auth").maxAge(0).httpOnly(true).sameSite("Lax").build());
+        return list;
     }
 
     public String getRefreshTokenFromCookies(jakarta.servlet.http.HttpServletRequest request) {

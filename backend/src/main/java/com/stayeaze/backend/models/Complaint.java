@@ -16,7 +16,7 @@ public class Complaint {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "tenant_id", nullable = false)
+    @JoinColumn(name = "tenant_id", nullable = true)
     @org.hibernate.annotations.NotFound(action = org.hibernate.annotations.NotFoundAction.IGNORE)
     @JsonIgnore
     private Tenant tenant;
@@ -51,6 +51,27 @@ public class Complaint {
     @Column(name = "feedback_notes", columnDefinition = "text")
     private String feedbackNotes;
 
+    @Column(name = "resolution_notes", columnDefinition = "text")
+    private String resolutionNotes;
+
+    @Column(name = "ticket_number", length = 50)
+    private String ticketNumber;
+
+    @Column(name = "sla_due_at")
+    private OffsetDateTime slaDueAt;
+
+    @Column(name = "is_escalated")
+    private Boolean isEscalated = false;
+
+    @Column(name = "escalated_at")
+    private OffsetDateTime escalatedAt;
+
+    @Column(name = "escalation_reason", columnDefinition = "text")
+    private String escalationReason;
+
+    @Column(name = "sla_breached")
+    private Boolean slaBreached = false;
+
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
@@ -68,11 +89,18 @@ public class Complaint {
     }
 
     public String getTicketNumber() {
+        if (ticketNumber != null && !ticketNumber.isBlank()) {
+            return ticketNumber;
+        }
         if (id != null) {
             String idStr = id.toString();
             return "TKT-" + (idStr.length() >= 6 ? idStr.substring(0, 6) : idStr).toUpperCase();
         }
         return "TKT-000000";
+    }
+
+    public void setTicketNumber(String ticketNumber) {
+        this.ticketNumber = ticketNumber;
     }
 
     public void setId(UUID id) {
@@ -157,6 +185,54 @@ public class Complaint {
 
     public void setFeedbackNotes(String feedbackNotes) {
         this.feedbackNotes = feedbackNotes;
+    }
+
+    public String getResolutionNotes() {
+        return resolutionNotes;
+    }
+
+    public void setResolutionNotes(String resolutionNotes) {
+        this.resolutionNotes = resolutionNotes;
+    }
+
+    public OffsetDateTime getSlaDueAt() {
+        return slaDueAt;
+    }
+
+    public void setSlaDueAt(OffsetDateTime slaDueAt) {
+        this.slaDueAt = slaDueAt;
+    }
+
+    public Boolean getIsEscalated() {
+        return isEscalated != null && isEscalated;
+    }
+
+    public void setIsEscalated(Boolean isEscalated) {
+        this.isEscalated = isEscalated;
+    }
+
+    public OffsetDateTime getEscalatedAt() {
+        return escalatedAt;
+    }
+
+    public void setEscalatedAt(OffsetDateTime escalatedAt) {
+        this.escalatedAt = escalatedAt;
+    }
+
+    public String getEscalationReason() {
+        return escalationReason;
+    }
+
+    public void setEscalationReason(String escalationReason) {
+        this.escalationReason = escalationReason;
+    }
+
+    public Boolean getSlaBreached() {
+        return slaBreached != null && slaBreached;
+    }
+
+    public void setSlaBreached(Boolean slaBreached) {
+        this.slaBreached = slaBreached;
     }
 
     public OffsetDateTime getCreatedAt() {

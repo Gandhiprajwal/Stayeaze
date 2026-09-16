@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { Client, IMessage } from '@stomp/stompjs';
+import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/stores/auth-store';
@@ -55,6 +55,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Active custom topic subscriptions: topic -> Set of callbacks
   const subscribersRef = useRef<Map<string, Set<(data: any) => void>>>(new Map());
+  const stompSubscriptionsRef = useRef<Map<string, StompSubscription>>(new Map());
 
   const getWsUrl = () => {
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
@@ -139,7 +140,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       // 5. Re-subscribe any dynamic active topics registered in memory
       subscribersRef.current.forEach((callbacks, topic) => {
-        client.subscribe(topic, (message: IMessage) => {
+        const sub = client.subscribe(topic, (message: IMessage) => {
           try {
             const data = JSON.parse(message.body);
             callbacks.forEach((cb) => cb(data));
@@ -147,11 +148,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             console.error(`Failed to handle message for topic ${topic}:`, e);
           }
         });
+        stompSubscriptionsRef.current.set(topic, sub);
       });
     };
 
     client.onDisconnect = () => {
       setIsConnected(false);
+      stompSubscriptionsRef.current.clear();
       console.warn('🔴 STOMP WebSocket disconnected.');
     };
 
@@ -163,6 +166,12 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     clientRef.current = client;
 
     return () => {
+      stompSubscriptionsRef.current.forEach((sub) => {
+        try {
+          sub.unsubscribe();
+        } catch (ignored) {}
+      });
+      stompSubscriptionsRef.current.clear();
       if (client.active) {
         client.deactivate();
       }
@@ -261,7 +270,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (!subscribersRef.current.has(topic)) {
       subscribersRef.current.set(topic, new Set());
       if (clientRef.current?.connected) {
-        clientRef.current.subscribe(topic, (message: IMessage) => {
+        const sub = clientRef.current.subscribe(topic, (message: IMessage) => {
           try {
             const data = JSON.parse(message.body);
             const callbacks = subscribersRef.current.get(topic);
@@ -270,6 +279,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             console.error(`Failed to handle message for dynamic topic ${topic}:`, e);
           }
         });
+        stompSubscriptionsRef.current.set(topic, sub);
       }
     }
     subscribersRef.current.get(topic)!.add(callback);
@@ -281,6 +291,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         callbacks.delete(callback);
         if (callbacks.size === 0) {
           subscribersRef.current.delete(topic);
+          const stompSub = stompSubscriptionsRef.current.get(topic);
+          if (stompSub) {
+            try {
+              stompSub.unsubscribe();
+            } catch (ignored) {}
+            stompSubscriptionsRef.current.delete(topic);
+          }
         }
       }
     };

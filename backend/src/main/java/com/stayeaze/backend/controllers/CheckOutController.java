@@ -33,9 +33,6 @@ public class CheckOutController {
     private TenantRepository tenantRepository;
 
     @Autowired
-    private RoomRepository roomRepository;
-
-    @Autowired
     private BedRepository bedRepository;
 
     @Autowired
@@ -49,6 +46,12 @@ public class CheckOutController {
 
     @Autowired
     private com.stayeaze.backend.services.EmailService emailService;
+
+    @Autowired
+    private com.stayeaze.backend.services.AuditLogService auditLogService;
+
+    @Autowired
+    private com.stayeaze.backend.services.InvoiceSequenceService invoiceSequenceService;
 
     @Autowired
     private com.stayeaze.backend.security.SecurityUtils securityUtils;
@@ -70,7 +73,8 @@ public class CheckOutController {
         // 1. Find matching Tenant and archive (do NOT delete!)
         List<Tenant> orgTenants = tenantRepository.findByOrganization(organization);
         Tenant tenant = orgTenants.stream().filter(t ->
-            (t.getFirstName() + " " + t.getLastName()).equalsIgnoreCase(checkOut.getTenantName()) ||
+            (t.getName() != null && t.getName().equalsIgnoreCase(checkOut.getTenantName())) ||
+            (t.getFirstName() != null && t.getFirstName().equalsIgnoreCase(checkOut.getTenantName())) ||
             (checkOut.getRoomNumber() != null && checkOut.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
              checkOut.getBedNumber() != null && checkOut.getBedNumber().equalsIgnoreCase(t.getBedNumber()))
         ).findFirst().orElse(null);
@@ -97,16 +101,22 @@ public class CheckOutController {
             } catch (Exception ignored) {}
         }
 
-        // 2. Release Bed back to AVAILABLE
+        // 2. Release Bed back to AVAILABLE (scoped by property if present)
         Room matchedRoom = null;
         if (checkOut.getRoomNumber() != null && checkOut.getBedNumber() != null) {
             try {
+                final UUID propId = checkOut.getPropertyId();
                 List<Bed> orgBeds = bedRepository.findByOrganizationId(organization.getId());
-                Bed bed = orgBeds.stream().filter(b ->
-                    checkOut.getBedNumber().equalsIgnoreCase(b.getBedNumber()) &&
-                    b.getRoom() != null &&
-                    checkOut.getRoomNumber().equalsIgnoreCase(b.getRoom().getRoomNumber())
-                ).findFirst().orElse(null);
+                Bed bed = orgBeds.stream().filter(b -> {
+                    boolean matchBed = checkOut.getBedNumber().equalsIgnoreCase(b.getBedNumber());
+                    if (!matchBed || b.getRoom() == null) return false;
+                    boolean matchRoom = checkOut.getRoomNumber().equalsIgnoreCase(b.getRoom().getRoomNumber());
+                    if (!matchRoom) return false;
+                    if (propId == null) return true;
+                    return b.getRoom().getFloor() != null && b.getRoom().getFloor().getBuilding() != null &&
+                           b.getRoom().getFloor().getBuilding().getProperty() != null &&
+                           propId.equals(b.getRoom().getFloor().getBuilding().getProperty().getId());
+                }).findFirst().orElse(null);
 
                 if (bed != null) {
                     bed.setStatus("AVAILABLE");
@@ -190,23 +200,25 @@ public class CheckOutController {
         request.setOrganization(organization);
 
         if (request.getPropertyId() == null) {
-            List<Room> orgRooms = roomRepository.findByOrganizationId(organization.getId());
-            if (orgRooms != null && !orgRooms.isEmpty() && orgRooms.get(0).getFloor() != null && orgRooms.get(0).getFloor().getBuilding() != null) {
-                request.setPropertyId(orgRooms.get(0).getFloor().getBuilding().getId());
-            } else {
-                request.setPropertyId(organization.getId());
+            List<Property> props = propertyRepository.findByOrganizationId(organization.getId());
+            if (props != null && !props.isEmpty()) {
+                request.setPropertyId(props.get(0).getId());
             }
         }
 
         if (request.getCode() == null || request.getCode().isEmpty()) {
-            request.setCode("CO-" + String.valueOf(System.currentTimeMillis()).substring(8));
+            Property prop = null;
+            if (request.getPropertyId() != null) {
+                prop = propertyRepository.findById(request.getPropertyId()).orElse(null);
+            }
+            request.setCode(invoiceSequenceService.nextCheckOutCode(prop, organization));
         }
 
         // Auto-map security deposit and refund payout destination from tenant record
         List<Tenant> orgTenants = tenantRepository.findByOrganization(organization);
         Tenant tenant = orgTenants.stream().filter(t ->
-            (t.getFirstName() + " " + t.getLastName()).equalsIgnoreCase(request.getTenantName()) ||
             (t.getName() != null && t.getName().equalsIgnoreCase(request.getTenantName())) ||
+            (t.getFirstName() != null && t.getFirstName().equalsIgnoreCase(request.getTenantName())) ||
             (request.getRoomNumber() != null && request.getRoomNumber().equalsIgnoreCase(t.getRoomNumber()) &&
              request.getBedNumber() != null && request.getBedNumber().equalsIgnoreCase(t.getBedNumber()))
         ).findFirst().orElse(null);
@@ -360,8 +372,8 @@ public class CheckOutController {
             try {
                 List<Tenant> orgTenants = tenantRepository.findByOrganization(organization);
                 Tenant tenant = orgTenants.stream().filter(t ->
-                    (t.getFirstName() + " " + t.getLastName()).equalsIgnoreCase(checkOut.getTenantName()) ||
-                    (t.getName() != null && t.getName().equalsIgnoreCase(checkOut.getTenantName()))
+                    (t.getName() != null && t.getName().equalsIgnoreCase(checkOut.getTenantName())) ||
+                    (t.getFirstName() != null && t.getFirstName().equalsIgnoreCase(checkOut.getTenantName()))
                 ).findFirst().orElse(null);
 
                 String tenantEmail = tenant != null ? tenant.getEmail() : null;
@@ -417,5 +429,117 @@ public class CheckOutController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
         }
+    }
+
+    @GetMapping("/{id}/no-dues-certificate")
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN') or hasRole('TENANT') or hasRole('ACCOUNTANT')")
+    public ResponseEntity<?> getNoDuesCertificate(@PathVariable UUID id) {
+        try {
+            com.stayeaze.backend.services.CheckoutSettlementService.NoDuesCertificateDTO dto = checkoutSettlementService.getNoDuesCertificateData(id);
+            return ResponseEntity.ok(dto);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/retract-notice")
+    @Transactional
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN') or hasRole('RECEPTIONIST') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> retractMoveOutNotice(@PathVariable UUID id) {
+        Organization organization = getLoggedUserOrg();
+        CheckOut checkOut = checkOutRepository.findById(id).orElse(null);
+        if (checkOut == null || !checkOut.getOrganization().getId().equals(organization.getId())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Check-out notice record not found."));
+        }
+
+        if (!"notice_period".equalsIgnoreCase(checkOut.getStatus()) && !"pending".equalsIgnoreCase(checkOut.getStatus())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Only active move-out notices in notice period can be retracted."));
+        }
+
+        // Find and restore tenant
+        Tenant tenant = null;
+        List<Tenant> tenants = tenantRepository.findByOrganization(organization);
+        if (checkOut.getTenantName() != null) {
+            tenant = tenants.stream()
+                    .filter(t -> (t.getFirstName() + " " + (t.getLastName() != null ? t.getLastName() : "")).trim().equalsIgnoreCase(checkOut.getTenantName().trim()))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (tenant != null) {
+            tenant.setLeaseEnd(null);
+            tenant.setStatus("ACTIVE");
+            tenantRepository.save(tenant);
+        }
+
+        checkOutRepository.delete(checkOut);
+        auditLogService.logCurrent("Retracted move-out notice for resident " + (tenant != null ? tenant.getFirstName() + " " + tenant.getLastName() : checkOut.getTenantName()) + " and restored lease to active.", null);
+        return ResponseEntity.ok(new MessageResponse("Move-out notice retracted successfully. Tenant lease restored to active."));
+    }
+
+    @PostMapping("/{id}/undo-checkout")
+    @Transactional
+    @PreAuthorize("hasRole('OWNER') or hasRole('PROPERTY_MANAGER') or hasRole('ADMIN') or hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> undoCheckOut(@PathVariable UUID id) {
+        Organization organization = getLoggedUserOrg();
+        CheckOut checkOut = checkOutRepository.findById(id).orElse(null);
+        if (checkOut == null || !checkOut.getOrganization().getId().equals(organization.getId())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Error: Check-out record not found."));
+        }
+
+        if (!"completed".equalsIgnoreCase(checkOut.getStatus())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Only completed check-outs can be rolled back."));
+        }
+
+        if ("REFUNDED".equalsIgnoreCase(checkOut.getRefundStatus())) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Cannot rollback check-out because security deposit refund has already been physically disbursed."));
+        }
+
+        // Find tenant
+        Tenant tenant = null;
+        List<Tenant> tenants = tenantRepository.findByOrganization(organization);
+        if (checkOut.getTenantName() != null) {
+            tenant = tenants.stream()
+                    .filter(t -> (t.getFirstName() + " " + (t.getLastName() != null ? t.getLastName() : "")).trim().equalsIgnoreCase(checkOut.getTenantName().trim()))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        boolean bedReassigned = false;
+        if (tenant != null) {
+            tenant.setStatus("ACTIVE");
+            tenant.setLeaseEnd(null);
+
+            // Check if original room and bed are still available
+            if (checkOut.getRoomNumber() != null && checkOut.getBedNumber() != null) {
+                List<Bed> orgBeds = bedRepository.findByOrganizationId(organization.getId());
+                Bed originalBed = orgBeds.stream().filter(b ->
+                        checkOut.getBedNumber().equalsIgnoreCase(b.getBedNumber()) &&
+                        b.getRoom() != null &&
+                        checkOut.getRoomNumber().equalsIgnoreCase(b.getRoom().getRoomNumber())
+                ).findFirst().orElse(null);
+
+                if (originalBed != null && ("AVAILABLE".equalsIgnoreCase(originalBed.getStatus()) || "NEEDS_CLEANING".equalsIgnoreCase(originalBed.getStatus()) || originalBed.getStatus() == null)) {
+                    originalBed.setStatus("OCCUPIED");
+                    originalBed.setTenantId(tenant.getId() != null ? tenant.getId().toString() : null);
+                    originalBed.setTenantName(tenant.getFirstName() + " " + (tenant.getLastName() != null ? tenant.getLastName() : ""));
+                    bedRepository.save(originalBed);
+                } else {
+                    bedReassigned = true;
+                }
+            }
+            tenantRepository.save(tenant);
+        }
+
+        checkOutRepository.delete(checkOut);
+        occupancySyncService.syncAllStatsForOrg(organization);
+        auditLogService.logCurrent("Rolled back accidental check-out for " + (tenant != null ? tenant.getFirstName() + " " + tenant.getLastName() : checkOut.getTenantName()), null);
+
+        String message = "Check-out rolled back successfully. Resident restored to ACTIVE status.";
+        if (bedReassigned) {
+            message += " Note: Original bed was already occupied by another resident; please reassign a bed for this resident.";
+        }
+
+        return ResponseEntity.ok(new MessageResponse(message));
     }
 }

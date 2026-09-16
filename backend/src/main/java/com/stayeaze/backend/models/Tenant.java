@@ -1,14 +1,15 @@
 package com.stayeaze.backend.models;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import org.hibernate.annotations.TenantId;
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "organization"})
 @Table(name = "tenants", indexes = {
         @Index(name = "idx_tenant_org_status", columnList = "org_id, kyc_status"),
         @Index(name = "idx_tenant_mobile", columnList = "mobile"),
@@ -23,6 +24,7 @@ public class Tenant {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "org_id", nullable = false)
+    @JsonIgnore
     private Organization organization;
 
     @TenantId
@@ -116,6 +118,33 @@ public class Tenant {
     @Column(name = "agreement_accepted_at")
     private OffsetDateTime agreementAcceptedAt;
 
+    @Column(name = "lock_in_months")
+    private Integer lockInMonths;
+
+    @Column(name = "notice_period_days")
+    private Integer noticePeriodDays;
+
+    @Column(name = "last_notice_reminder_sent_at")
+    private OffsetDateTime lastNoticeReminderSentAt;
+
+    @Column(name = "notice_status", length = 50)
+    private String noticeStatus = "NONE"; // NONE, NOTICE_DUE, REMINDER_SENT, VACATING, RENEWED
+
+    @Column(name = "billing_responsibility", length = 50)
+    private String billingResponsibility = "SELF_PAY"; // SELF_PAY, CORPORATE_SPONSORED
+
+    @Column(name = "corporate_company_name", length = 255)
+    private String corporateCompanyName;
+
+    @Column(name = "corporate_gstin", length = 30)
+    private String corporateGstin;
+
+    @Column(name = "utility_responsibility", length = 50)
+    private String utilityResponsibility = "CORPORATE_COVERED"; // CORPORATE_COVERED, OCCUPANT_SELF_PAY
+
+    @Column(name = "deposit_responsibility", length = 50)
+    private String depositResponsibility = "OCCUPANT_PAID"; // OCCUPANT_PAID, CORPORATE_PAID
+
     @Transient
     private String buildingName;
 
@@ -143,7 +172,14 @@ public class Tenant {
     }
 
     public UUID getOrgId() {
-        return organization != null ? organization.getId() : null;
+        if (tenantOrgId != null) {
+            return tenantOrgId;
+        }
+        try {
+            return organization != null ? organization.getId() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public void setOrganization(Organization organization) {
@@ -423,5 +459,77 @@ public class Tenant {
 
     public void setAgreementAcceptedAt(OffsetDateTime agreementAcceptedAt) {
         this.agreementAcceptedAt = agreementAcceptedAt;
+    }
+
+    public Integer getLockInMonths() {
+        return lockInMonths;
+    }
+
+    public void setLockInMonths(Integer lockInMonths) {
+        this.lockInMonths = lockInMonths;
+    }
+
+    public Integer getNoticePeriodDays() {
+        return noticePeriodDays;
+    }
+
+    public void setNoticePeriodDays(Integer noticePeriodDays) {
+        this.noticePeriodDays = noticePeriodDays;
+    }
+
+    public OffsetDateTime getLastNoticeReminderSentAt() {
+        return lastNoticeReminderSentAt;
+    }
+
+    public void setLastNoticeReminderSentAt(OffsetDateTime lastNoticeReminderSentAt) {
+        this.lastNoticeReminderSentAt = lastNoticeReminderSentAt;
+    }
+
+    public String getNoticeStatus() {
+        return noticeStatus != null ? noticeStatus : "NONE";
+    }
+
+    public void setNoticeStatus(String noticeStatus) {
+        this.noticeStatus = noticeStatus;
+    }
+
+    public String getBillingResponsibility() {
+        return billingResponsibility != null ? billingResponsibility : "SELF_PAY";
+    }
+
+    public void setBillingResponsibility(String billingResponsibility) {
+        this.billingResponsibility = billingResponsibility;
+    }
+
+    public String getCorporateCompanyName() {
+        return corporateCompanyName;
+    }
+
+    public void setCorporateCompanyName(String corporateCompanyName) {
+        this.corporateCompanyName = corporateCompanyName;
+    }
+
+    public String getCorporateGstin() {
+        return corporateGstin;
+    }
+
+    public void setCorporateGstin(String corporateGstin) {
+        this.corporateGstin = corporateGstin;
+    }
+
+    public String getUtilityResponsibility() {
+        return utilityResponsibility != null ? utilityResponsibility : "CORPORATE_COVERED";
+    }
+
+    public void setUtilityResponsibility(String utilityResponsibility) {
+        this.utilityResponsibility = utilityResponsibility;
+    }
+
+    public String getDepositResponsibility() {
+        return depositResponsibility != null ? depositResponsibility : "OCCUPANT_PAID";
+    }
+
+    public void setDepositResponsibility(String depositResponsibility) {
+        this.depositResponsibility = depositResponsibility;
     }
 }

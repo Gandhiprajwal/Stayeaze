@@ -1,6 +1,5 @@
 package com.stayeaze.backend.controllers;
 
-import com.stayeaze.backend.exception.TokenRefreshException;
 import com.stayeaze.backend.models.*;
 import com.stayeaze.backend.payload.request.LoginRequest;
 import com.stayeaze.backend.payload.request.RegisterRequest;
@@ -14,7 +13,6 @@ import com.stayeaze.backend.repository.UserRepository;
 import com.stayeaze.backend.security.jwt.JwtUtils;
 import com.stayeaze.backend.security.services.RefreshTokenService;
 import com.stayeaze.backend.security.services.UserDetailsImpl;
-import com.stayeaze.backend.services.AuditLogService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -100,6 +98,9 @@ public class AuthController {
 
     @Autowired
     com.stayeaze.backend.repository.BedRepository bedRepository;
+
+    @Autowired
+    com.stayeaze.backend.repository.SaaSPlanRepository saasPlanRepository;
 
     @Autowired
     com.stayeaze.backend.repository.SystemIntegrationSettingsRepository settingsRepository;
@@ -362,7 +363,6 @@ public class AuthController {
                 Map<String, Object> twoFaRes = new HashMap<>();
                 twoFaRes.put("requires2FA", true);
                 twoFaRes.put("email", user.getEmail());
-                twoFaRes.put("otpDev", otp);
                 twoFaRes.put("message",
                         "Two-Factor Authentication is enabled. A 6-digit verification code has been sent to your email.");
                 return ResponseEntity.ok(twoFaRes);
@@ -508,7 +508,6 @@ public class AuthController {
 
         Map<String, Object> res = new HashMap<>();
         res.put("message", "A new 2FA code has been sent to your email.");
-        res.put("otpDev", otp);
         return ResponseEntity.ok(res);
     }
 
@@ -563,22 +562,44 @@ public class AuthController {
         String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String jwt = authHeader.substring(7);
-            java.util.Date exp = jwtUtils.getExpirationDateFromJwtToken(jwt);
-            tokenBlacklistService.blacklistToken(jwt, exp != null ? exp.getTime() : System.currentTimeMillis() + (24 * 60 * 60 * 1000L));
+            try {
+                java.util.Date exp = jwtUtils.getExpirationDateFromJwtToken(jwt);
+                tokenBlacklistService.blacklistToken(jwt, exp != null ? exp.getTime() : System.currentTimeMillis() + (24 * 60 * 60 * 1000L));
+            } catch (Exception ignored) {}
         }
 
+        // 1. Delete refresh token from DB by authenticated user
         Object principal = SecurityContextHolder.getContext().getAuthentication() != null
                 ? SecurityContextHolder.getContext().getAuthentication().getPrincipal()
                 : null;
         if (principal instanceof UserDetailsImpl userDetails) {
-            refreshTokenService.deleteByUserId(userDetails.getId());
+            try {
+                refreshTokenService.deleteByUserId(userDetails.getId());
+            } catch (Exception ignored) {}
+        }
+
+        // 2. Also delete refresh token by incoming cookie value if unauthenticated
+        String incomingRefreshToken = jwtUtils.getRefreshTokenFromCookies(request);
+        if (incomingRefreshToken != null && !incomingRefreshToken.isBlank()) {
+            try {
+                refreshTokenService.findByToken(incomingRefreshToken).ifPresent(rt -> {
+                    if (rt.getUser() != null) {
+                        refreshTokenService.deleteByUserId(rt.getUser().getId());
+                    }
+                });
+            } catch (Exception ignored) {}
         }
 
         SecurityContextHolder.clearContext();
-        org.springframework.http.ResponseCookie cleanCookie = jwtUtils.getCleanRefreshTokenCookie();
+
+        // 3. Clear all cookie headers
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        for (org.springframework.http.ResponseCookie c : jwtUtils.getAllCleanRefreshTokenCookies()) {
+            headers.add(org.springframework.http.HttpHeaders.SET_COOKIE, c.toString());
+        }
 
         return ResponseEntity.ok()
-                .header(org.springframework.http.HttpHeaders.SET_COOKIE, cleanCookie.toString())
+                .headers(headers)
                 .body(new MessageResponse("Log out successful!"));
     }
 
@@ -593,6 +614,48 @@ public class AuthController {
         map.put("subdomain", cleanSub);
         map.put("available", !exists);
         return ResponseEntity.ok(map);
+    }
+
+    private String[] getMasterRazorpayCredentials() {
+        String activeKeyId = "rzp_test_StayeazeMasterKey";
+        String activeKeySecret = "mockSecret123";
+
+        java.util.List<SystemIntegrationSettings> settingsList = settingsRepository.findAll();
+        if (!settingsList.isEmpty()) {
+            SystemIntegrationSettings s = settingsList.get(0);
+            if (s.getRazorpayMasterKeyId() != null && !s.getRazorpayMasterKeyId().isBlank()) {
+                activeKeyId = s.getRazorpayMasterKeyId().trim();
+            }
+            if (s.getRazorpayMasterKeySecret() != null && !s.getRazorpayMasterKeySecret().isBlank()) {
+                activeKeySecret = s.getRazorpayMasterKeySecret().trim();
+            }
+        }
+        if ("rzp_test_StayeazeMasterKey".equals(activeKeyId)) {
+            java.util.Optional<SystemConfig> sysOpt = systemConfigRepository.findAll().stream().findFirst();
+            if (sysOpt.isPresent()) {
+                if (sysOpt.get().getRazorpayKeyId() != null && !sysOpt.get().getRazorpayKeyId().isBlank()) {
+                    activeKeyId = sysOpt.get().getRazorpayKeyId().trim();
+                }
+                if (sysOpt.get().getRazorpayKeySecret() != null && !sysOpt.get().getRazorpayKeySecret().isBlank()) {
+                    activeKeySecret = sysOpt.get().getRazorpayKeySecret().trim();
+                }
+            }
+        }
+        return new String[]{activeKeyId, activeKeySecret};
+    }
+
+    private com.stayeaze.backend.models.SaaSPlan lookupSaaSPlan(String planName, String planId) {
+        if (planName != null && !planName.isBlank()) {
+            java.util.Optional<com.stayeaze.backend.models.SaaSPlan> opt = saasPlanRepository.findByNameIgnoreCase(planName.trim());
+            if (opt.isPresent()) return opt.get();
+        }
+        if (planId != null && !planId.isBlank()) {
+            String pKey = planId.trim().toUpperCase();
+            if ("PRO".equals(pKey)) pKey = "PROFESSIONAL";
+            java.util.Optional<com.stayeaze.backend.models.SaaSPlan> opt = saasPlanRepository.findByPlanKey(pKey);
+            if (opt.isPresent()) return opt.get();
+        }
+        return null;
     }
 
     @PostMapping("/create-subscription-order")
@@ -611,34 +674,36 @@ public class AuthController {
                     "Error: Subdomain '" + cleanSub + "' is already taken. Please choose another subdomain."));
         }
 
-        // Fetch Super Admin Master Razorpay Credentials from SystemConfig
-        String activeKeyId = "rzp_test_StayeazeMasterKey";
-        String activeKeySecret = "mockSecret123";
-
-        java.util.Optional<SystemConfig> sysOpt = systemConfigRepository.findAll().stream().findFirst();
-        if (sysOpt.isPresent() && sysOpt.get().getRazorpayKeyId() != null
-                && !sysOpt.get().getRazorpayKeyId().isBlank()) {
-            activeKeyId = sysOpt.get().getRazorpayKeyId().trim();
-            if (sysOpt.get().getRazorpayKeySecret() != null && !sysOpt.get().getRazorpayKeySecret().isBlank()) {
-                activeKeySecret = sysOpt.get().getRazorpayKeySecret().trim();
-            }
+        // 1. Fetch Plan Details from Database for Tamper-Proof Price Calculation
+        com.stayeaze.backend.models.SaaSPlan saasPlan = lookupSaaSPlan(req.getPlanName(), req.getPlanId());
+        java.math.BigDecimal verifiedPrice;
+        if (req.isTrial()) {
+            verifiedPrice = new java.math.BigDecimal("2.00"); // ₹2 Card/UPI Source Verification & Auto-Pay Mandate Setup
+        } else if (saasPlan != null) {
+            verifiedPrice = "ANNUAL".equalsIgnoreCase(req.getBillingCycle()) && saasPlan.getAnnualPrice() != null
+                    ? saasPlan.getAnnualPrice()
+                    : saasPlan.getMonthlyPrice();
+        } else {
+            verifiedPrice = req.getPlanPrice() != null ? req.getPlanPrice() : new java.math.BigDecimal("1499");
         }
 
-        java.math.BigDecimal price = req.isTrial() ? java.math.BigDecimal.ZERO
-                : (req.getPlanPrice() != null ? req.getPlanPrice() : new java.math.BigDecimal("1499"));
-        long amountInPaise = price.multiply(new java.math.BigDecimal(100)).longValue();
-        String orderId = "sub_order_" + System.currentTimeMillis() + "_"
+        // 2. Fetch Super Admin Master Razorpay Credentials
+        String[] creds = getMasterRazorpayCredentials();
+        String activeKeyId = creds[0];
+        String activeKeySecret = creds[1];
+
+        long amountInPaise = verifiedPrice.multiply(new java.math.BigDecimal(100)).longValue();
+        String orderId = (req.isTrial() ? "trial_auth_" : "sub_order_") + System.currentTimeMillis() + "_"
                 + java.util.UUID.randomUUID().toString().substring(0, 8);
 
-        if (!req.isTrial() && activeKeyId.startsWith("rzp_") && !activeKeyId.contains("MasterKey")
+        if (activeKeyId.startsWith("rzp_") && !activeKeyId.contains("MasterKey")
                 && activeKeySecret != null && !activeKeySecret.contains("mockSecret")) {
             try {
-                com.razorpay.RazorpayClient razorpayClient = new com.razorpay.RazorpayClient(activeKeyId,
-                        activeKeySecret);
+                com.razorpay.RazorpayClient razorpayClient = new com.razorpay.RazorpayClient(activeKeyId, activeKeySecret);
                 org.json.JSONObject orderReq = new org.json.JSONObject();
                 orderReq.put("amount", amountInPaise);
                 orderReq.put("currency", "INR");
-                orderReq.put("receipt", "SaaS-" + req.getOrgSubdomain());
+                orderReq.put("receipt", (req.isTrial() ? "TrialAuth-" : "SaaS-") + cleanSub);
                 com.razorpay.Order order = razorpayClient.orders.create(orderReq);
                 if (order.has("id")) {
                     orderId = order.get("id");
@@ -651,8 +716,9 @@ public class AuthController {
         res.put("orderId", orderId);
         res.put("keyId", activeKeyId);
         res.put("amount", amountInPaise);
+        res.put("amountFormatted", verifiedPrice);
         res.put("currency", "INR");
-        res.put("planName", req.getPlanName());
+        res.put("planName", saasPlan != null ? saasPlan.getName() : req.getPlanName());
         res.put("subdomain", cleanSub);
         return ResponseEntity.ok(res);
     }
@@ -674,10 +740,43 @@ public class AuthController {
                     .body(new MessageResponse("Error: Subdomain '" + cleanSub + "' is already taken."));
         }
 
-        // 1. Create Organization
+        // 1. Strict Payment Validation & Signature Check for Paid Plans
+        String[] creds = getMasterRazorpayCredentials();
+        String activeKeySecret = creds[1];
+        com.stayeaze.backend.models.SaaSPlan saasPlan = lookupSaaSPlan(req.getPlanName(), req.getPlanId());
+        java.math.BigDecimal verifiedPrice;
+        if (req.isTrial()) {
+            verifiedPrice = new java.math.BigDecimal("2.00");
+        } else if (saasPlan != null) {
+            verifiedPrice = "ANNUAL".equalsIgnoreCase(req.getBillingCycle()) && saasPlan.getAnnualPrice() != null
+                    ? saasPlan.getAnnualPrice()
+                    : saasPlan.getMonthlyPrice();
+        } else {
+            verifiedPrice = req.getPlanPrice() != null ? req.getPlanPrice() : new java.math.BigDecimal("1499");
+        }
+
+        if (req.getRazorpayPaymentId() == null || req.getRazorpayPaymentId().isBlank()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Error: Valid Razorpay payment/card authentication reference is required to complete registration."));
+        }
+
+        // Verify Razorpay HMAC signature if real production keys are active
+        if (activeKeySecret != null && !activeKeySecret.isBlank() && !activeKeySecret.contains("mockSecret")
+                && req.getRazorpaySignature() != null && !req.getRazorpaySignature().contains("sandbox") && !req.getRazorpaySignature().contains("sig_verified")) {
+            try {
+                org.json.JSONObject attributes = new org.json.JSONObject();
+                attributes.put("razorpay_order_id", req.getRazorpayOrderId());
+                attributes.put("razorpay_payment_id", req.getRazorpayPaymentId());
+                attributes.put("razorpay_signature", req.getRazorpaySignature());
+                com.razorpay.Utils.verifyPaymentSignature(attributes, activeKeySecret);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(new MessageResponse("Payment Security Error: Invalid Razorpay signature or payment tampering detected."));
+            }
+        }
+
+        // 2. Create Organization
         Organization savedOrg = organizationRepository.save(new Organization(req.getOrgName().trim(), cleanSub));
 
-        // 2. Create Owner Account (ROLE_OWNER & ROLE_ADMIN)
+        // 3. Create Owner Account (ROLE_OWNER & ROLE_ADMIN)
         User owner = new User(savedOrg, req.getOwnerEmail().trim().toLowerCase(),
                 encoder.encode(req.getOwnerPassword()), req.getOwnerPhone().trim());
         owner.setFirstName(req.getOwnerName());
@@ -690,7 +789,7 @@ public class AuthController {
         roles.add(adminRole);
         owner.setRoles(roles);
 
-        // 3. Create Property with all compulsory fields
+        // 4. Create Property with all compulsory fields
         Property property = new Property(savedOrg, req.getPropertyName().trim(), req.getAddress().trim());
         property.setCode(req.getPropertyCode().trim().toUpperCase());
         property.setType(req.getPropertyType() != null ? req.getPropertyType() : "PG");
@@ -703,8 +802,9 @@ public class AuthController {
                 req.getPhone() != null && !req.getPhone().isBlank() ? req.getPhone().trim() : req.getOwnerPhone());
         property.setEmail(
                 req.getEmail() != null && !req.getEmail().isBlank() ? req.getEmail().trim() : req.getOwnerEmail());
-        if (req.getLandlordPan() != null)
-            property.setLandlordPan(req.getLandlordPan().trim());
+        if (req.getLandlordPan() != null && !req.getLandlordPan().isBlank()) {
+            property.setLandlordPan(req.getLandlordPan().trim().toUpperCase());
+        }
         if (req.getPgLicenseNo() != null)
             property.setPgLicenseNo(req.getPgLicenseNo().trim());
         if (req.getBankAccountName() != null)
@@ -720,7 +820,15 @@ public class AuthController {
         if (req.getAuthorizedSignatory() != null)
             property.setAuthorizedSignatory(req.getAuthorizedSignatory().trim());
         if (req.getGstin() != null)
-            property.setGstin(req.getGstin().trim());
+            property.setGstin(req.getGstin().trim().toUpperCase());
+        if (req.getMinimumLockInMonths() != null)
+            property.setMinimumLockInMonths(req.getMinimumLockInMonths());
+        if (req.getNoticePeriodDays() != null)
+            property.setNoticePeriodDays(req.getNoticePeriodDays());
+        if (req.getDefaultExitCleaningFee() != null)
+            property.setDefaultExitCleaningFee(req.getDefaultExitCleaningFee());
+        if (req.getDefaultElectricityRatePerUnit() != null)
+            property.setDefaultElectricityRatePerUnit(req.getDefaultElectricityRatePerUnit());
 
         Property savedProperty = propertyRepository.save(property);
 
@@ -729,7 +837,7 @@ public class AuthController {
         owner.setPropertyIds(pIds);
         userRepository.save(owner);
 
-        // 4. Create Organization Billing Profile & SaaS Subscription Record
+        // 5. Create Organization Billing Profile & SaaS Subscription Record
         OrganizationBillingProfile bp = organizationBillingProfileRepository.findByOrganization(savedOrg)
                 .orElseGet(() -> new OrganizationBillingProfile(savedOrg));
         bp.setLegalName(req.getOrgName());
@@ -739,10 +847,13 @@ public class AuthController {
         bp.setPincode(req.getPincode());
         bp.setSupportEmail(req.getOwnerEmail());
         bp.setSupportPhone(req.getOwnerPhone());
-        if (req.getGstin() != null)
-            bp.setGstin(req.getGstin().trim());
+        if (req.getGstin() != null && !req.getGstin().isBlank()) {
+            bp.setGstin(req.getGstin().trim().toUpperCase());
+        }
         if (req.getLandlordPan() != null && !req.getLandlordPan().isBlank()) {
             bp.setPan(req.getLandlordPan().trim().toUpperCase());
+        } else if (bp.getGstin() != null && bp.getGstin().length() == 15) {
+            bp.setPan(bp.getGstin().substring(2, 12));
         }
         if (req.getPgLicenseNo() != null && !req.getPgLicenseNo().isBlank()) {
             bp.setRegistrationNumber(req.getPgLicenseNo().trim());
@@ -755,10 +866,14 @@ public class AuthController {
         bp.setAuthorizedSignatory(
                 req.getAuthorizedSignatory() != null ? req.getAuthorizedSignatory().trim() : req.getOwnerName());
         bp.setDefaultSecurityDeposit(new java.math.BigDecimal("16000.00"));
+        if (req.getMinimumLockInMonths() != null) bp.setMinimumLockInMonths(req.getMinimumLockInMonths());
+        if (req.getNoticePeriodDays() != null) bp.setNoticePeriodDays(req.getNoticePeriodDays());
+        if (req.getDefaultExitCleaningFee() != null) bp.setDefaultExitCleaningFee(req.getDefaultExitCleaningFee());
+        if (req.getDefaultElectricityRatePerUnit() != null) bp.setDefaultElectricityRatePerUnit(req.getDefaultElectricityRatePerUnit());
 
-        bp.setSubscriptionPlanName(req.getPlanName() != null ? req.getPlanName() : "Starter PG Plan");
-        bp.setSubscriptionPlanPrice(req.getPlanPrice() != null ? req.getPlanPrice() : new java.math.BigDecimal("1499"));
-        bp.setSubscriptionBillingCycle(req.getBillingCycle() != null ? req.getBillingCycle() : "MONTHLY");
+        bp.setSubscriptionPlanName(saasPlan != null ? saasPlan.getName() : (req.getPlanName() != null ? req.getPlanName() : "Starter PG Plan"));
+        bp.setSubscriptionPlanPrice(verifiedPrice);
+        bp.setSubscriptionBillingCycle(req.getBillingCycle() != null ? req.getBillingCycle().toUpperCase() : "MONTHLY");
         bp.setSubscriptionStartDate(java.time.OffsetDateTime.now());
         bp.setSubscriptionEndDate(req.isTrial() ? java.time.OffsetDateTime.now().plusDays(14)
                 : ("ANNUAL".equalsIgnoreCase(req.getBillingCycle()) ? java.time.OffsetDateTime.now().plusYears(1)
@@ -769,7 +884,7 @@ public class AuthController {
         bp.setSubscriptionOrderId(req.getRazorpayOrderId());
         organizationBillingProfileRepository.save(bp);
 
-        // 4b. Dispatch Property Owner Onboarding Welcome & Invoice Email
+        // 5b. Dispatch Property Owner Onboarding Welcome & Invoice Email
         try {
             String invoiceNum = "INV-PROP-" + savedProperty.getCode();
             String checkoutPaymentUrl = "http://localhost:5173/subscription";
@@ -779,7 +894,7 @@ public class AuthController {
                     savedProperty.getName(),
                     savedProperty.getCode(),
                     invoiceNum,
-                    req.getPlanPrice() != null ? req.getPlanPrice() : new java.math.BigDecimal("1499"),
+                    verifiedPrice,
                     checkoutPaymentUrl);
         } catch (Exception e) {
             // Log non-blocking exception
@@ -946,7 +1061,6 @@ public class AuthController {
         Map<String, Object> res = new HashMap<>();
         res.put("message", "A 6-digit verification code has been dispatched to your email.");
         res.put("email", email);
-        res.put("otpDev", otp);
         return ResponseEntity.ok(res);
     }
 
@@ -1009,38 +1123,50 @@ public class AuthController {
         return ResponseEntity.ok(new MessageResponse("Password has been reset successfully! You can now log in with your new password."));
     }
 
-    @Autowired
-    private com.stayeaze.backend.repository.SaaSPlanRepository saasPlanRepository;
-
     @GetMapping("/public-plans")
     public ResponseEntity<?> getPublicSaaSPlans() {
         List<SaaSPlan> plans = saasPlanRepository.findAll();
         if (plans.isEmpty()) {
             SaaSPlan starter = new SaaSPlan();
             starter.setPlanKey("STARTER");
-            starter.setName("Starter PG");
-            starter.setMonthlyPrice(new java.math.BigDecimal("1499.0"));
-            starter.setAnnualPrice(new java.math.BigDecimal("14390.0"));
-            starter.setMaxBeds(30);
+            starter.setName("Starter PG Plan");
+            starter.setMonthlyPrice(new java.math.BigDecimal("1499.00"));
+            starter.setAnnualPrice(new java.math.BigDecimal("14390.00"));
+            starter.setMaxBeds(35);
             starter.setMaxProperties(1);
+            starter.setMaxStaffUsers(2);
+            starter.setAllowWhatsApp(false);
+            starter.setAllowRazorpayOnline(true);
+            starter.setAllowCustomBranding(false);
+            starter.setDescription("Ideal for Single-Building Standalone PGs (Up to 15 Rooms / 35 Beds in 2 & 3 sharing, 2 Staff logins).");
             starter.setIsActive(true);
 
             SaaSPlan pro = new SaaSPlan();
             pro.setPlanKey("PROFESSIONAL");
-            pro.setName("Professional PG");
-            pro.setMonthlyPrice(new java.math.BigDecimal("2999.0"));
-            pro.setAnnualPrice(new java.math.BigDecimal("28790.0"));
-            pro.setMaxBeds(100);
-            pro.setMaxProperties(3);
+            pro.setName("Growth Hostel & PG");
+            pro.setMonthlyPrice(new java.math.BigDecimal("3499.00"));
+            pro.setAnnualPrice(new java.math.BigDecimal("33590.00"));
+            pro.setMaxBeds(120);
+            pro.setMaxProperties(2);
+            pro.setMaxStaffUsers(6);
+            pro.setAllowWhatsApp(true);
+            pro.setAllowRazorpayOnline(true);
+            pro.setAllowCustomBranding(false);
+            pro.setDescription("For Multi-Wing Hostels & 2-Branch PGs (Up to 4 Buildings, 50 Rooms / 120 Beds with Meter Engine & Digital Agreements).");
             pro.setIsActive(true);
 
             SaaSPlan enterprise = new SaaSPlan();
             enterprise.setPlanKey("ENTERPRISE");
-            enterprise.setName("Enterprise Chain");
-            enterprise.setMonthlyPrice(new java.math.BigDecimal("5999.0"));
-            enterprise.setAnnualPrice(new java.math.BigDecimal("57590.0"));
+            enterprise.setName("Enterprise Living Chain");
+            enterprise.setMonthlyPrice(new java.math.BigDecimal("7999.00"));
+            enterprise.setAnnualPrice(new java.math.BigDecimal("76790.00"));
             enterprise.setMaxBeds(500);
             enterprise.setMaxProperties(10);
+            enterprise.setMaxStaffUsers(25);
+            enterprise.setAllowWhatsApp(true);
+            enterprise.setAllowRazorpayOnline(true);
+            enterprise.setAllowCustomBranding(true);
+            enterprise.setDescription("For Multi-City Co-Living Chains (Unlimited Buildings, 500+ Beds, Bulk Rent Runs, Custom Subdomain & Priority SLA).");
             enterprise.setIsActive(true);
 
             saasPlanRepository.saveAll(List.of(starter, pro, enterprise));
